@@ -1,0 +1,7 @@
+{
+    "projectName": "Sub2",
+    "namespace": "Sub2.Contracts",
+    "lang": 0,
+    "autoCodeGen": true,
+    "projectPath": "../"
+}

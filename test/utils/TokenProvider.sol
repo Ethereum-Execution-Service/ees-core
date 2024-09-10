@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import {Vm} from "lib/forge-std/src/Test.sol";
+import {Vm} from "forge-std/src/Test.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 
 contract TokenProvider {

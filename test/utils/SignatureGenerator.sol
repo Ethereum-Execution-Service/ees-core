@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import {Vm} from "lib/forge-std/src/Vm.sol";
+import {Vm} from "forge-std/src/Vm.sol";
 
 contract SignatureGenerator {
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));

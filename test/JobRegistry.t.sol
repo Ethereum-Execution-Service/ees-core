@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import {Test} from "lib/forge-std/src/Test.sol";
+import {Test} from "forge-std/src/Test.sol";
 import {SafeERC20, IERC20, IERC20Permit} from "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {TokenProvider} from "./utils/TokenProvider.sol";
-import {GasSnapshot} from "forge-gas-snapshot/GasSnapshot.sol";
+import {GasSnapshot} from "forge-gas-snapshot/src/GasSnapshot.sol";
 import {SignatureExpired, InvalidNonce} from "../src/PermitErrors.sol";
 import {IJobRegistry} from "../src/interfaces/IJobRegistry.sol";
 import {IApplication} from "../src/interfaces/IApplication.sol";
@@ -14,7 +14,7 @@ import {DummyExecutionModule} from "./mocks/dummyContracts/DummyExecutionModule.
 import {DummyFeeModule} from "./mocks/dummyContracts/DummyFeeModule.sol";
 import {JobSpecificationSignature} from "./utils/JobSpecificationSignature.sol";
 import {FeeModuleInputSignature} from "./utils/FeeModuleInputSignature.sol";
-import {StdUtils} from "lib/forge-std/src/StdUtils.sol";
+import {StdUtils} from "forge-std/src/StdUtils.sol";
 
 contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeModuleInputSignature, GasSnapshot {
     JobRegistry jobRegistry;

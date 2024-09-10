@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import {Test} from "lib/forge-std/src/Test.sol";
-import {GasSnapshot} from "forge-gas-snapshot/GasSnapshot.sol";
+import {Test} from "forge-std/src/Test.sol";
+import {GasSnapshot} from "forge-gas-snapshot/src/GasSnapshot.sol";
 import {JobRegistry} from "../../src/JobRegistry.sol";
 import {MockPeggedLinearAuction} from "../mocks/MockPeggedLinearAuction.sol";
 import {IPeggedLinearAuction} from "../../src/interfaces/feeModules/IPeggedLinearAuction.sol";

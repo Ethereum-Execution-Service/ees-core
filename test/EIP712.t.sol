@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import {Test} from "lib/forge-std/src/Test.sol";
+import {Test} from "forge-std/src/Test.sol";
 import {JobRegistry} from "../src/JobRegistry.sol";
 
 // forge test --match-contract EIP712

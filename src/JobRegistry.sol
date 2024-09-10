@@ -12,7 +12,7 @@ import {JobSpecificationHash} from "./libraries/JobSpecificationHash.sol";
 import {FeeModuleInputHash} from "./libraries/FeeModuleInputHash.sol";
 import {SignatureExpired, InvalidNonce} from "./PermitErrors.sol";
 import {EIP712} from "./EIP712.sol";
-import {Owned} from "lib/solmate/src/auth/Owned.sol";
+import {Owned} from "solmate/src/auth/Owned.sol";
 
 /// @author Victor Brevig
 /// @notice JobRegistry keeps track of all jobs in the EES. It is through this contract jobs are created, executed and deleted.
@@ -22,7 +22,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard, Owned {
     using JobSpecificationHash for JobSpecification;
     using FeeModuleInputHash for FeeModuleInput;
 
-    address internal treasury;
+    address immutable treasury;
     uint8 public protocolFeeRatio;
     Job[] public jobs;
 
@@ -51,7 +51,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard, Owned {
         bytes calldata _sponsorSignature,
         bool _hasSponsorship,
         uint256 _index
-    ) public override returns (uint256 index) {
+    ) public override nonReentrant returns (uint256 index) {
         if (_hasSponsorship) {
             if (block.timestamp > _specification.deadline) revert SignatureExpired(_specification.deadline);
             _useUnorderedNonce(_sponsor, _specification.nonce);
@@ -157,7 +157,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard, Owned {
      * @notice Deletes the job from the jobs array and calls onDeleteJob on execution module and application.
      * @param _index The index of the job in the jobs array.
      */
-    function deleteJob(uint256 _index) public override {
+    function deleteJob(uint256 _index) public override nonReentrant {
         Job memory job = jobs[_index];
 
         IExecutionModule executionModule = executionModules[uint8(job.executionModule)];
@@ -225,7 +225,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard, Owned {
         address _sponsor,
         bytes calldata _sponsorSignature,
         bool _hasSponsorship
-    ) public override {
+    ) public override nonReentrant {
         Job storage job = jobs[_feeModuleInput.index];
         if (job.owner != msg.sender) revert Unauthorized();
         if (_hasSponsorship) {

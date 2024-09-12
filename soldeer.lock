@@ -1,4 +1,11 @@
 [[dependencies]]
+name = "@chainlink-contracts"
+version = "1.2.0"
+source = "https://soldeer-revisions.s3.amazonaws.com/@chainlink-contracts/1_2_0_19-08-2024_05:22:05_contracts.zip"
+checksum = "08f7fc58fb8976a16213bcf18720b94aa779c9507db45c5d969f7a87214bc30b"
+integrity = "8d147a5710e2667c5c70f9b328b67ca734652bb6895fa0c4ed96be73cc09c23f"
+
+[[dependencies]]
 name = "@openzeppelin-contracts"
 version = "5.0.2"
 source = "https://soldeer-revisions.s3.amazonaws.com/@openzeppelin-contracts/5_0_2_14-03-2024_06:11:59_contracts.zip"

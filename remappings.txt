@@ -1,3 +1,4 @@
+@chainlink-contracts/=dependencies/@chainlink-contracts-1.2.0/
 @openzeppelin-contracts/=dependencies/@openzeppelin-contracts-5.0.2/
 forge-gas-snapshot/=dependencies/forge-gas-snapshot-0.0.4/
 forge-std/=dependencies/forge-std-1.9.2/

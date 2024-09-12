@@ -25,6 +25,7 @@ sepolia = { key = "${ETHERSCAN_API_KEY}" }
 forge-gas-snapshot = "0.0.4"
 forge-std = "1.9.2"
 solmate = "6.7.0"
+"@chainlink-contracts" = "1.2.0"
 
 [soldeer]
 recursive_deps = true

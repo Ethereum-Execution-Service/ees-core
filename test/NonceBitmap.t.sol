@@ -12,7 +12,7 @@ contract NonceBitmapTest is Test {
         jobRegistry = new MockJobRegistry(address(0x2), address(0x3), 2);
     }
 
-    function testLowNonces() public {
+    function test_LowNonces() public {
         jobRegistry.useUnorderedNonce(address(this), 5);
         jobRegistry.useUnorderedNonce(address(this), 0);
         jobRegistry.useUnorderedNonce(address(this), 1);
@@ -26,7 +26,7 @@ contract NonceBitmapTest is Test {
         jobRegistry.useUnorderedNonce(address(this), 4);
     }
 
-    function testNonceWordBoundary() public {
+    function test_NonceWordBoundary() public {
         jobRegistry.useUnorderedNonce(address(this), 255);
         jobRegistry.useUnorderedNonce(address(this), 256);
 
@@ -36,7 +36,7 @@ contract NonceBitmapTest is Test {
         jobRegistry.useUnorderedNonce(address(this), 256);
     }
 
-    function testHighNonces() public {
+    function test_HighNonces() public {
         jobRegistry.useUnorderedNonce(address(this), 2 ** 240);
         jobRegistry.useUnorderedNonce(address(this), 2 ** 240 + 1);
 
@@ -46,7 +46,7 @@ contract NonceBitmapTest is Test {
         jobRegistry.useUnorderedNonce(address(this), 2 ** 240 + 1);
     }
 
-    function testInvalidateFullWord() public {
+    function test_InvalidateFullWord() public {
         jobRegistry.invalidateUnorderedNonces(0, 2 ** 256 - 1);
 
         vm.expectRevert(InvalidNonce.selector);
@@ -60,7 +60,7 @@ contract NonceBitmapTest is Test {
         jobRegistry.useUnorderedNonce(address(this), 256);
     }
 
-    function testInvalidateNonzeroWord() public {
+    function test_InvalidateNonzeroWord() public {
         jobRegistry.invalidateUnorderedNonces(1, 2 ** 256 - 1);
 
         jobRegistry.useUnorderedNonce(address(this), 0);
@@ -73,13 +73,13 @@ contract NonceBitmapTest is Test {
         jobRegistry.useUnorderedNonce(address(this), 512);
     }
 
-    function testUsingNonceTwiceFails(uint256 nonce) public {
+    function test_UsingNonceTwiceFails(uint256 nonce) public {
         jobRegistry.useUnorderedNonce(address(this), nonce);
         vm.expectRevert(InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), nonce);
     }
 
-    function testUseTwoRandomNonces(uint256 first, uint256 second) public {
+    function test_UseTwoRandomNonces(uint256 first, uint256 second) public {
         jobRegistry.useUnorderedNonce(address(this), first);
         if (first == second) {
             vm.expectRevert(InvalidNonce.selector);
@@ -89,12 +89,12 @@ contract NonceBitmapTest is Test {
         }
     }
 
-    function testInvalidateNoncesRandomly(uint248 wordPos, uint256 mask) public {
+    function test_InvalidateNoncesRandomly(uint248 wordPos, uint256 mask) public {
         jobRegistry.invalidateUnorderedNonces(wordPos, mask);
         assertEq(mask, jobRegistry.nonceBitmap(address(this), wordPos));
     }
 
-    function testInvalidateTwoNoncesRandomly(uint248 wordPos, uint256 startBitmap, uint256 mask) public {
+    function test_InvalidateTwoNoncesRandomly(uint248 wordPos, uint256 startBitmap, uint256 mask) public {
         jobRegistry.invalidateUnorderedNonces(wordPos, startBitmap);
         assertEq(startBitmap, jobRegistry.nonceBitmap(address(this), wordPos));
 

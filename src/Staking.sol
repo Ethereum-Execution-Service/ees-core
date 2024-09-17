@@ -3,11 +3,9 @@ pragma solidity 0.8.27;
 
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
-import {VRFConsumerBaseV2Plus} from "@chainlink-contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
-import {VRFV2PlusClient} from "@chainlink-contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 import {IStaking} from "./interfaces/IStaking.sol";
 
-contract Staking is IStaking, VRFConsumerBaseV2Plus {
+contract Staking is IStaking {
     using SafeTransferLib for ERC20;
 
     uint256 public roundEndBlock;
@@ -19,39 +17,39 @@ contract Staking is IStaking, VRFConsumerBaseV2Plus {
     uint40 public numberOfActiveStakers;
 
     // in blocks
-    uint8 internal immutable s_epochBuffer;
-    uint8 internal immutable s_roundBuffer;
+    uint8 internal immutable roundBuffer;
 
-    address internal immutable s_stakingToken;
-    uint256 internal immutable s_stakingAmount;
+    address internal immutable stakingToken;
+    uint256 internal immutable stakingAmount;
     // minimum amount of staking balance required to be eligible to execute
-    uint256 internal immutable s_stakingBalanceThreshold;
+    uint256 internal immutable stakingBalanceThreshold;
     // amount to slash from the staker upon inactivity.
-    uint256 internal immutable s_slashingAmount;
+    uint256 internal immutable slashingAmount;
     // number of blocks inactive executor can be slashed within
-    uint8 internal immutable s_slashingWindow;
+    uint8 internal immutable slashingWindow;
     // in blocks
-    uint8 internal immutable s_roundDuration;
-    uint8 internal immutable s_roundsPerEpoch;
-    uint8 internal immutable s_epochLength;
+    uint8 internal immutable roundDuration;
 
-    uint256 public requestId;
+    uint8 internal immutable roundsPerEpoch;
+    // in blocks
+    uint8 internal immutable epochLength;
 
-    // one index per round in order to select a staker
-    uint40[] public selectedIndices;
+    // in blocks
+    uint8 internal immutable commitPhaseDuration;
+    uint8 internal immutable revealPhaseDuration;
+
     // true for an index if the executor has executed in that round
     bool[] public executedRounds;
-
-    uint256 public subscriptionId;
-    // https://docs.chain.link/vrf/v2-5/supported-networks
-    bytes32 public keyHash = 0x9e1344a1247c8a1785d0a4681a27152bffdb43666ae5bf7d14d24a5efd44bf71;
 
     address[] public activeStakers;
     mapping(address => StakerInfo) public stakerInfo;
 
-    constructor(StakingSpec memory _spec, uint256 _subscriptionId, address _vrfCoordinator)
-        VRFConsumerBaseV2Plus(_vrfCoordinator)
-    {
+    bytes32 public seed;
+    uint256 public epoch;
+
+    mapping(address => CommitData) public commitmentMap;
+
+    constructor(StakingSpec memory _spec) {
         require(
             _spec.stakingBalanceThreshold <= _spec.stakingAmount,
             "Staking: threshold must be less than or equal to staking amount"
@@ -60,40 +58,41 @@ contract Staking is IStaking, VRFConsumerBaseV2Plus {
             _spec.slashingAmount <= _spec.stakingBalanceThreshold,
             "Staking: slashing amount must be less than or equal to staking threshold amount"
         );
-        subscriptionId = _subscriptionId;
-        s_stakingToken = _spec.stakingToken;
-        s_stakingAmount = _spec.stakingAmount;
-        s_stakingBalanceThreshold = _spec.stakingBalanceThreshold;
-        s_slashingAmount = _spec.slashingAmount;
-        s_roundDuration = _spec.roundDuration;
-        s_roundsPerEpoch = _spec.roundsPerEpoch;
-        s_slashingWindow = _spec.slashingWindow;
-        s_roundBuffer = _spec.roundBuffer;
-        s_epochBuffer = _spec.epochBuffer;
-        s_epochLength = (s_roundDuration + s_roundBuffer) * s_roundsPerEpoch;
-
-        selectedIndices = new uint40[](s_roundsPerEpoch);
-        executedRounds = new bool[](s_roundsPerEpoch);
+        stakingToken = _spec.stakingToken;
+        stakingAmount = _spec.stakingAmount;
+        stakingBalanceThreshold = _spec.stakingBalanceThreshold;
+        slashingAmount = _spec.slashingAmount;
+        roundDuration = _spec.roundDuration;
+        roundsPerEpoch = _spec.roundsPerEpoch;
+        roundBuffer = _spec.roundBuffer;
+        epochLength = (roundDuration + roundBuffer) * roundsPerEpoch;
+        commitPhaseDuration = _spec.commitPhaseDuration;
+        revealPhaseDuration = _spec.revealPhaseDuration;
+        executedRounds = new bool[](roundsPerEpoch);
     }
 
     function stake() public {
         // check if already staked
         if (stakerInfo[msg.sender].balance > 0) revert AlreadyStaked();
 
-        ERC20(s_stakingToken).transferFrom(msg.sender, address(this), s_stakingAmount);
+        ERC20(stakingToken).transferFrom(msg.sender, address(this), stakingAmount);
 
         _activateStaker(msg.sender);
         stakerInfo[msg.sender] =
-            StakerInfo({balance: s_stakingAmount, active: true, initialized: true, arrayIndex: numberOfActiveStakers});
+            StakerInfo({balance: stakingAmount, active: true, initialized: true, arrayIndex: numberOfActiveStakers});
         numberOfActiveStakers += 1;
     }
 
     function unstake() public {
-        // CANNOT DO WHILE IN A AN EPOCH or slashing window - make check
-        if (block.number < epochEndBlock + s_slashingWindow) revert EpochNotDone();
+        if (block.number >= epochEndBlock - epochLength - revealPhaseDuration) {
+            revert InvalidBlockNumber();
+        }
+
         StakerInfo memory staker = stakerInfo[msg.sender];
         if (!staker.initialized) revert NotAStaker();
         delete stakerInfo[msg.sender];
+
+        delete commitmentMap[msg.sender];
 
         // if staker is active, deactivate it
         if (staker.active) {
@@ -101,18 +100,122 @@ contract Staking is IStaking, VRFConsumerBaseV2Plus {
             stakerInfo[lastStaker].arrayIndex = staker.arrayIndex;
             numberOfActiveStakers -= 1;
         }
-        ERC20(s_stakingToken).transfer(msg.sender, staker.balance);
+        ERC20(stakingToken).transfer(msg.sender, staker.balance);
     }
 
     function topup(uint256 _amount) public {
         StakerInfo storage staker = stakerInfo[msg.sender];
         if (!staker.initialized) revert NotAStaker();
-        ERC20(s_stakingToken).transferFrom(msg.sender, address(this), _amount);
+        ERC20(stakingToken).transferFrom(msg.sender, address(this), _amount);
         staker.balance += _amount;
-        if (!staker.active && staker.balance >= s_stakingAmount) {
+        if (!staker.active && staker.balance >= stakingAmount) {
             _activateStaker(msg.sender);
             staker.active = true;
             numberOfActiveStakers += 1;
+        }
+    }
+
+    function slashInactiveStaker() public {
+        // have to check if there nothing was executed (function wasnt called) in the last round
+        if (block.number < epochEndBlock - epochLength || block.number >= epochEndBlock) revert InvalidBlockNumber();
+        // compute round number (the one that just passed)
+
+        uint256 blocksIntoEpoch = epochLength - (epochEndBlock - block.number);
+        uint8 roundTotalDuration = roundDuration + roundBuffer;
+        // revert if still in execution phase of the round
+        if (blocksIntoEpoch % roundTotalDuration < roundDuration) revert NotInBufferOfRound();
+
+        uint256 round = blocksIntoEpoch / roundTotalDuration;
+
+        // compute selected index for round
+        uint256 stakerIndex = uint256(keccak256(abi.encodePacked(seed, round))) % uint256(numberOfActiveStakers);
+
+        // check whether the selected staker has executed in thus round
+        if (executedRounds[round]) revert RoundExecuted();
+
+        address stakerAddress = activeStakers[stakerIndex];
+        _slash(slashingAmount, stakerAddress, msg.sender);
+        executedRounds[round] = true;
+    }
+
+    function slashCommitter(address _committer) public {
+        if (block.number < epochEndBlock - epochLength || block.number >= epochEndBlock) revert InvalidBlockNumber();
+        CommitData storage commitData = commitmentMap[_committer];
+        if (commitData.epoch != epoch) revert OldEpoch();
+        if (commitData.revealed) revert CommitmentRevealed();
+        // slash the committer
+        _slash(slashingAmount, _committer, msg.sender);
+        commitData.revealed = true;
+    }
+
+    function initiateEpoch() public {
+        if (block.number < epochEndBlock) revert InvalidBlockNumber();
+        epochEndBlock = block.number + commitPhaseDuration + revealPhaseDuration + epochLength;
+        // reset executedRounds
+        // executedRounds = new bool[](roundsPerEpoch);
+        /*
+        for (uint256 i = 0; i < executedRounds.length; i++) {
+            executedRounds[i] = false;
+        }
+            */
+
+        assembly {
+            let len := sload(executedRounds.slot) // Load the length of the array (dynamic arrays store length in slot)
+            let startSlot := add(executedRounds.slot, 1) // First element of the array is stored in slot + 1
+            for { let i := 0 } lt(i, len) { i := add(i, 1) } { sstore(add(startSlot, i), 0) } // Set each element to zero
+        }
+
+        epoch += 1;
+        seed = keccak256(abi.encodePacked(block.timestamp, block.number));
+    }
+
+    function commit(bytes32 _commitment) public {
+        if (block.number >= epochEndBlock - epochLength - revealPhaseDuration) {
+            revert InvalidBlockNumber();
+        }
+        // check if active staker
+        if (!stakerInfo[msg.sender].active) revert NotAStaker();
+
+        commitmentMap[msg.sender] = CommitData({commitment: _commitment, epoch: epoch, revealed: false});
+    }
+
+    function reveal(bytes calldata _signature) public {
+        // do time checks
+        if (
+            block.number < epochEndBlock - epochLength - revealPhaseDuration
+                || block.number >= epochEndBlock - epochLength
+        ) {
+            revert InvalidBlockNumber();
+        }
+
+        if (!_verifySignature(epoch, block.chainid, _signature, msg.sender)) revert InvalidSignature();
+
+        CommitData storage commitData = commitmentMap[msg.sender];
+        if (commitData.commitment != keccak256(abi.encodePacked(_signature))) revert WrongCommitment();
+        if (commitData.revealed) revert CommitmentRevealed();
+        if (commitData.epoch != epoch) revert OldEpoch();
+
+        commitData.revealed = true;
+        seed = keccak256(abi.encodePacked(seed, _signature));
+    }
+
+    function _verifySignature(uint256 _epochNum, uint256 _chainId, bytes memory _signature, address _expectedSigner)
+        private
+        pure
+        returns (bool)
+    {
+        bytes32 messageHash = keccak256(abi.encodePacked(_epochNum, _chainId));
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
+        (bytes32 r, bytes32 s, uint8 v) = _splitSignature(_signature);
+        return ecrecover(ethSignedMessageHash, v, r, s) == _expectedSigner;
+    }
+
+    function _splitSignature(bytes memory _sig) private pure returns (bytes32 r, bytes32 s, uint8 v) {
+        if (_sig.length != 65) revert InvalidSignatureLength();
+        assembly {
+            r := mload(add(_sig, 32))
+            s := mload(add(_sig, 64))
+            v := byte(0, mload(add(_sig, 96)))
         }
     }
 
@@ -133,68 +236,18 @@ contract Staking is IStaking, VRFConsumerBaseV2Plus {
         return lastStaker;
     }
 
-    function slash(uint256 _index) public {
-        // have to check if there nothing was executed (function wasnt called) in the last round
-        if (block.number < epochEndBlock) revert EpochNotDone();
-        if (block.number >= epochEndBlock + s_slashingWindow) revert SlashingWindowOver();
-        if (executedRounds[_index]) revert RoundExecuted();
+    function _slash(uint256 _amount, address _stakerAddress, address _recipient) private {
+        StakerInfo storage staker = stakerInfo[_stakerAddress];
+        staker.balance -= _amount;
 
-        uint40 activeStakerIndex = selectedIndices[_index];
-        address stakerAddress = activeStakers[activeStakerIndex];
-        StakerInfo storage staker = stakerInfo[stakerAddress];
-        staker.balance -= s_slashingAmount;
-
-        if (staker.balance < s_stakingBalanceThreshold) {
+        if (staker.balance < stakingBalanceThreshold) {
             // index in activeStakers array
-            address lastStakerAddress = _deactivateStaker(activeStakerIndex);
+            address lastStakerAddress = _deactivateStaker(staker.arrayIndex);
             stakerInfo[lastStakerAddress].arrayIndex = staker.arrayIndex;
-            stakerInfo[stakerAddress].active = false;
+            staker.active = false;
             numberOfActiveStakers -= 1;
         }
         // reward slasher
-        ERC20(s_stakingToken).transfer(msg.sender, s_slashingAmount / 2);
-        executedRounds[_index] = true;
-    }
-
-    function fulfillRandomWords(uint256, /* _requestId */ uint256[] calldata _randomWords) internal override {
-        if (msg.sender != address(s_vrfCoordinator)) revert OnlyCoordinator();
-
-        // need to make sure it cannot be called again
-        if (!epochRequested) revert RequestAlreadyFulfilled();
-        if (_randomWords.length != s_roundsPerEpoch) revert WrongNumberOfRandomWords();
-        for (uint256 i = 0; i < _randomWords.length; ++i) {
-            selectedIndices[i] = uint40(_randomWords[i] % numberOfActiveStakers);
-        }
-
-        /*
-        assembly {
-          let ptr := selectedIndices.slot
-
-          for { let i := 0 } lt(i, ROUNDS_PER_EPOCH) { i := add(i, 1) } {
-              let randomWord := calldataload(add(_randomWords.offset, mul(i, 0x20)))
-              sstore(add(ptr, i), mod(randomWord, numberOfActiveStakers))
-          }
-        } 
-        */
-
-        epochRequested = false;
-        epochEndBlock = block.number + s_epochLength;
-    }
-
-    function requestRound() public {
-        if (epochRequested) revert EpochAlreadyRequested();
-        if (block.number < epochEndBlock + s_epochBuffer) revert EpochNotDone();
-        epochRequested = true;
-        requestId = s_vrfCoordinator.requestRandomWords(
-            VRFV2PlusClient.RandomWordsRequest({
-                keyHash: keyHash,
-                subId: subscriptionId,
-                requestConfirmations: 3,
-                callbackGasLimit: 100000,
-                numWords: s_roundsPerEpoch,
-                extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: true}))
-            })
-        );
-        executionInRound = false;
+        ERC20(stakingToken).transfer(_recipient, _amount / 2);
     }
 }

@@ -9,6 +9,12 @@ interface IStaking {
         uint40 arrayIndex;
     }
 
+    struct CommitData {
+        bytes32 commitment;
+        uint256 epoch;
+        bool revealed;
+    }
+
     struct StakingSpec {
         address stakingToken;
         uint256 stakingAmount;
@@ -16,18 +22,20 @@ interface IStaking {
         uint256 slashingAmount;
         uint8 roundDuration;
         uint8 roundsPerEpoch;
-        uint8 slashingWindow;
         uint8 roundBuffer;
-        uint8 epochBuffer;
+        uint8 commitPhaseDuration;
+        uint8 revealPhaseDuration;
     }
 
     error NotAStaker();
-    error EpochAlreadyRequested();
-    error EpochNotDone();
-    error OnlyCoordinator();
-    error RequestAlreadyFulfilled();
     error AlreadyStaked();
     error RoundExecuted();
-    error SlashingWindowOver();
     error WrongNumberOfRandomWords();
+    error CommitmentRevealed();
+    error InvalidBlockNumber();
+    error OldEpoch();
+    error InvalidSignature();
+    error WrongCommitment();
+    error NotInBufferOfRound();
+    error InvalidSignatureLength();
 }

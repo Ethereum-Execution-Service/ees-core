@@ -5,13 +5,10 @@ import {Staking} from "../../src/Staking.sol";
 /// @author Victor Brevig
 
 contract MockStaking is Staking {
-    constructor(StakingSpec memory _spec, uint256 _subscriptionId, address _vrfCoordinator)
-        Staking(_spec, _subscriptionId, _vrfCoordinator)
-    {}
+    constructor(StakingSpec memory _spec) Staking(_spec) {}
 
-    function setSelectedIndex(uint256 _index, uint40 _value) public {
-        require(_index < selectedIndices.length, "MockStaking: index out of bounds");
-        selectedIndices[_index] = _value;
+    function setSeed(bytes32 _seed) public {
+        seed = _seed;
     }
 
     function setExecutedRound(uint256 _index, bool _value) public {
@@ -25,5 +22,17 @@ contract MockStaking is Staking {
 
     function setEpochEndBlock(uint256 _epochEndBlock) public {
         epochEndBlock = _epochEndBlock;
+    }
+
+    function setCommitment(CommitData memory _commitment, address _executor) public {
+        commitmentMap[_executor] = _commitment;
+    }
+
+    function setEpoch(uint256 _epoch) public {
+        epoch = _epoch;
+    }
+
+    function getActiveStakersLength() public view returns (uint256) {
+        return activeStakers.length;
     }
 }

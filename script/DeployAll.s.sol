@@ -17,9 +17,8 @@ contract DeployAll is Script {
 
     function setUp() public {
         // set to treasury
-        treasury = 0x84cC05F95B87fd9ba181C43562d89Ea5e605F6D0;
+        treasury = 0x303cAE9641B868722194Bd9517eaC5ca2ad6e71a;
         treasuryBasisPoints = 2000;
-        owner = 0x303cAE9641B868722194Bd9517eaC5ca2ad6e71a;
         protocolFeeRatio = 2;
     }
 
@@ -35,7 +34,7 @@ contract DeployAll is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        jobRegistry = new JobRegistry(owner, treasury, protocolFeeRatio);
+        jobRegistry = new JobRegistry(treasury, protocolFeeRatio);
         console2.log("JobRegistry Deployed:", address(jobRegistry));
 
         regularTimeInterval = new RegularTimeInterval(jobRegistry);

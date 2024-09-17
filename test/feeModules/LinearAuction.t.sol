@@ -31,7 +31,7 @@ contract LinearAuctionTest is Test, GasSnapshot {
         defaultExecutionWindow = 1800;
         defaultStartTime = 1641070800;
 
-        jobRegistry = new JobRegistry(address2, address2, 2);
+        jobRegistry = new JobRegistry(address2, 2);
         feeModule = new MockLinearAuction(jobRegistry);
 
         fromPrivateKey = 0x12341234;

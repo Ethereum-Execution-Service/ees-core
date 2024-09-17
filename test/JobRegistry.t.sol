@@ -50,7 +50,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         defaultMaxExecutionFee = 100;
         defaultExecutionWindow = 1800;
         vm.prank(address0);
-        jobRegistry = new JobRegistry(address2, treasury, defaultProtocolFeeRatio);
+        jobRegistry = new JobRegistry(treasury, defaultProtocolFeeRatio);
 
         initializeERC20Tokens();
         defaultFeeToken = address(token0);
@@ -58,9 +58,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         dummyExecutionModule = new DummyExecutionModule(jobRegistry);
         dummyFeeModule = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
 
-        vm.prank(address2);
+        vm.prank(treasury);
         jobRegistry.addExecutionModule(dummyExecutionModule);
-        vm.prank(address2);
+        vm.prank(treasury);
         jobRegistry.addFeeModule(dummyFeeModule);
 
         fromPrivateKey = 0x12341234;
@@ -401,8 +401,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
     function test_BalancesExecuteNoSponsor(uint256 _executionFee) public {
         uint256 startBalanceFrom = token0.balanceOf(from);
-        uint256 startBalanceExecutor = token0.balanceOf(executor);
-        uint256 startBalanceTreasury = token0.balanceOf(treasury);
+        uint256 startBalanceJobRegistry = token0.balanceOf(address(jobRegistry));
         _executionFee = bound(_executionFee, 0, startBalanceFrom);
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
@@ -426,22 +425,22 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         assertEq(_executionFee, executionFee, "execution fee mismatch");
         assertEq(token0.balanceOf(from), startBalanceFrom - executionFee, "from balance");
+        assertEq(token0.balanceOf(address(jobRegistry)), startBalanceJobRegistry + executionFee, "job registry balance");
         assertEq(
-            token0.balanceOf(executor),
-            startBalanceExecutor + (executionFee - (executionFee / defaultProtocolFeeRatio)),
+            jobRegistry.feeBalances(executor, address(token0)),
+            (executionFee - (executionFee / defaultProtocolFeeRatio)),
             "executor balance"
         );
         assertEq(
-            token0.balanceOf(treasury),
-            startBalanceTreasury + (executionFee / defaultProtocolFeeRatio),
+            jobRegistry.feeBalances(treasury, address(token0)),
+            (executionFee / defaultProtocolFeeRatio),
             "treasury balance"
         );
     }
 
     function test_BalancesExecuteWithSponsor(uint256 _executionFee) public {
         uint256 startBalanceFrom = token0.balanceOf(from);
-        uint256 startBalanceExecutor = token0.balanceOf(executor);
-        uint256 startBalanceTreasury = token0.balanceOf(treasury);
+        uint256 startBalanceJobRegistry = token0.balanceOf(address(jobRegistry));
         uint256 startBalanceSponsor = token0.balanceOf(sponsor);
         _executionFee = bound(_executionFee, 0, startBalanceFrom);
 
@@ -471,14 +470,15 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         assertEq(_executionFee, executionFee, "execution fee mismatch");
         assertEq(token0.balanceOf(from), startBalanceFrom, "from balance");
         assertEq(token0.balanceOf(sponsor), startBalanceSponsor - executionFee, "sponsor balance");
+        assertEq(token0.balanceOf(address(jobRegistry)), startBalanceJobRegistry + executionFee, "job registry balance");
         assertEq(
-            token0.balanceOf(executor),
-            startBalanceExecutor + (executionFee - (executionFee / defaultProtocolFeeRatio)),
+            jobRegistry.feeBalances(executor, address(token0)),
+            (executionFee - (executionFee / defaultProtocolFeeRatio)),
             "executor balance"
         );
         assertEq(
-            token0.balanceOf(treasury),
-            startBalanceTreasury + (executionFee / defaultProtocolFeeRatio),
+            jobRegistry.feeBalances(treasury, address(token0)),
+            (executionFee / defaultProtocolFeeRatio),
             "treasury balance"
         );
     }
@@ -620,7 +620,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
-        vm.prank(address2);
+        vm.prank(treasury);
         jobRegistry.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -657,7 +657,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
-        vm.prank(address2);
+        vm.prank(treasury);
         jobRegistry.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -693,7 +693,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
 
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
-        vm.prank(address2);
+        vm.prank(treasury);
         jobRegistry.addFeeModule(dummyFeeModule2);
 
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
@@ -728,7 +728,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
-        vm.prank(address2);
+        vm.prank(treasury);
         jobRegistry.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -761,7 +761,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
-        vm.prank(address2);
+        vm.prank(treasury);
         jobRegistry.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -792,7 +792,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
-        vm.prank(address2);
+        vm.prank(treasury);
         jobRegistry.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -870,37 +870,5 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.MaxExecutionsExceeded.selector));
         jobRegistry.execute(0, from, "");
-    }
-
-    function test_UpdateProtocolFeeRatio(uint8 protocolFeeRatio) public {
-        // Should be able to update protocol fee ratio
-        vm.prank(address2);
-        jobRegistry.updateProtocolFeeRatio(protocolFeeRatio);
-        assertEq(jobRegistry.protocolFeeRatio(), protocolFeeRatio, "protocol fee ratio mismatch");
-    }
-
-    function testFail_UpdateProtocolFeeRatioNotOwner(address caller) public {
-        // Should revert when updating protocol fee ratio from a caller that is not the owner of JobRegistry
-        vm.assume(caller != address2);
-        vm.prank(caller);
-        jobRegistry.updateProtocolFeeRatio(1);
-    }
-
-    function test_WithdrawProtocolFee(uint256 tokenAmount) public {
-        // Should be able to withdraw protocol fee
-        uint256 startBalanceTreasury = token0.balanceOf(treasury);
-        deal(address(token0), address(jobRegistry), tokenAmount);
-        vm.prank(address2);
-        jobRegistry.withdrawProtocolFee(address(token0), treasury);
-        assertEq(token0.balanceOf(treasury), startBalanceTreasury + tokenAmount, "treasury balance mismatch");
-    }
-
-    function testFail_WithdrawProtocolFeeNotOwner(address caller) public {
-        // Should revert when trying to withdraw protocol fee as non-owner
-        vm.assume(caller != address2);
-        uint256 startBalanceTreasury = token0.balanceOf(treasury);
-        deal(address(token0), address(jobRegistry), 100);
-        vm.prank(caller);
-        jobRegistry.withdrawProtocolFee(address(token0), treasury);
     }
 }

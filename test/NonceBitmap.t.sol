@@ -9,7 +9,7 @@ contract NonceBitmapTest is Test {
     MockJobRegistry jobRegistry;
 
     function setUp() public {
-        jobRegistry = new MockJobRegistry(address(0x2), address(0x3), 2);
+        jobRegistry = new MockJobRegistry(address(0x3), 2);
     }
 
     function test_LowNonces() public {

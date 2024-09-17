@@ -37,8 +37,6 @@ interface IJobRegistry {
         bytes calldata _sponsorSignature,
         bool _hasSponsorship
     ) external;
-    function updateProtocolFeeRatio(uint8 _protocolFeeRatio) external;
-    function withdrawProtocolFee(address _token, address _recipient) external;
     function getJobsArrayLength() external view returns (uint256);
 
     event JobCreated(uint256 indexed index, address indexed owner, address indexed application, bool initialExecution);

@@ -13,7 +13,7 @@ contract EIP712Test is Test {
     JobRegistry jobRegistry;
 
     function setUp() public {
-        jobRegistry = new JobRegistry(address(0x2), address(0x2), 2);
+        jobRegistry = new JobRegistry(address(0x2), 2);
     }
 
     function testDomainSeparator() public {

@@ -80,7 +80,7 @@ contract Staking is IStaking {
         // check if already staked
         if (stakerInfo[msg.sender].balance > 0) revert AlreadyStaked();
 
-        ERC20(stakingToken).transferFrom(msg.sender, address(this), stakingAmount);
+        ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), stakingAmount);
 
         _activateStaker(msg.sender);
         stakerInfo[msg.sender] =
@@ -105,13 +105,13 @@ contract Staking is IStaking {
             stakerInfo[lastStaker].arrayIndex = staker.arrayIndex;
             numberOfActiveStakers -= 1;
         }
-        ERC20(stakingToken).transfer(msg.sender, staker.balance);
+        ERC20(stakingToken).safeTransfer(msg.sender, staker.balance);
     }
 
     function topup(uint256 _amount) public {
         StakerInfo storage staker = stakerInfo[msg.sender];
         if (!staker.initialized) revert NotAStaker();
-        ERC20(stakingToken).transferFrom(msg.sender, address(this), _amount);
+        ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), _amount);
         staker.balance += _amount;
         if (!staker.active && staker.balance >= stakingAmount) {
             _activateStaker(msg.sender);
@@ -249,6 +249,6 @@ contract Staking is IStaking {
             numberOfActiveStakers -= 1;
         }
         // reward slasher
-        ERC20(stakingToken).transfer(_recipient, _amount / 2);
+        ERC20(stakingToken).safeTransfer(_recipient, _amount / 2);
     }
 }

@@ -4,26 +4,25 @@ pragma solidity 0.8.27;
 import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {IExecutionModule} from "./interfaces/IExecutionModule.sol";
 import {IFeeModule} from "./interfaces/IFeeModule.sol";
-import {ERC20} from "solmate/src/tokens/ERC20.sol";
-import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
+
 import {SignatureVerification} from "./libraries/SignatureVerification.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 import {JobSpecificationHash} from "./libraries/JobSpecificationHash.sol";
 import {FeeModuleInputHash} from "./libraries/FeeModuleInputHash.sol";
 import {SignatureExpired, InvalidNonce} from "./PermitErrors.sol";
 import {EIP712} from "./EIP712.sol";
-import {Owned} from "solmate/src/auth/Owned.sol";
+import {FeeManager} from "./FeeManager.sol";
+import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
+import {ERC20} from "solmate/src/tokens/ERC20.sol";
 
 /// @author Victor Brevig
 /// @notice JobRegistry keeps track of all jobs in the EES. It is through this contract jobs are created, executed and deleted.
-contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard, Owned {
-    using SignatureVerification for bytes;
+contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
     using SafeTransferLib for ERC20;
+    using SignatureVerification for bytes;
     using JobSpecificationHash for JobSpecification;
     using FeeModuleInputHash for FeeModuleInput;
 
-    address immutable treasury;
-    uint8 public protocolFeeRatio;
     Job[] public jobs;
 
     IExecutionModule[] public executionModules;
@@ -31,10 +30,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard, Owned {
 
     mapping(address => mapping(uint256 => uint256)) public nonceBitmap;
 
-    constructor(address _owner, address _treasury, uint8 _protocolFeeRatio) Owned(_owner) {
-        treasury = _treasury;
-        protocolFeeRatio = _protocolFeeRatio;
-    }
+    constructor(address _treasury, uint8 _protocolFeeRatio) FeeManager(_treasury, _protocolFeeRatio) {}
 
     /**
      * @notice Creates a job with given specification and stores it in the jobs array. It calls the callback funcitons onCreateJob on both the execution module and the application.
@@ -140,9 +136,13 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard, Owned {
         unchecked {
             executorFee = executionFee - protocolFee;
         }
-        ERC20(executionFeeToken).safeTransferFrom(job.sponsor, treasury, protocolFee);
-        // transfer executor fee
-        ERC20(executionFeeToken).safeTransferFrom(job.sponsor, _feeRecipient, executorFee);
+        // transfer whole fee to this
+        ERC20(executionFeeToken).safeTransferFrom(job.sponsor, address(this), executionFee);
+
+        // update mapping with treasury fee
+        feeBalances[this.owner()][executionFeeToken] += protocolFee;
+        // update mapping with executor fee
+        feeBalances[_feeRecipient][executionFeeToken] += executorFee;
 
         emit JobExecuted(
             _index, job.owner, address(job.application), job.executionCounter, executionFee, executionFeeToken
@@ -255,23 +255,6 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard, Owned {
             job.feeModule = _feeModuleInput.feeModule;
             emit FeeModuleUpdate(_feeModuleInput.index, job.owner, job.sponsor);
         }
-    }
-
-    /**
-     * @notice Updates protocol fee ratio.
-     * @param _protocolFeeRatio The new protocol fee ratio.
-     */
-    function updateProtocolFeeRatio(uint8 _protocolFeeRatio) public override onlyOwner {
-        protocolFeeRatio = _protocolFeeRatio;
-    }
-
-    /**
-     * @notice Withdraws protocol fee from the contract.
-     * @param _token The ERC-20 token to withdraw.
-     * @param _recipient The address to receive the withdrawn tokens.
-     */
-    function withdrawProtocolFee(address _token, address _recipient) public override onlyOwner {
-        ERC20(_token).safeTransfer(_recipient, ERC20(_token).balanceOf(address(this)));
     }
 
     /**

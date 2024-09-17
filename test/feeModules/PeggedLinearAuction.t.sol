@@ -34,7 +34,7 @@ contract PeggedLinearAuctionTest is Test, GasSnapshot {
         defaultExecutionWindow = 1800;
         defaultStartTime = 1641070800;
 
-        jobRegistry = new JobRegistry(address2, address2, 2);
+        jobRegistry = new JobRegistry(address2, 2);
         feeModule = new MockPeggedLinearAuction(jobRegistry);
 
         dummyPriceOracle = new DummyPriceOracle(100);

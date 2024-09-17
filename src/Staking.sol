@@ -12,11 +12,11 @@ contract Staking is IStaking {
     bool public executionInRound;
     bool public epochRequested;
 
-    uint256 public epochEndBlock;
+    uint256 public epochEndTime;
 
     uint40 public numberOfActiveStakers;
 
-    // in blocks
+    // in seconds
     uint8 internal immutable roundBuffer;
 
     address internal immutable stakingToken;
@@ -25,18 +25,22 @@ contract Staking is IStaking {
     uint256 internal immutable stakingBalanceThreshold;
     // amount to slash from the staker upon inactivity.
     uint256 internal immutable slashingAmount;
-    // number of blocks inactive executor can be slashed within
-    uint8 internal immutable slashingWindow;
-    // in blocks
+
+    // in seconds
     uint8 internal immutable roundDuration;
 
     uint8 internal immutable roundsPerEpoch;
-    // in blocks
-    uint8 internal immutable epochLength;
+    // in seconds
+    uint8 internal immutable epochDuration;
 
-    // in blocks
+    // in seconds
     uint8 internal immutable commitPhaseDuration;
+
+    // in seconds
     uint8 internal immutable revealPhaseDuration;
+
+    // in seconds
+    uint8 internal immutable selectionPhaseDuration;
 
     // true for an index if the executor has executed in that round
     bool[] public executedRounds;
@@ -65,7 +69,8 @@ contract Staking is IStaking {
         roundDuration = _spec.roundDuration;
         roundsPerEpoch = _spec.roundsPerEpoch;
         roundBuffer = _spec.roundBuffer;
-        epochLength = (roundDuration + roundBuffer) * roundsPerEpoch;
+        selectionPhaseDuration = _spec.commitPhaseDuration + _spec.revealPhaseDuration;
+        epochDuration = selectionPhaseDuration + (roundDuration + roundBuffer) * roundsPerEpoch;
         commitPhaseDuration = _spec.commitPhaseDuration;
         revealPhaseDuration = _spec.revealPhaseDuration;
         executedRounds = new bool[](roundsPerEpoch);
@@ -84,8 +89,8 @@ contract Staking is IStaking {
     }
 
     function unstake() public {
-        if (block.number >= epochEndBlock - epochLength - revealPhaseDuration) {
-            revert InvalidBlockNumber();
+        if (block.timestamp < epochEndTime && block.timestamp >= epochEndTime - epochDuration + revealPhaseDuration) {
+            revert InvalidBlockTime();
         }
 
         StakerInfo memory staker = stakerInfo[msg.sender];
@@ -117,15 +122,16 @@ contract Staking is IStaking {
 
     function slashInactiveStaker() public {
         // have to check if there nothing was executed (function wasnt called) in the last round
-        if (block.number < epochEndBlock - epochLength || block.number >= epochEndBlock) revert InvalidBlockNumber();
-        // compute round number (the one that just passed)
-
-        uint256 blocksIntoEpoch = epochLength - (epochEndBlock - block.number);
+        if (block.timestamp < epochEndTime - epochDuration + selectionPhaseDuration || block.timestamp >= epochEndTime)
+        {
+            revert InvalidBlockTime();
+        }
+        uint256 timeIntoRounds = epochDuration - selectionPhaseDuration - (epochEndTime - block.timestamp);
         uint8 roundTotalDuration = roundDuration + roundBuffer;
-        // revert if still in execution phase of the round
-        if (blocksIntoEpoch % roundTotalDuration < roundDuration) revert NotInBufferOfRound();
-
-        uint256 round = blocksIntoEpoch / roundTotalDuration;
+        // revert if in execution phase of the round
+        if (timeIntoRounds % roundTotalDuration < roundDuration) revert NotInBufferOfRound();
+        // current round within the epoch
+        uint256 round = timeIntoRounds / roundTotalDuration;
 
         // compute selected index for round
         uint256 stakerIndex = uint256(keccak256(abi.encodePacked(seed, round))) % uint256(numberOfActiveStakers);
@@ -139,7 +145,9 @@ contract Staking is IStaking {
     }
 
     function slashCommitter(address _committer) public {
-        if (block.number < epochEndBlock - epochLength || block.number >= epochEndBlock) revert InvalidBlockNumber();
+        if (block.timestamp < epochEndTime - epochDuration + commitPhaseDuration || block.timestamp >= epochEndTime) {
+            revert InvalidBlockTime();
+        }
         CommitData storage commitData = commitmentMap[_committer];
         if (commitData.epoch != epoch) revert OldEpoch();
         if (commitData.revealed) revert CommitmentRevealed();
@@ -149,15 +157,8 @@ contract Staking is IStaking {
     }
 
     function initiateEpoch() public {
-        if (block.number < epochEndBlock) revert InvalidBlockNumber();
-        epochEndBlock = block.number + commitPhaseDuration + revealPhaseDuration + epochLength;
-        // reset executedRounds
-        // executedRounds = new bool[](roundsPerEpoch);
-        /*
-        for (uint256 i = 0; i < executedRounds.length; i++) {
-            executedRounds[i] = false;
-        }
-            */
+        if (block.timestamp < epochEndTime) revert InvalidBlockTime();
+        epochEndTime = block.timestamp + epochDuration;
 
         assembly {
             let len := sload(executedRounds.slot) // Load the length of the array (dynamic arrays store length in slot)
@@ -166,12 +167,12 @@ contract Staking is IStaking {
         }
 
         epoch += 1;
-        seed = keccak256(abi.encodePacked(block.timestamp, block.number));
+        seed = keccak256(abi.encodePacked(block.timestamp, block.timestamp));
     }
 
     function commit(bytes32 _commitment) public {
-        if (block.number >= epochEndBlock - epochLength - revealPhaseDuration) {
-            revert InvalidBlockNumber();
+        if (block.timestamp >= epochEndTime - epochDuration + revealPhaseDuration) {
+            revert InvalidBlockTime();
         }
         // check if active staker
         if (!stakerInfo[msg.sender].active) revert NotAStaker();
@@ -182,10 +183,10 @@ contract Staking is IStaking {
     function reveal(bytes calldata _signature) public {
         // do time checks
         if (
-            block.number < epochEndBlock - epochLength - revealPhaseDuration
-                || block.number >= epochEndBlock - epochLength
+            block.timestamp < epochEndTime - epochDuration + revealPhaseDuration
+                || block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
         ) {
-            revert InvalidBlockNumber();
+            revert InvalidBlockTime();
         }
 
         if (!_verifySignature(epoch, block.chainid, _signature, msg.sender)) revert InvalidSignature();

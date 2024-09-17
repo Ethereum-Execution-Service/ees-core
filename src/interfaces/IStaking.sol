@@ -32,7 +32,7 @@ interface IStaking {
     error RoundExecuted();
     error WrongNumberOfRandomWords();
     error CommitmentRevealed();
-    error InvalidBlockNumber();
+    error InvalidBlockTime();
     error OldEpoch();
     error InvalidSignature();
     error WrongCommitment();

@@ -27,6 +27,8 @@ interface IStaking {
         uint8 revealPhaseDuration;
     }
 
+    event EpochInitiated(uint248 epoch);
+
     error NotAStaker();
     error AlreadyStaked();
     error RoundExecuted();

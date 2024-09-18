@@ -49,6 +49,7 @@ contract FeeManagerTest is Test, TokenProvider, GasSnapshot {
     event Hello(uint256 balance);
 
     function test_WithdrawCollectedFee(address caller, uint256 tokenAmount) public {
+        vm.assume(caller != address(feeManager));
         vm.assume(tokenAmount > 0);
         // Should be able to withdraw protocol fee
         uint256 startBalanceCaller = token0.balanceOf(caller);

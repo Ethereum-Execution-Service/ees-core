@@ -43,4 +43,8 @@ contract MockStaking is Staking {
     function getSelectionPhaseDuration() public view returns (uint256) {
         return selectionPhaseDuration;
     }
+
+    function getTotalRoundDuration() public view returns (uint256) {
+        return totalRoundDuration;
+    }
 }

@@ -32,6 +32,7 @@ contract Staking is IStaking {
     uint8 internal immutable commitPhaseDuration;
     uint8 internal immutable revealPhaseDuration;
     uint8 internal immutable selectionPhaseDuration;
+    uint8 internal immutable totalRoundDuration;
 
     // true for an index if the executor has executed in that round
     bool[] public executedRounds;
@@ -53,9 +54,8 @@ contract Staking is IStaking {
             _spec.slashingAmount <= _spec.stakingBalanceThreshold,
             "Staking: slashing amount must be less than or equal to staking threshold amount"
         );
-        require(
-            _spec.roundDuration + _spec.roundBuffer > 0, "Staking: round duration and buffer must be greater than 0"
-        );
+        totalRoundDuration = _spec.roundDuration + _spec.roundBuffer;
+        require(totalRoundDuration > 0, "Staking: round duration and buffer must be greater than 0");
         stakingToken = _spec.stakingToken;
         stakingAmount = _spec.stakingAmount;
         stakingBalanceThreshold = _spec.stakingBalanceThreshold;
@@ -64,7 +64,7 @@ contract Staking is IStaking {
         roundsPerEpoch = _spec.roundsPerEpoch;
         roundBuffer = _spec.roundBuffer;
         selectionPhaseDuration = _spec.commitPhaseDuration + _spec.revealPhaseDuration;
-        epochDuration = selectionPhaseDuration + (roundDuration + roundBuffer) * roundsPerEpoch;
+        epochDuration = selectionPhaseDuration + totalRoundDuration * roundsPerEpoch;
         commitPhaseDuration = _spec.commitPhaseDuration;
         revealPhaseDuration = _spec.revealPhaseDuration;
         executedRounds = new bool[](roundsPerEpoch);
@@ -86,7 +86,8 @@ contract Staking is IStaking {
     }
 
     function unstake() public {
-        if (block.timestamp < epochEndTime && block.timestamp >= epochEndTime - epochDuration + revealPhaseDuration) {
+        if (block.timestamp < epochEndTime && block.timestamp >= epochEndTime - epochDuration + commitPhaseDuration) {
+            // not allowed to unstake in reveal phase + rounds
             revert InvalidBlockTime();
         }
 
@@ -131,20 +132,17 @@ contract Staking is IStaking {
         unchecked {
             // safe given that 1) epochEndTime > block.timestamp and 2) block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
             uint256 timeIntoRounds = epochDuration - selectionPhaseDuration - (epochEndTime - block.timestamp);
-            // two uint8's cannot be more than uint16
-            uint16 roundTotalDuration = roundDuration + roundBuffer;
-            /// roundTotalDuration is > 0 becasue of constructor check on roundDuration + roundBuffer
-            // revert if in execution phase of the round
-            if (timeIntoRounds % roundTotalDuration < roundDuration) revert NotInBufferOfRound();
+            /// totalRoundDuration is > 0 becasue of constructor check on totalRoundDuration
+            // revert if in buffer (open execution) phase of the round
+            if (timeIntoRounds % totalRoundDuration < roundDuration) revert NotInBufferOfRound();
             // current round within the epoch
-            round = timeIntoRounds / roundTotalDuration;
+            round = timeIntoRounds / totalRoundDuration;
         }
+        // check whether the selected staker has executed in thus round
+        if (executedRounds[round]) revert RoundExecuted();
 
         // compute selected index for round
         uint256 stakerIndex = uint256(keccak256(abi.encodePacked(seed, round))) % uint256(numberOfActiveStakers);
-
-        // check whether the selected staker has executed in thus round
-        if (executedRounds[round]) revert RoundExecuted();
 
         address stakerAddress = activeStakers[stakerIndex];
         _slash(slashingAmount, stakerAddress, msg.sender);
@@ -152,7 +150,8 @@ contract Staking is IStaking {
     }
 
     function slashCommitter(address _committer) public {
-        if (block.timestamp < epochEndTime - epochDuration + commitPhaseDuration || block.timestamp >= epochEndTime) {
+        if (block.timestamp < epochEndTime - epochDuration + selectionPhaseDuration || block.timestamp >= epochEndTime)
+        {
             revert InvalidBlockTime();
         }
         CommitData storage commitData = commitmentMap[_committer];
@@ -178,13 +177,13 @@ contract Staking is IStaking {
 
         unchecked {
             // number of epochs should not exceed uint248
-            epoch++;
+            emit EpochInitiated(++epoch);
         }
         seed = keccak256(abi.encodePacked(block.timestamp, block.number, seed));
     }
 
     function commit(bytes32 _commitment) public {
-        if (block.timestamp >= epochEndTime - epochDuration + revealPhaseDuration) {
+        if (block.timestamp >= epochEndTime - epochDuration + commitPhaseDuration) {
             revert InvalidBlockTime();
         }
         // check if active staker
@@ -195,8 +194,9 @@ contract Staking is IStaking {
 
     function reveal(bytes calldata _signature) public {
         // do time checks
+
         if (
-            block.timestamp < epochEndTime - epochDuration + revealPhaseDuration
+            block.timestamp < epochEndTime - epochDuration + commitPhaseDuration
                 || block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
         ) {
             revert InvalidBlockTime();
@@ -267,7 +267,7 @@ contract Staking is IStaking {
             stakerInfo[lastStakerAddress].arrayIndex = staker.arrayIndex;
             staker.active = false;
         }
-        // reward slasher
+        // reward slasher, how about putting it in the fee mapping? then it needs access
         ERC20(stakingToken).safeTransfer(_recipient, _amount / 2);
     }
 }

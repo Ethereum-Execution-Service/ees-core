@@ -28,7 +28,7 @@ contract MockStaking is Staking {
         commitmentMap[_executor] = _commitment;
     }
 
-    function setEpoch(uint256 _epoch) public {
+    function setEpoch(uint248 _epoch) public {
         epoch = _epoch;
     }
 

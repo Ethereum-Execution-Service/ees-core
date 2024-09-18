@@ -8,7 +8,7 @@ import {GasSnapshot} from "forge-gas-snapshot/src/GasSnapshot.sol";
 import {SignatureExpired, InvalidNonce} from "../src/PermitErrors.sol";
 import {IJobRegistry} from "../src/interfaces/IJobRegistry.sol";
 import {IApplication} from "../src/interfaces/IApplication.sol";
-import {JobRegistry} from "../src/JobRegistry.sol";
+import {MockJobRegistry} from "./mocks/MockJobRegistry.sol";
 import {DummyApplication} from "./mocks/dummyContracts/DummyApplication.sol";
 import {DummyExecutionModule} from "./mocks/dummyContracts/DummyExecutionModule.sol";
 import {DummyFeeModule} from "./mocks/dummyContracts/DummyFeeModule.sol";
@@ -17,7 +17,7 @@ import {FeeModuleInputSignature} from "./utils/FeeModuleInputSignature.sol";
 import {StdUtils} from "forge-std/src/StdUtils.sol";
 
 contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeModuleInputSignature, GasSnapshot {
-    JobRegistry jobRegistry;
+    MockJobRegistry jobRegistry;
     DummyApplication dummyApplication;
     DummyExecutionModule dummyExecutionModule;
     DummyFeeModule dummyFeeModule;
@@ -50,7 +50,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         defaultMaxExecutionFee = 100;
         defaultExecutionWindow = 1800;
         vm.prank(address0);
-        jobRegistry = new JobRegistry(treasury, defaultProtocolFeeRatio);
+        jobRegistry = new MockJobRegistry(treasury, defaultProtocolFeeRatio);
 
         initializeERC20Tokens();
         defaultFeeToken = address(token0);

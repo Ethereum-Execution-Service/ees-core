@@ -11,7 +11,7 @@ interface IStaking {
 
     struct CommitData {
         bytes32 commitment;
-        uint256 epoch;
+        uint248 epoch;
         bool revealed;
     }
 

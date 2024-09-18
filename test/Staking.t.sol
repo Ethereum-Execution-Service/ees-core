@@ -245,7 +245,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         staking.setEpochEndTime(defaultEpochEndTime);
         vm.warp(defaultEpochEndTime - staking.getEpochDuration() + staking.getSelectionPhaseDuration() + roundDuration);
         vm.prank(slasher);
-        staking.slashInactiveStaker();
+        staking.slashRoundInactiveStaker();
         uint256 endBalanceSlasher = token0.balanceOf(slasher);
         (uint256 balance, bool active, bool initialized, uint40 arrayIndex) = staking.stakerInfo(executor);
         assertEq(balance, stakingAmount - slashingAmount, "balance mismatch");
@@ -262,7 +262,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         vm.warp(defaultEpochEndTime - staking.getEpochDuration() + staking.getSelectionPhaseDuration() + roundDuration);
         vm.prank(slasher);
         vm.expectRevert(IStaking.RoundExecuted.selector);
-        staking.slashInactiveStaker();
+        staking.slashRoundInactiveStaker();
     }
 
     function test_SlashingEndBalanceBelowThreshold(address slasher) public {
@@ -280,7 +280,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         staking.setEpochEndTime(defaultEpochEndTime);
         vm.warp(defaultEpochEndTime - staking.getEpochDuration() + staking.getSelectionPhaseDuration() + roundDuration);
         vm.prank(slasher);
-        staking.slashInactiveStaker();
+        staking.slashRoundInactiveStaker();
         uint256 endBalanceSlasher = token0.balanceOf(slasher);
         (uint256 balance, bool active, bool initialized, uint40 arrayIndex) = staking.stakerInfo(executor);
         assertEq(balance, stakingBalanceThreshold + 1 - slashingAmount, "balance mismatch");
@@ -314,7 +314,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         staking.initiateEpoch();
     }
 
-    function test_Commit(bytes32 commitment, uint256 epoch) public {
+    function test_Commit(bytes32 commitment, uint248 epoch) public {
         vm.prank(executor);
         staking.stake();
 
@@ -324,7 +324,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         vm.prank(executor);
         staking.commit(commitment);
 
-        (bytes32 commitmentSet, uint256 epochSet, bool revealedSet) = staking.commitmentMap(executor);
+        (bytes32 commitmentSet, uint248 epochSet, bool revealedSet) = staking.commitmentMap(executor);
         assertEq(commitmentSet, commitment, "commitment mismatch");
         assertEq(epochSet, epoch, "epoch mismatch");
         assertFalse(revealedSet, "revealed mismatch");
@@ -338,7 +338,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         staking.commit(commitment);
     }
 
-    function test_Reveal(uint256 epochNum) public {
+    function test_Reveal(uint248 epochNum) public {
         vm.prank(executor);
         staking.stake();
 
@@ -361,7 +361,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         assertTrue(revealed, "not revealed");
     }
 
-    function test_RevealWrongSigLength(uint256 epochNum) public {
+    function test_RevealWrongSigLength(uint248 epochNum) public {
         vm.prank(executor);
         staking.stake();
 
@@ -383,7 +383,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         staking.reveal(sigExtra);
     }
 
-    function test_RevealWrongSigner(uint256 epochNum, address caller) public {
+    function test_RevealWrongSigner(uint248 epochNum, address caller) public {
         vm.assume(executor != caller);
 
         vm.prank(executor);
@@ -406,7 +406,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         staking.reveal(sig);
     }
 
-    function test_RevealWrongEpoch(uint256 epochNum, uint256 secondEpochNum) public {
+    function test_RevealWrongEpoch(uint248 epochNum, uint248 secondEpochNum) public {
         vm.assume(epochNum != secondEpochNum);
 
         vm.prank(executor);
@@ -429,7 +429,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         staking.reveal(generateSignature(ethSignedMessageHash, secondExecutorPrivateKey));
     }
 
-    function test_RevealWrongChainId(uint256 epochNum, uint256 chainId) public {
+    function test_RevealWrongChainId(uint248 epochNum, uint256 chainId) public {
         vm.assume(block.chainid != chainId);
 
         vm.prank(executor);
@@ -452,7 +452,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         staking.reveal(generateSignature(ethSignedMessageHash, executorPrivateKey));
     }
 
-    function test_RevealWrongCommitment(uint256 epochNum, bytes32 commitment) public {
+    function test_RevealWrongCommitment(uint248 epochNum, bytes32 commitment) public {
         vm.prank(executor);
         staking.stake();
 
@@ -472,7 +472,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         staking.reveal(generateSignature(ethSignedMessageHash, executorPrivateKey));
     }
 
-    function test_RevealCommitmentOldEpoch(uint256 epochNum, uint256 secondEpochNum) public {
+    function test_RevealCommitmentOldEpoch(uint248 epochNum, uint248 secondEpochNum) public {
         vm.assume(epochNum != secondEpochNum);
 
         vm.prank(executor);
@@ -495,7 +495,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         staking.reveal(generateSignature(ethSignedMessageHash, executorPrivateKey));
     }
 
-    function test_RevealAlreadyRevealed(uint256 epoch) public {
+    function test_RevealAlreadyRevealed(uint248 epoch) public {
         vm.prank(executor);
         staking.stake();
 
@@ -537,7 +537,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         assertEq(endBalanceSlasher, startBalanceSlasher + slashingAmount / 2, "slasher balance mismatch");
     }
 
-    function test_SlashCommitterOldEpoch(address slasher, uint256 epochNum, uint256 secondEpochNum) public {
+    function test_SlashCommitterOldEpoch(address slasher, uint248 epochNum, uint248 secondEpochNum) public {
         vm.assume(epochNum != secondEpochNum);
         vm.prank(executor);
         staking.stake();

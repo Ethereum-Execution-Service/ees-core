@@ -85,8 +85,7 @@ contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
         });
 
         if (reuseIndex) {
-            Job storage job = jobs[_index];
-            if (job.owner != address(0)) revert JobAlreadyExistsAtIndex();
+            if (jobs[_index].owner != address(0)) revert JobAlreadyExistsAtIndex();
             jobs[index] = newJob;
         } else {
             jobs.push(newJob);
@@ -108,7 +107,7 @@ contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
         nonReentrant
         returns (uint256 executionFee, address executionFeeToken)
     {
-        Job storage job = jobs[_index];
+        Job memory job = jobs[_index];
 
         // job.owner can only be 0 if job was deleted
         if (job.owner == address(0)) revert JobIsDeleted();
@@ -124,7 +123,7 @@ contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
 
         uint256 gasBefore = gasleft();
 
-        (uint256 executionTime) = executionModule.onExecuteJob(_index, job.executionWindow, _verificationData);
+        uint256 executionTime = executionModule.onExecuteJob(_index, job.executionWindow, _verificationData);
         job.application.onExecuteJob(_index, job.owner, job.executionCounter);
 
         (executionFee, executionFeeToken) =
@@ -148,7 +147,7 @@ contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
             _index, job.owner, address(job.application), job.executionCounter, executionFee, executionFeeToken
         );
 
-        job.executionCounter++;
+        jobs[_index].executionCounter++;
 
         return (executionFee, executionFeeToken);
     }
@@ -160,6 +159,8 @@ contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
     function deleteJob(uint256 _index) public override nonReentrant {
         Job memory job = jobs[_index];
 
+        // executionModule, feeModule, owner, executinCounter, maxExecutions, executionWindow, application
+        // NO sponsor
         IExecutionModule executionModule = executionModules[uint8(job.executionModule)];
         IFeeModule feeModule = feeModules[uint8(job.feeModule)];
 
@@ -228,6 +229,11 @@ contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
     ) public override nonReentrant {
         Job storage job = jobs[_feeModuleInput.index];
         if (job.owner != msg.sender) revert Unauthorized();
+        // Check that job is not in execution mode
+        IExecutionModule executionModule = executionModules[uint8(job.executionModule)];
+        if (executionModule.jobIsInExecutionMode(_feeModuleInput.index, job.executionWindow)) {
+            revert JobInExecutionMode();
+        }
         if (_hasSponsorship) {
             if (block.timestamp > _feeModuleInput.deadline) revert SignatureExpired(_feeModuleInput.deadline);
             _useUnorderedNonce(_sponsor, _feeModuleInput.nonce);
@@ -235,11 +241,6 @@ contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
             job.sponsor = _sponsor;
         } else {
             job.sponsor = job.owner;
-        }
-        // Check that job is not in execution mode
-        IExecutionModule executionModule = executionModules[uint8(job.executionModule)];
-        if (executionModule.jobIsInExecutionMode(_feeModuleInput.index, job.executionWindow)) {
-            revert JobInExecutionMode();
         }
 
         IFeeModule currentFeeModule = feeModules[uint8(job.feeModule)];

@@ -21,7 +21,10 @@ contract Staking is IStaking {
     // minimum amount of staking balance required to be eligible to execute
     uint256 internal immutable stakingBalanceThreshold;
     // amount to slash from the staker upon inactivity.
-    uint256 internal immutable slashingAmount;
+    uint256 internal immutable inactiveSlashingAmount;
+
+    // amount to slash for committing without revealing
+    uint256 internal immutable commitSlashingAmount;
 
     uint8 internal immutable roundsPerEpoch;
 
@@ -33,15 +36,14 @@ contract Staking is IStaking {
     uint8 internal immutable revealPhaseDuration;
     uint8 internal immutable selectionPhaseDuration;
     uint8 internal immutable totalRoundDuration;
-
-    // true for an index if the executor has executed in that round
-    bool[] public executedRounds;
+    // slashing phase
+    uint8 internal immutable epochBuffer;
 
     address[] public activeStakers;
     mapping(address => StakerInfo) public stakerInfo;
 
     bytes32 public seed;
-    uint248 public epoch;
+    uint192 public epoch;
 
     mapping(address => CommitData) public commitmentMap;
 
@@ -50,35 +52,48 @@ contract Staking is IStaking {
             _spec.stakingBalanceThreshold <= _spec.stakingAmount,
             "Staking: threshold must be less than or equal to staking amount"
         );
-        require(
-            _spec.slashingAmount <= _spec.stakingBalanceThreshold,
-            "Staking: slashing amount must be less than or equal to staking threshold amount"
-        );
         totalRoundDuration = _spec.roundDuration + _spec.roundBuffer;
         require(totalRoundDuration > 0, "Staking: round duration and buffer must be greater than 0");
+
         stakingToken = _spec.stakingToken;
         stakingAmount = _spec.stakingAmount;
         stakingBalanceThreshold = _spec.stakingBalanceThreshold;
-        slashingAmount = _spec.slashingAmount;
+        inactiveSlashingAmount = _spec.inactiveSlashingAmount;
+        commitSlashingAmount = _spec.commitSlashingAmount;
+        require(
+            inactiveSlashingAmount + commitSlashingAmount <= stakingBalanceThreshold,
+            "Staking: invalid slashing amounts"
+        );
         roundDuration = _spec.roundDuration;
         roundsPerEpoch = _spec.roundsPerEpoch;
         roundBuffer = _spec.roundBuffer;
+        epochBuffer = _spec.epochBuffer;
         selectionPhaseDuration = _spec.commitPhaseDuration + _spec.revealPhaseDuration;
         epochDuration = selectionPhaseDuration + totalRoundDuration * roundsPerEpoch;
         commitPhaseDuration = _spec.commitPhaseDuration;
         revealPhaseDuration = _spec.revealPhaseDuration;
-        executedRounds = new bool[](roundsPerEpoch);
     }
 
     function stake() public {
+        // not allowed to stake during rounds, numberOfActiveStakers should remain const in that phase
+        if (block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration && block.timestamp < epochEndTime)
+        {
+            revert InvalidBlockTime();
+        }
+
         // check if already staked
         if (stakerInfo[msg.sender].balance > 0) revert AlreadyStaked();
 
         ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), stakingAmount);
 
         _activateStaker(msg.sender);
-        stakerInfo[msg.sender] =
-            StakerInfo({balance: stakingAmount, active: true, initialized: true, arrayIndex: numberOfActiveStakers});
+        stakerInfo[msg.sender] = StakerInfo({
+            balance: stakingAmount,
+            active: true,
+            initialized: true,
+            arrayIndex: numberOfActiveStakers,
+            latestExecutedEpoch: 0
+        });
         unchecked {
             // number of active stakers should not exceed uint40
             numberOfActiveStakers++;
@@ -92,7 +107,7 @@ contract Staking is IStaking {
         }
 
         StakerInfo memory staker = stakerInfo[msg.sender];
-        if (!staker.initialized) revert NotAStaker();
+        if (!staker.initialized) revert NotActiveStaker();
         delete stakerInfo[msg.sender];
         delete commitmentMap[msg.sender];
 
@@ -105,8 +120,13 @@ contract Staking is IStaking {
     }
 
     function topup(uint256 _amount) public {
+        // not allowed to topup during rounds, numberOfActiveStakers should remain const in that phase
+        if (block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration && block.timestamp < epochEndTime)
+        {
+            revert InvalidBlockTime();
+        }
         StakerInfo storage staker = stakerInfo[msg.sender];
-        if (!staker.initialized) revert NotAStaker();
+        if (!staker.initialized) revert NotActiveStaker();
         ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), _amount);
         unchecked {
             // sum of all user balances should not exceed uint256
@@ -122,61 +142,45 @@ contract Staking is IStaking {
         }
     }
 
-    function slashRoundInactiveStaker() public {
-        // have to check if there nothing was executed (function wasnt called) in the last round
-        if (block.timestamp < epochEndTime - epochDuration + selectionPhaseDuration || block.timestamp >= epochEndTime)
-        {
+    function slashRoundInactiveStaker(address _staker, uint8 _round) public {
+        if (block.timestamp < epochEndTime || block.timestamp >= epochEndTime + epochBuffer) {
             revert InvalidBlockTime();
         }
-        uint256 round;
-        unchecked {
-            // safe given that 1) epochEndTime > block.timestamp and 2) block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
-            uint256 timeIntoRounds = epochDuration - selectionPhaseDuration - (epochEndTime - block.timestamp);
-            /// totalRoundDuration is > 0 becasue of constructor check on totalRoundDuration
-            // revert if in buffer (open execution) phase of the round
-            if (timeIntoRounds % totalRoundDuration < roundDuration) revert NotInBufferOfRound();
-            // current round within the epoch
-            round = timeIntoRounds / totalRoundDuration;
-        }
-        // check whether the selected staker has executed in thus round
-        if (executedRounds[round]) revert RoundExecuted();
+        // check if the staker did execute this epoch
+        StakerInfo storage staker = stakerInfo[_staker];
+        // do we have to check if staker is active? no, becasue we verify that staker.arayIndex is selected
+        // verify staker.arrayIndex is selected
+        uint256 stakerIndex = uint256(keccak256(abi.encodePacked(seed, _round))) % uint256(numberOfActiveStakers);
+        if (staker.arrayIndex != stakerIndex) revert StakerNotSelectedForRound();
+        if (staker.latestExecutedEpoch == epoch) revert RoundExecuted();
 
-        // compute selected index for round
-        uint256 stakerIndex = uint256(keccak256(abi.encodePacked(seed, round))) % uint256(numberOfActiveStakers);
+        // prevent from slashing again
+        staker.latestExecutedEpoch = epoch;
 
-        address stakerAddress = activeStakers[stakerIndex];
-        _slash(slashingAmount, stakerAddress, msg.sender);
-        executedRounds[round] = true;
+        _slash(inactiveSlashingAmount, _staker, msg.sender);
     }
 
     function slashCommitter(address _committer) public {
-        if (block.timestamp < epochEndTime - epochDuration + selectionPhaseDuration || block.timestamp >= epochEndTime)
-        {
+        if (block.timestamp < epochEndTime || block.timestamp >= epochEndTime + epochBuffer) {
             revert InvalidBlockTime();
         }
         CommitData storage commitData = commitmentMap[_committer];
         if (commitData.epoch != epoch) revert OldEpoch();
         if (commitData.revealed) revert CommitmentRevealed();
         // slash the committer
-        _slash(slashingAmount, _committer, msg.sender);
+        _slash(commitSlashingAmount, _committer, msg.sender);
         commitData.revealed = true;
     }
 
     function initiateEpoch() public {
-        if (block.timestamp < epochEndTime) revert InvalidBlockTime();
+        if (block.timestamp < epochEndTime + epochBuffer) revert InvalidBlockTime();
         unchecked {
             // block.timestamp + uint8 will not reach uint256
             epochEndTime = block.timestamp + epochDuration;
         }
 
-        assembly {
-            let len := sload(executedRounds.slot) // Load the length of the array (dynamic arrays store length in slot)
-            let startSlot := add(executedRounds.slot, 1) // First element of the array is stored in slot + 1
-            for { let i := 0 } lt(i, len) { i := add(i, 1) } { sstore(add(startSlot, i), 0) } // Set each element to zero
-        }
-
         unchecked {
-            // number of epochs should not exceed uint248
+            // number of epochs should not exceed uint192
             emit EpochInitiated(++epoch);
         }
         seed = keccak256(abi.encodePacked(block.timestamp, block.number, seed));
@@ -186,8 +190,7 @@ contract Staking is IStaking {
         if (block.timestamp >= epochEndTime - epochDuration + commitPhaseDuration) {
             revert InvalidBlockTime();
         }
-        // check if active staker
-        if (!stakerInfo[msg.sender].active) revert NotAStaker();
+        if (!stakerInfo[msg.sender].active) revert NotActiveStaker();
 
         commitmentMap[msg.sender] = CommitData({commitment: _commitment, epoch: epoch, revealed: false});
     }
@@ -213,7 +216,7 @@ contract Staking is IStaking {
         seed = keccak256(abi.encodePacked(seed, _signature));
     }
 
-    function _verifySignature(uint248 _epochNum, uint256 _chainId, bytes memory _signature, address _expectedSigner)
+    function _verifySignature(uint192 _epochNum, uint256 _chainId, bytes memory _signature, address _expectedSigner)
         private
         pure
         returns (bool)

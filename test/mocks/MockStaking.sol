@@ -11,11 +11,6 @@ contract MockStaking is Staking {
         seed = _seed;
     }
 
-    function setExecutedRound(uint256 _index, bool _value) public {
-        require(_index < executedRounds.length, "MockStaking: index out of bounds");
-        executedRounds[_index] = _value;
-    }
-
     function setStakerInfo(StakerInfo memory _stakerInfo, address _staker) public {
         stakerInfo[_staker] = _stakerInfo;
     }
@@ -24,11 +19,15 @@ contract MockStaking is Staking {
         epochEndTime = _epochEndTime;
     }
 
+    function getEpochBuffer() public view returns (uint256) {
+        return epochBuffer;
+    }
+
     function setCommitment(CommitData memory _commitment, address _executor) public {
         commitmentMap[_executor] = _commitment;
     }
 
-    function setEpoch(uint248 _epoch) public {
+    function setEpoch(uint192 _epoch) public {
         epoch = _epoch;
     }
 

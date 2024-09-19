@@ -10,8 +10,4 @@ contract MockJobRegistry is JobRegistry {
     function useUnorderedNonce(address from, uint256 nonce) public {
         _useUnorderedNonce(from, nonce);
     }
-
-    function getProtocolFeeRatio() public view returns (uint8) {
-        return protocolFeeRatio;
-    }
 }

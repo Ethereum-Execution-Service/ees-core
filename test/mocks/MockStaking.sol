@@ -19,8 +19,8 @@ contract MockStaking is Staking {
         epochEndTime = _epochEndTime;
     }
 
-    function getEpochBuffer() public view returns (uint256) {
-        return epochBuffer;
+    function getSlashingDuration() public view returns (uint256) {
+        return slashingDuration;
     }
 
     function setCommitment(CommitData memory _commitment, address _executor) public {
@@ -29,6 +29,10 @@ contract MockStaking is Staking {
 
     function setEpoch(uint192 _epoch) public {
         epoch = _epoch;
+    }
+
+    function setNumberOfActiveStakers(uint40 _numberOfActiveStakers) public {
+        numberOfActiveStakers = _numberOfActiveStakers;
     }
 
     function getActiveStakersLength() public view returns (uint256) {
@@ -45,5 +49,9 @@ contract MockStaking is Staking {
 
     function getTotalRoundDuration() public view returns (uint256) {
         return totalRoundDuration;
+    }
+
+    function getNumberOfActiveStakers() public view returns (uint40) {
+        return numberOfActiveStakers;
     }
 }

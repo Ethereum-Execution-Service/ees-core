@@ -27,7 +27,7 @@ interface IStaking {
         uint8 roundBuffer;
         uint8 commitPhaseDuration;
         uint8 revealPhaseDuration;
-        uint8 epochBuffer;
+        uint8 slashingDuration;
     }
 
     event EpochInitiated(uint192 epoch);
@@ -43,4 +43,5 @@ interface IStaking {
     error WrongCommitment();
     error InvalidSignatureLength();
     error StakerNotSelectedForRound();
+    error RoundExceedingTotal();
 }

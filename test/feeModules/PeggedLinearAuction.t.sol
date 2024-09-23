@@ -34,7 +34,7 @@ contract PeggedLinearAuctionTest is Test, GasSnapshot {
         defaultExecutionWindow = 1800;
         defaultStartTime = 1641070800;
 
-        jobRegistry = new JobRegistry(address2, 2);
+        jobRegistry = new JobRegistry(address2, address(0x5));
         feeModule = new MockPeggedLinearAuction(jobRegistry);
 
         dummyPriceOracle = new DummyPriceOracle(100);
@@ -51,7 +51,7 @@ contract PeggedLinearAuctionTest is Test, GasSnapshot {
         vm.warp(defaultStartTime + 600);
         vm.fee(3157729);
         (uint256 executionFee, address executionFeeToken) =
-            feeModule.onExecuteJob(0, from, defaultExecutionWindow, defaultStartTime, 0);
+            feeModule.onExecuteJob(0, defaultExecutionWindow, defaultStartTime, 0);
         emit ExecutionFee(executionFee, executionFeeToken);
         //assertEq(dummyPriceOracle.price(), 100, "price mismatch");
     }
@@ -159,7 +159,7 @@ contract PeggedLinearAuctionTest is Test, GasSnapshot {
         vm.assume(caller != address(jobRegistry));
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IPeggedLinearAuction.NotJobRegistry.selector));
-        feeModule.onExecuteJob(0, caller, defaultExecutionWindow, block.timestamp, 0);
+        feeModule.onExecuteJob(0, defaultExecutionWindow, block.timestamp, 0);
     }
 
     function test_CreateJobNotJobRegistry(address caller) public {

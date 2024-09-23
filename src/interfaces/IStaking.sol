@@ -7,7 +7,7 @@ interface IStaking {
         bool active;
         bool initialized;
         uint40 arrayIndex;
-        uint192 latestExecutedEpoch;
+        uint192 lastCheckInEpoch;
     }
 
     struct CommitData {
@@ -28,6 +28,8 @@ interface IStaking {
         uint8 commitPhaseDuration;
         uint8 revealPhaseDuration;
         uint8 slashingDuration;
+        uint256 executorTax;
+        uint256 protocolTax;
     }
 
     event EpochInitiated(uint192 epoch);
@@ -44,4 +46,5 @@ interface IStaking {
     error InvalidSignatureLength();
     error StakerNotSelectedForRound();
     error RoundExceedingTotal();
+    error AlreadyCheckedIn();
 }

@@ -24,9 +24,7 @@ interface IJobRegistry {
         bool _hasSponsorship,
         uint256 _index
     ) external returns (uint256 index);
-    function execute(uint256 _index, address _feeRecipient, bytes calldata _verificationData)
-        external
-        returns (uint256 executionFee, address executionFeeToken);
+    function execute(uint256 _index, address _feeRecipient, bytes calldata _verificationData) external;
     function deleteJob(uint256 _index) external;
     function revokeSponsorship(uint256 _index) external;
     function addExecutionModule(IExecutionModule _module) external;
@@ -63,7 +61,7 @@ interface IJobRegistry {
     /// @notice Thrown when a job aldready exists at index
     error JobAlreadyExistsAtIndex();
 
-    /// @notice Thrown when the caller is not authorized to the action on the job
+    /// @notice Thrown when the caller is not authorized
     error Unauthorized();
 
     /// @notice Thrown when the execution module is not supported

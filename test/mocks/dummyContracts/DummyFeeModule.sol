@@ -12,8 +12,8 @@ contract DummyFeeModule is IFeeModule {
 
     uint256 public counter;
 
-    address internal executionFeeToken;
-    uint256 internal executionFee;
+    address public executionFeeToken;
+    uint256 public executionFee;
 
     constructor(JobRegistry _jobRegistry, address _executionFeeToken, uint256 _executionFee) {
         jobRegistry = _jobRegistry;
@@ -28,7 +28,6 @@ contract DummyFeeModule is IFeeModule {
 
     function onExecuteJob(
         uint256 _index,
-        address _caller,
         uint32 _executionWindow,
         uint256 _executionTime,
         uint256 _variableGasConsumption

@@ -35,7 +35,6 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
      */
     function onExecuteJob(
         uint256 _index,
-        address, /* _caller */
         uint32 _executionWindow,
         uint256 _executionTime,
         uint256 _variableGasConsumption

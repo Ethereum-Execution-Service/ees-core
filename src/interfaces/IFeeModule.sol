@@ -7,7 +7,6 @@ interface IFeeModule {
      * @dev Called by JobRegistry contract upon execution of a job with this executable.
      * @dev _caller can be used to restrict who can call this function. This enables restriction of custom contracts to call execute in JobExpiry.
      * @param _index The index of the job in the jobs array in the JobRegistry contract.
-     * @param _caller The address of the caller of JobRegistry's execute function.
      * @param _executionWindow The time in seconds where the job can be executed within before expiring.
      * @param _executionTime The time when the job can be executed from.
      * @param _variableGasConsumption The gas consumed by the execution module and application during execution.
@@ -16,7 +15,6 @@ interface IFeeModule {
      */
     function onExecuteJob(
         uint256 _index,
-        address _caller,
         uint32 _executionWindow,
         uint256 _executionTime,
         uint256 _variableGasConsumption

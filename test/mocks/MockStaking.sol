@@ -5,7 +5,7 @@ import {Staking} from "../../src/Staking.sol";
 /// @author Victor Brevig
 
 contract MockStaking is Staking {
-    constructor(StakingSpec memory _spec) Staking(_spec) {}
+    constructor(StakingSpec memory _spec, address _treasury) Staking(_spec, _treasury) {}
 
     function setSeed(bytes32 _seed) public {
         seed = _seed;
@@ -17,6 +17,22 @@ contract MockStaking is Staking {
 
     function setEpochEndTime(uint256 _epochEndTime) public {
         epochEndTime = _epochEndTime;
+    }
+
+    function getEpochPoolBalance() public view returns (uint256) {
+        return epochPoolBalance;
+    }
+
+    function setEpochPoolBalance(uint256 _epochPoolBalance) public {
+        epochPoolBalance = _epochPoolBalance;
+    }
+
+    function getNextEpochPoolBalance() public view returns (uint256) {
+        return nextEpochPoolBalance;
+    }
+
+    function setNextEpochPoolBalance(uint256 _nextEpochPoolBalance) public {
+        nextEpochPoolBalance = _nextEpochPoolBalance;
     }
 
     function getSlashingDuration() public view returns (uint256) {

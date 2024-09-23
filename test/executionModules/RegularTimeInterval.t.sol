@@ -27,7 +27,7 @@ contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignatu
         defaultExecutionWindow = 1800;
         defaultStartTime = 1641070800;
         vm.prank(address0);
-        jobRegistry = new JobRegistry(address2, 2);
+        jobRegistry = new JobRegistry(address2, address(0x5));
         executionModule = new MockRegularTimeInterval(jobRegistry);
         fromPrivateKey = 0x12341234;
         from = vm.addr(fromPrivateKey);

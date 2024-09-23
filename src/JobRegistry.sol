@@ -4,20 +4,18 @@ pragma solidity 0.8.27;
 import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {IExecutionModule} from "./interfaces/IExecutionModule.sol";
 import {IFeeModule} from "./interfaces/IFeeModule.sol";
-
 import {SignatureVerification} from "./libraries/SignatureVerification.sol";
-import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 import {JobSpecificationHash} from "./libraries/JobSpecificationHash.sol";
 import {FeeModuleInputHash} from "./libraries/FeeModuleInputHash.sol";
 import {SignatureExpired, InvalidNonce} from "./PermitErrors.sol";
 import {EIP712} from "./EIP712.sol";
-import {FeeManager} from "./FeeManager.sol";
 import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
+import {Owned} from "solmate/src/auth/Owned.sol";
 
 /// @author Victor Brevig
 /// @notice JobRegistry keeps track of all jobs in the EES. It is through this contract jobs are created, executed and deleted.
-contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
+contract JobRegistry is IJobRegistry, EIP712, Owned {
     using SafeTransferLib for ERC20;
     using SignatureVerification for bytes;
     using JobSpecificationHash for JobSpecification;
@@ -28,9 +26,13 @@ contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
     IExecutionModule[] public executionModules;
     IFeeModule[] public feeModules;
 
+    address internal immutable executionContract;
+
     mapping(address => mapping(uint256 => uint256)) public nonceBitmap;
 
-    constructor(address _treasury, uint8 _protocolFeeRatio) FeeManager(_treasury, _protocolFeeRatio) {}
+    constructor(address _treasury, address _executionContract) Owned(_treasury) {
+        executionContract = _executionContract;
+    }
 
     /**
      * @notice Creates a job with given specification and stores it in the jobs array. It calls the callback funcitons onCreateJob on both the execution module and the application.
@@ -47,7 +49,7 @@ contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
         bytes calldata _sponsorSignature,
         bool _hasSponsorship,
         uint256 _index
-    ) public override nonReentrant returns (uint256 index) {
+    ) public override returns (uint256 index) {
         if (_hasSponsorship) {
             if (block.timestamp > _specification.deadline) revert SignatureExpired(_specification.deadline);
             _useUnorderedNonce(_sponsor, _specification.nonce);
@@ -101,12 +103,8 @@ contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
      * @param _index Index of the job in the jobs array.
      * @param _feeRecipient Address who receives execution fee tokens.
      */
-    function execute(uint256 _index, address _feeRecipient, bytes calldata _verificationData)
-        public
-        override
-        nonReentrant
-        returns (uint256 executionFee, address executionFeeToken)
-    {
+    function execute(uint256 _index, address _feeRecipient, bytes calldata _verificationData) external override {
+        if (msg.sender != executionContract) revert Unauthorized();
         Job memory job = jobs[_index];
 
         // job.owner can only be 0 if job was deleted
@@ -126,37 +124,24 @@ contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
         uint256 executionTime = executionModule.onExecuteJob(_index, job.executionWindow, _verificationData);
         job.application.onExecuteJob(_index, job.owner, job.executionCounter);
 
-        (executionFee, executionFeeToken) =
-            feeModule.onExecuteJob(_index, msg.sender, job.executionWindow, executionTime, gasBefore - gasleft());
+        (uint256 executionFee, address executionFeeToken) =
+            feeModule.onExecuteJob(_index, job.executionWindow, executionTime, gasBefore - gasleft());
 
-        // transfer protocol fee
-        uint256 protocolFee = executionFee / protocolFeeRatio;
-        uint256 executorFee;
-        unchecked {
-            executorFee = executionFee - protocolFee;
-        }
-        // transfer whole fee to this
-        ERC20(executionFeeToken).safeTransferFrom(job.sponsor, address(this), executionFee);
-
-        // update mapping with treasury fee
-        feeBalances[this.owner()][executionFeeToken] += protocolFee;
-        // update mapping with executor fee
-        feeBalances[_feeRecipient][executionFeeToken] += executorFee;
+        // transfer fee to recipient
+        ERC20(executionFeeToken).safeTransferFrom(job.sponsor, _feeRecipient, executionFee);
 
         emit JobExecuted(
             _index, job.owner, address(job.application), job.executionCounter, executionFee, executionFeeToken
         );
 
         jobs[_index].executionCounter++;
-
-        return (executionFee, executionFeeToken);
     }
 
     /**
      * @notice Deletes the job from the jobs array and calls onDeleteJob on execution module and application.
      * @param _index The index of the job in the jobs array.
      */
-    function deleteJob(uint256 _index) public override nonReentrant {
+    function deleteJob(uint256 _index) public override {
         Job memory job = jobs[_index];
 
         // executionModule, feeModule, owner, executinCounter, maxExecutions, executionWindow, application
@@ -226,7 +211,7 @@ contract JobRegistry is IJobRegistry, FeeManager, EIP712, ReentrancyGuard {
         address _sponsor,
         bytes calldata _sponsorSignature,
         bool _hasSponsorship
-    ) public override nonReentrant {
+    ) public override {
         Job storage job = jobs[_feeModuleInput.index];
         if (job.owner != msg.sender) revert Unauthorized();
         // Check that job is not in execution mode

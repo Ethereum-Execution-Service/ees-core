@@ -8,9 +8,11 @@ import {MockStaking} from "./mocks/MockStaking.sol";
 import {StdUtils} from "forge-std/src/StdUtils.sol";
 import {IStaking} from "../src/interfaces/IStaking.sol";
 import {SignatureGenerator} from "./utils/SignatureGenerator.sol";
+import {DummyJobRegistry} from "./mocks/dummyContracts/DummyJobRegistry.sol";
 
 contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
     MockStaking staking;
+    DummyJobRegistry jobRegistry;
 
     address defaultStakingToken;
     // same as staker
@@ -33,8 +35,12 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
     uint8 commitPhaseDuration = 15;
     uint8 revealPhaseDuration = 15;
     uint8 slashingDuration = 30;
+    uint256 executorTax = 2;
+    uint256 protocolTax = 2;
 
     uint256 defaultEpochEndTime = 1000;
+
+    address treasury = address(0x3);
 
     function setUp() public {
         initializeERC20Tokens();
@@ -51,9 +57,14 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
             roundBuffer: roundBuffer,
             commitPhaseDuration: commitPhaseDuration,
             revealPhaseDuration: revealPhaseDuration,
-            slashingDuration: slashingDuration
+            slashingDuration: slashingDuration,
+            executorTax: executorTax,
+            protocolTax: protocolTax
         });
-        staking = new MockStaking(spec);
+        staking = new MockStaking(spec, treasury);
+        jobRegistry = new DummyJobRegistry();
+        vm.prank(treasury);
+        staking.setJobRegistry(address(jobRegistry));
         staking.setEpochEndTime(defaultEpochEndTime);
 
         executorPrivateKey = 0x12341234;
@@ -74,6 +85,205 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         setERC20TestTokens(address(staking));
     }
 
+    function test_ExecuteBatchInEpochOutsideRound(uint256 time) public {
+        time = bound(
+            time,
+            defaultEpochEndTime - staking.getEpochDuration() + staking.getSelectionPhaseDuration(),
+            defaultEpochEndTime - 1
+        );
+
+        uint256 timeIntoRounds =
+            staking.getEpochDuration() - staking.getSelectionPhaseDuration() - (defaultEpochEndTime - time);
+        vm.assume(timeIntoRounds % staking.getTotalRoundDuration() >= roundDuration);
+
+        vm.prank(executor);
+        staking.stake();
+        uint256[] memory indices = new uint256[](1);
+        indices[0] = 0;
+        bytes[] memory verificationData = new bytes[](1);
+        verificationData[0] = abi.encodePacked(uint256(0));
+
+        vm.warp(time);
+        vm.prank(executor);
+        uint256 numberOfExecutedJobs = staking.executeBatch(indices, executor, false, verificationData);
+        (uint256 balance,,,,) = staking.stakerInfo(executor);
+
+        assertEq(numberOfExecutedJobs, 1, "number of executed jobs mismatch");
+        assertEq(balance, stakingAmount - (executorTax + protocolTax), "executor balance mismatch");
+        assertEq(staking.getNextEpochPoolBalance(), executorTax, "next epoch pool balance mismatch");
+    }
+
+    function test_ExecuteBatchNotSelectedStaker(bytes32 seed) public {
+        // first executor is selected for round 0
+        vm.assume(uint256(keccak256(abi.encodePacked(seed, uint256(0)))) % 2 == 0);
+        vm.prank(executor);
+        staking.stake();
+        vm.prank(secondExecutor);
+        staking.stake();
+
+        staking.setSeed(seed);
+
+        uint256[] memory indices = new uint256[](1);
+        indices[0] = 0;
+        bytes[] memory verificationData = new bytes[](1);
+        verificationData[0] = abi.encodePacked(uint256(0));
+
+        vm.warp(defaultEpochEndTime - staking.getEpochDuration() + staking.getSelectionPhaseDuration());
+        vm.prank(secondExecutor);
+        vm.expectRevert(IStaking.StakerNotSelectedForRound.selector);
+        staking.executeBatch(indices, secondExecutor, false, verificationData);
+    }
+
+    function test_ExecuteBatchInRoundCheckIn(uint256 epochPoolBalance) public {
+        vm.prank(executor);
+        staking.stake();
+        uint256[] memory indices = new uint256[](1);
+        indices[0] = 0;
+        bytes[] memory verificationData = new bytes[](1);
+        verificationData[0] = abi.encodePacked(uint256(0));
+
+        staking.setEpoch(10);
+        staking.setEpochPoolBalance(epochPoolBalance);
+
+        vm.warp(defaultEpochEndTime - staking.getEpochDuration() + staking.getSelectionPhaseDuration());
+        vm.prank(executor);
+        uint256 numberOfExecutedJobs = staking.executeBatch(indices, executor, true, verificationData);
+        (uint256 balance,,,, uint192 lastCheckInEpoch) = staking.stakerInfo(executor);
+
+        assertEq(numberOfExecutedJobs, 1, "number of executed jobs mismatch");
+        assertEq(
+            balance,
+            stakingAmount + (staking.getEpochPoolBalance() / roundsPerEpoch) - protocolTax,
+            "executor balance mismatch"
+        );
+        assertEq(lastCheckInEpoch, 10, "latest executed epoch mismatch");
+        assertEq(staking.getNextEpochPoolBalance(), 0, "next epoch pool balance mismatch");
+    }
+
+    function test_ExecuteBatchAlreadyCheckedIn(uint256 time) public {
+        vm.prank(executor);
+        staking.stake();
+        uint256[] memory indices = new uint256[](1);
+        indices[0] = 0;
+        bytes[] memory verificationData = new bytes[](1);
+        verificationData[0] = abi.encodePacked(uint256(0));
+
+        staking.setEpoch(10);
+        staking.setEpochPoolBalance(100);
+
+        staking.setStakerInfo(
+            IStaking.StakerInfo({
+                balance: stakingAmount,
+                active: true,
+                initialized: true,
+                arrayIndex: 0,
+                lastCheckInEpoch: 10
+            }),
+            executor
+        );
+
+        vm.warp(defaultEpochEndTime - staking.getEpochDuration() + staking.getSelectionPhaseDuration());
+        vm.prank(executor);
+        vm.expectRevert(IStaking.AlreadyCheckedIn.selector);
+        staking.executeBatch(indices, executor, true, verificationData);
+    }
+
+    function test_ExecuteBatchInRoundNoCheckIn(uint256 time) public {
+        time = bound(
+            time,
+            defaultEpochEndTime - staking.getEpochDuration() + staking.getSelectionPhaseDuration(),
+            defaultEpochEndTime - 1
+        );
+        uint256 timeIntoRounds =
+            staking.getEpochDuration() - staking.getSelectionPhaseDuration() - (defaultEpochEndTime - time);
+        vm.assume(timeIntoRounds % staking.getTotalRoundDuration() < roundDuration);
+
+        vm.prank(executor);
+        staking.stake();
+        uint256[] memory indices = new uint256[](1);
+        indices[0] = 0;
+        bytes[] memory verificationData = new bytes[](1);
+        verificationData[0] = abi.encodePacked(uint256(0));
+
+        vm.warp(time);
+        vm.prank(executor);
+        uint256 numberOfExecutedJobs = staking.executeBatch(indices, executor, false, verificationData);
+        (uint256 balance,,,,) = staking.stakerInfo(executor);
+
+        assertEq(numberOfExecutedJobs, 1, "number of executed jobs mismatch");
+        assertEq(balance, stakingAmount - protocolTax, "executor balance mismatch");
+        assertEq(staking.getNextEpochPoolBalance(), 0, "next epoch pool balance mismatch");
+    }
+
+    function test_ExecuteBatchExecutionReverts() public {
+        vm.prank(executor);
+        staking.stake();
+        uint256[] memory indices = new uint256[](1);
+        indices[0] = 0;
+        bytes[] memory verificationData = new bytes[](1);
+        verificationData[0] = abi.encodePacked(uint256(0));
+
+        jobRegistry.setRevertOnExecute(true);
+
+        vm.warp(defaultEpochEndTime);
+        vm.prank(executor);
+        uint256 numberOfExecutedJobs = staking.executeBatch(indices, executor, false, verificationData);
+        (uint256 balance,,,,) = staking.stakerInfo(executor);
+
+        assertEq(numberOfExecutedJobs, 0, "number of executed jobs mismatch");
+        assertEq(balance, stakingAmount, "executor balance mismatch");
+        assertEq(staking.getNextEpochPoolBalance(), 0, "next epoch pool balance mismatch");
+    }
+
+    function test_ExecuteBatchBeforeRounds(uint256 time) public {
+        time =
+            bound(time, 0, defaultEpochEndTime - staking.getEpochDuration() + staking.getSelectionPhaseDuration() - 1);
+        vm.prank(executor);
+        staking.stake();
+        uint256[] memory indices = new uint256[](1);
+        indices[0] = 0;
+        bytes[] memory verificationData = new bytes[](1);
+        verificationData[0] = abi.encodePacked(uint256(0));
+
+        vm.warp(time);
+        vm.prank(executor);
+        uint256 numberOfExecutedJobs = staking.executeBatch(indices, executor, false, verificationData);
+        (uint256 balance,,,,) = staking.stakerInfo(executor);
+
+        assertEq(numberOfExecutedJobs, 1, "number of executed jobs mismatch");
+        assertEq(balance, stakingAmount - (executorTax + protocolTax), "executor balance mismatch");
+        assertEq(staking.getNextEpochPoolBalance(), executorTax, "next epoch pool balance mismatch");
+    }
+
+    function test_ExecuteBatchAfterRounds(uint256 time) public {
+        time = bound(time, defaultEpochEndTime, type(uint192).max);
+        vm.prank(executor);
+        staking.stake();
+        uint256[] memory indices = new uint256[](1);
+        indices[0] = 0;
+        bytes[] memory verificationData = new bytes[](1);
+        verificationData[0] = abi.encodePacked(uint256(0));
+
+        vm.warp(time);
+        vm.prank(executor);
+        uint256 numberOfExecutedJobs = staking.executeBatch(indices, executor, false, verificationData);
+        (uint256 balance,,,,) = staking.stakerInfo(executor);
+
+        assertEq(numberOfExecutedJobs, 1, "number of executed jobs mismatch");
+        assertEq(balance, stakingAmount - (executorTax + protocolTax), "executor balance mismatch");
+        assertEq(staking.getNextEpochPoolBalance(), executorTax, "next epoch pool balance mismatch");
+    }
+
+    function test_ExecuteBatchNotActiveStaker() public {
+        uint256[] memory indices = new uint256[](1);
+        indices[0] = 0;
+        bytes[] memory verificationData = new bytes[](1);
+        verificationData[0] = abi.encodePacked(uint256(0));
+        vm.prank(executor);
+        vm.expectRevert(IStaking.NotActiveStaker.selector);
+        staking.executeBatch(indices, executor, false, verificationData);
+    }
+
     function test_Stake(uint256 time) public {
         vm.assume(
             time < defaultEpochEndTime - staking.getEpochDuration() + staking.getSelectionPhaseDuration()
@@ -88,7 +298,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         uint256 endBalanceExecutor = token0.balanceOf(executor);
         uint256 endBalanceProtocol = token0.balanceOf(address(staking));
 
-        (uint256 balance, bool active, bool initialized, uint40 arrayIndex, uint192 latestExecutedEpoch) =
+        (uint256 balance, bool active, bool initialized, uint40 arrayIndex, uint192 lastCheckInEpoch) =
             staking.stakerInfo(executor);
         assertTrue(active, "not active");
         assertTrue(initialized, "not initialized");
@@ -97,7 +307,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         assertEq(staking.activeStakers(0), executor, "not in active stakers array");
         assertEq(startBalanceExecutor - endBalanceExecutor, stakingAmount, "executor balance mismatch");
         assertEq(endBalanceProtocol - startBalanceProtocol, stakingAmount, "protocol balance mismatch");
-        assertEq(latestExecutedEpoch, 0, "latest executed epoch mismatch");
+        assertEq(lastCheckInEpoch, 0, "latest executed epoch mismatch");
         assertEq(staking.getNumberOfActiveStakers(), 1, "number of active stakers mismatch");
     }
 
@@ -173,7 +383,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         uint256 endBalanceExecutor = token0.balanceOf(executor);
         uint256 endBalanceProtocol = token0.balanceOf(address(staking));
 
-        (uint256 balance, bool active, bool initialized, uint40 arrayIndex, uint192 latestExecutedEpoch) =
+        (uint256 balance, bool active, bool initialized, uint40 arrayIndex, uint192 lastCheckInEpoch) =
             staking.stakerInfo(executor);
         assertFalse(active, "active");
         assertFalse(initialized, "initialized");
@@ -182,7 +392,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
         assertEq(staking.activeStakers(0), address(0), "in active stakers array");
         assertEq(endBalanceExecutor, startBalanceExecutor, "executor balance mismatch");
         assertEq(endBalanceProtocol, startBalanceProtocol, "protocol balance mismatch");
-        assertEq(latestExecutedEpoch, 0, "latest executed epoch mismatch");
+        assertEq(lastCheckInEpoch, 0, "latest executed epoch mismatch");
         assertEq(staking.getNumberOfActiveStakers(), 0, "number of active stakers mismatch");
     }
 
@@ -199,7 +409,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
                 active: false,
                 initialized: true,
                 arrayIndex: 0,
-                latestExecutedEpoch: 0
+                lastCheckInEpoch: 0
             }),
             executor
         );
@@ -251,7 +461,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
                 active: false,
                 initialized: true,
                 arrayIndex: 0,
-                latestExecutedEpoch: 0
+                lastCheckInEpoch: 0
             }),
             executor
         );
@@ -281,7 +491,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
                 active: false,
                 initialized: true,
                 arrayIndex: 0,
-                latestExecutedEpoch: 0
+                lastCheckInEpoch: 0
             }),
             executor
         );
@@ -356,7 +566,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
                 active: true,
                 initialized: true,
                 arrayIndex: 0,
-                latestExecutedEpoch: epoch
+                lastCheckInEpoch: epoch
             }),
             executor
         );
@@ -380,7 +590,7 @@ contract StakingTest is Test, TokenProvider, SignatureGenerator, GasSnapshot {
                 active: true,
                 initialized: true,
                 arrayIndex: 0,
-                latestExecutedEpoch: 0
+                lastCheckInEpoch: 0
             }),
             executor
         );

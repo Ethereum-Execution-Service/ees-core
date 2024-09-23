@@ -4,9 +4,14 @@ pragma solidity 0.8.27;
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 import {IStaking} from "./interfaces/IStaking.sol";
+import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
+import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
+import {Owned} from "solmate/src/auth/Owned.sol";
 
-contract Staking is IStaking {
+contract Staking is IStaking, Owned {
     using SafeTransferLib for ERC20;
+
+    address public jobRegistry;
 
     uint256 public roundEndBlock;
     bool public executionInRound;
@@ -28,6 +33,12 @@ contract Staking is IStaking {
 
     uint8 internal immutable roundsPerEpoch;
 
+    uint256 internal immutable executorTax;
+    uint256 internal immutable protocolTax;
+
+    uint256 internal epochPoolBalance;
+    uint256 internal nextEpochPoolBalance;
+
     // all in seconds
     uint8 internal immutable roundDuration;
     uint8 internal immutable roundBuffer;
@@ -47,7 +58,7 @@ contract Staking is IStaking {
 
     mapping(address => CommitData) public commitmentMap;
 
-    constructor(StakingSpec memory _spec) {
+    constructor(StakingSpec memory _spec, address _treasury) Owned(_treasury) {
         require(
             _spec.stakingBalanceThreshold <= _spec.stakingAmount,
             "Staking: threshold must be less than or equal to staking amount"
@@ -64,6 +75,7 @@ contract Staking is IStaking {
             inactiveSlashingAmount + commitSlashingAmount <= stakingBalanceThreshold,
             "Staking: invalid slashing amounts"
         );
+        require(_spec.roundsPerEpoch > 0, "Staking: rounds per epoch must be greater than 0");
         roundDuration = _spec.roundDuration;
         roundsPerEpoch = _spec.roundsPerEpoch;
         roundBuffer = _spec.roundBuffer;
@@ -72,6 +84,100 @@ contract Staking is IStaking {
         epochDuration = selectionPhaseDuration + totalRoundDuration * roundsPerEpoch;
         commitPhaseDuration = _spec.commitPhaseDuration;
         revealPhaseDuration = _spec.revealPhaseDuration;
+        executorTax = _spec.executorTax;
+        protocolTax = _spec.protocolTax;
+    }
+
+    /**
+     * @notice Executes the jobs with the given indices.
+     * @notice Outside rounds the executor pays the protocol tax and the executor tax.
+     * @notice If the current block.timestamp is in a round, only the selected executor can call and pays no executor tax.
+     * @notice If checkIn is true, the executor will be rewarded with the pool cut.
+     * @notice This function does not revert if any of the calls to execute jobs reverts.
+     * @param _indices The indices of the jobs to execute.
+     * @param _feeRecipient The address to receive excution fees.
+     * @param _checkIn If true, the the lastCheckInEpoch is updated such that the executor cannot be slashed for inactivity. The executor will be rewarded with the pool cut. Is only relevant if block.timestamp is within a round where the caller is the selected executor.
+     * @param _verificationData The verification data for each job.
+     */
+    function executeBatch(
+        uint256[] calldata _indices,
+        address _feeRecipient,
+        bool _checkIn,
+        bytes[] calldata _verificationData
+    ) public returns (uint256 numberOfExecutedJobs) {
+        // check that caller is active staker
+        StakerInfo storage executor = stakerInfo[msg.sender];
+        if (!executor.active) revert NotActiveStaker();
+
+        bool inRound = false;
+        if (block.timestamp < epochEndTime && block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration)
+        {
+            // we are in an epoch
+            uint256 timeIntoRounds;
+            unchecked {
+                // safe given that 1) epochEndTime > block.timestamp and 2) block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
+                timeIntoRounds = epochDuration - selectionPhaseDuration - (epochEndTime - block.timestamp);
+                // totalRoundDuration is > 0 becasue of constructor check on totalRoundDuration
+                // current round within the epoch
+                inRound = timeIntoRounds % totalRoundDuration < roundDuration;
+            }
+
+            if (inRound) {
+                uint256 round;
+                unchecked {
+                    // totalRoundDuration is > 0 becasue of constructor check on totalRoundDuration
+                    round = timeIntoRounds / totalRoundDuration;
+                }
+                uint256 stakerIndex = uint256(keccak256(abi.encodePacked(seed, round))) % numberOfActiveStakers;
+                if (activeStakers[stakerIndex] != msg.sender) revert StakerNotSelectedForRound();
+            }
+        }
+
+        address jobRegistryCache = jobRegistry;
+        // execute each job, only pay tax on those which succeed. We have to wrap this in a try-catch. Maybe make a helper function?
+        for (uint256 i = 0; i < _indices.length; ++i) {
+            uint256 _index = _indices[i];
+
+            try IJobRegistry(jobRegistryCache).execute(_index, msg.sender, _verificationData[i]) {
+                numberOfExecutedJobs++;
+            } catch {}
+        }
+
+        if (inRound) {
+            if (_checkIn) {
+                // what if an executor is selected twice? currently they can only get rewarded once
+                // check that this is first time in epoch caller is checking in
+                if (executor.lastCheckInEpoch == epoch) revert AlreadyCheckedIn();
+                executor.lastCheckInEpoch = epoch;
+
+                uint256 poolReward = epochPoolBalance / roundsPerEpoch;
+                uint256 totalProtocolTax = protocolTax * numberOfExecutedJobs;
+
+                if (poolReward >= totalProtocolTax) {
+                    unchecked {
+                        executor.balance += poolReward - totalProtocolTax;
+                    }
+                } else {
+                    executor.balance -= totalProtocolTax - poolReward;
+                }
+            } else {
+                // not checking in, pay protocol tax
+                if (numberOfExecutedJobs > 0) {
+                    executor.balance -= protocolTax * numberOfExecutedJobs;
+                }
+            }
+        } else {
+            if (numberOfExecutedJobs > 0) {
+                // executor pays protocol and executor tax
+                executor.balance -= (protocolTax + executorTax) * numberOfExecutedJobs;
+                // update pool balance for next epoch
+                unchecked {
+                    // nextEpochPoolBalance will never exceed uint256 max value since there are not enough tokens in existence
+                    nextEpochPoolBalance += executorTax * numberOfExecutedJobs;
+                }
+            }
+        }
+        return numberOfExecutedJobs;
     }
 
     /**
@@ -96,7 +202,7 @@ contract Staking is IStaking {
             active: true,
             initialized: true,
             arrayIndex: numberOfActiveStakers,
-            latestExecutedEpoch: 0
+            lastCheckInEpoch: 0
         });
         _activateStaker(msg.sender);
     }
@@ -171,10 +277,10 @@ contract Staking is IStaking {
         // verify staker.arrayIndex is selected
         uint256 stakerIndex = uint256(keccak256(abi.encodePacked(seed, _round))) % uint256(numberOfActiveStakers);
         if (staker.arrayIndex != stakerIndex) revert StakerNotSelectedForRound();
-        if (staker.latestExecutedEpoch == epoch) revert RoundExecuted();
+        if (staker.lastCheckInEpoch == epoch) revert RoundExecuted();
 
         // prevent from slashing again
-        staker.latestExecutedEpoch = epoch;
+        staker.lastCheckInEpoch = epoch;
 
         _slash(inactiveSlashingAmount, _staker, msg.sender);
     }
@@ -213,6 +319,8 @@ contract Staking is IStaking {
             emit EpochInitiated(++epoch);
         }
         seed = keccak256(abi.encodePacked(block.timestamp, block.number, seed));
+        epochPoolBalance = nextEpochPoolBalance;
+        nextEpochPoolBalance = 0;
     }
 
     /**
@@ -252,6 +360,10 @@ contract Staking is IStaking {
 
         commitData.revealed = true;
         seed = keccak256(abi.encodePacked(seed, _signature));
+    }
+
+    function setJobRegistry(address _jobRegistry) public onlyOwner {
+        jobRegistry = _jobRegistry;
     }
 
     /**

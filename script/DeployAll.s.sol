@@ -7,6 +7,8 @@ import {JobRegistry} from "../src/JobRegistry.sol";
 import {RegularTimeInterval} from "../src/executionModules/RegularTimeInterval.sol";
 import {LinearAuction} from "../src/feeModules/LinearAuction.sol";
 import {PeggedLinearAuction} from "../src/feeModules/PeggedLinearAuction.sol";
+import {Staking} from "../src/Staking.sol";
+import {IStaking} from "../src/interfaces/IStaking.sol";
 
 contract DeployAll is Script {
     address treasury;
@@ -15,16 +17,41 @@ contract DeployAll is Script {
     // owner is deployer
     address owner;
 
+    IStaking.StakingSpec stakingSpec;
+
     function setUp() public {
         // set to treasury
         treasury = 0x303cAE9641B868722194Bd9517eaC5ca2ad6e71a;
         treasuryBasisPoints = 2000;
-        protocolFeeRatio = 2;
+
+        stakingSpec = IStaking.StakingSpec({
+            // Base sepolia USDC copy
+            stakingToken: 0x7139F4601480d20d43Fa77780B67D295805aD31a,
+            // 1000 USDC
+            stakingAmount: 1000000000,
+            // 400 USDC
+            stakingBalanceThreshold: 400000000,
+            // 200 USDC
+            inactiveSlashingAmount: 200000000,
+            // 100 USDC
+            commitSlashingAmount: 100000000,
+            roundDuration: 15,
+            roundsPerEpoch: 5,
+            roundBuffer: 15,
+            commitPhaseDuration: 15,
+            revealPhaseDuration: 15,
+            slashingDuration: 15,
+            // 0.05 USDC
+            executorTax: 50000,
+            // 0.05 USDC
+            protocolTax: 50000
+        });
     }
 
     function run()
         public
         returns (
+            Staking staking,
             JobRegistry jobRegistry,
             RegularTimeInterval regularTimeInterval,
             LinearAuction linearAuction,
@@ -34,8 +61,13 @@ contract DeployAll is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        jobRegistry = new JobRegistry(treasury, protocolFeeRatio);
+        staking = new Staking(stakingSpec, treasury);
+        console2.log("Staking Deployed:", address(staking));
+
+        jobRegistry = new JobRegistry(treasury, address(staking));
         console2.log("JobRegistry Deployed:", address(jobRegistry));
+
+        staking.setJobRegistry(address(jobRegistry));
 
         regularTimeInterval = new RegularTimeInterval(jobRegistry);
         console2.log("RegularTimeInterval Deployed:", address(regularTimeInterval));

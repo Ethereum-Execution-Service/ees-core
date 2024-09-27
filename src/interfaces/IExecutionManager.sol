@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-interface IStaking {
-    struct StakerInfo {
+interface IExecutionManager {
+    struct Executor {
         uint256 balance;
         bool active;
         bool initialized;
         uint40 arrayIndex;
-        uint192 lastCheckInEpoch;
+        uint8 lastCheckinRound;
+        uint192 lastCheckinEpoch;
     }
 
     struct CommitData {
@@ -16,7 +17,7 @@ interface IStaking {
         bool revealed;
     }
 
-    struct StakingSpec {
+    struct InitSpec {
         address stakingToken;
         uint256 stakingAmount;
         uint256 stakingBalanceThreshold;
@@ -34,7 +35,7 @@ interface IStaking {
 
     event EpochInitiated(uint192 epoch);
 
-    error NotActiveStaker();
+    error NotActiveExecutor();
     error AlreadyStaked();
     error RoundExecuted();
     error WrongNumberOfRandomWords();
@@ -44,7 +45,8 @@ interface IStaking {
     error InvalidSignature();
     error WrongCommitment();
     error InvalidSignatureLength();
-    error StakerNotSelectedForRound();
+    error ExecutorNotSelectedForRound();
     error RoundExceedingTotal();
     error AlreadyCheckedIn();
+    error CheckInOutsideRound();
 }

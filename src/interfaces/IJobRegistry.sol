@@ -8,6 +8,9 @@ import {IFeeModule} from "./IFeeModule.sol";
 interface IJobRegistry {
     struct Job {
         address owner;
+        bool active;
+        bool ignoreAppRevert;
+        uint40 inactiveGracePeriod;
         address sponsor;
         uint48 executionCounter;
         uint48 maxExecutions;
@@ -24,8 +27,9 @@ interface IJobRegistry {
         bool _hasSponsorship,
         uint256 _index
     ) external returns (uint256 index);
-    function execute(uint256 _index, address _feeRecipient, bytes calldata _verificationData) external;
+    function execute(uint256 _index, address _feeRecipient) external;
     function deleteJob(uint256 _index) external;
+    function deactivateJob(uint256 _index) external;
     function revokeSponsorship(uint256 _index) external;
     function addExecutionModule(IExecutionModule _module) external;
     function addFeeModule(IFeeModule _module) external;
@@ -43,6 +47,7 @@ interface IJobRegistry {
         uint256 indexed index,
         address indexed owner,
         address indexed application,
+        bool success,
         uint48 executionNumber,
         uint256 executionFee,
         address executionFeeToken
@@ -79,12 +84,26 @@ interface IJobRegistry {
     /// @notice Thrown when maximum number of executions is exceeded.
     error MaxExecutionsExceeded();
 
+    /// @notice Thrown when the job is created with invalid inactive grace period
+    error InvalidInactiveGracePeriod();
+
+    /// @notice Thrown when the job is not active
+    error JobNotActive();
+
+    /// @notice Thrown when the job is in grace period
+    error JobInGracePeriod();
+
+    /// @notice Thrown when the job is not expired or is active
+    error JobNotExpiredOrActive();
+
     struct JobSpecification {
         uint256 nonce;
         uint256 deadline;
         IApplication application;
         uint32 executionWindow;
         uint48 maxExecutions;
+        uint40 inactiveGracePeriod;
+        bool ignoreAppRevert;
         bytes1 executionModule;
         bytes1 feeModule;
         bytes executionModuleInput;

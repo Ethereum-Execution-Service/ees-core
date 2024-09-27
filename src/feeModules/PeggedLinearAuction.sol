@@ -12,8 +12,11 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
     JobRegistry public immutable jobRegistry;
     mapping(uint256 => Params) public params;
 
-    uint256 private constant BASE_BPS = 10000;
-    uint256 private constant EXECUTION_GAS_CONSUMPTION = 50000;
+    // 0.1 USDC
+    uint256 private constant _EXECUTOR_TAX = 100_000;
+    address private constant _EXECUTOR_TAX_TOKEN = 0x7139F4601480d20d43Fa77780B67D295805aD31a;
+    uint256 private constant _BASE_BPS = 10_000;
+    uint256 private constant _EXECUTION_GAS_CONSUMPTION = 50_000;
 
     constructor(JobRegistry _jobRegistry) {
         jobRegistry = _jobRegistry;
@@ -41,13 +44,16 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
     ) external override onlyJobRegistry returns (uint256 executionFee, address executionFeeToken) {
         Params memory job = params[_index];
 
+        // need to also get executor tax in the staking token
+        // need to know how many tokens of job.executionFeeToken it requires for _EXECUTOR_TAX of _EXECUTOR_TAX_TOKEN
+
         // tokens / wei
         uint256 price = job.priceOracle.getPrice(job.executionFeeToken, job.oracleData);
 
         // wei / gas
         uint256 baseFee = block.basefee;
         // gas
-        uint256 totalGasConsumption = _variableGasConsumption + EXECUTION_GAS_CONSUMPTION;
+        uint256 totalGasConsumption = _variableGasConsumption + _EXECUTION_GAS_CONSUMPTION;
         // tokens
         uint256 totalFeeBase = price * baseFee * totalGasConsumption;
 
@@ -59,7 +65,7 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
         uint256 secondsInAuctionPeriod = block.timestamp - _executionTime;
         uint256 feeOverheadBps = ((feeDiff * secondsInAuctionPeriod) / (_executionWindow - 1)) + job.minOverheadBps;
 
-        executionFee = (totalFeeBase * feeOverheadBps) / BASE_BPS;
+        executionFee = (totalFeeBase * feeOverheadBps) / _BASE_BPS;
         executionFeeToken = job.executionFeeToken;
 
         return (executionFee, executionFeeToken);

@@ -32,11 +32,7 @@ contract DummyExecutionModule is IExecutionModule {
 
     function onDeleteJob(uint256 _index) external override {}
 
-    function onExecuteJob(uint256 _index, uint32 _executionWindow, bytes calldata _verificationData)
-        external
-        override
-        returns (uint256)
-    {
+    function onExecuteJob(uint256 _index, uint32 _executionWindow) external override returns (uint256) {
         counter++;
         return (type(uint256).max);
     }

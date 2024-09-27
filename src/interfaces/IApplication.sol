@@ -24,4 +24,11 @@ interface IApplication {
     /// @param _index The index of the job in the jobs array in the JobRegistry contract.
     /// @param _owner The owner of the job which is being executed.
     function onDeleteJob(uint256 _index, address _owner) external;
+
+    /// @dev Should be callable by anyone.
+    /// @dev Should return an upper bound on the gas cost of calling onExecuteJob - preferably as tight as possible.
+    /// @dev Setting this too low can result in out of gas scenarios where the job wont get executed.
+    /// @dev Setting this too high can result in gas waste for the user.
+    /// @return gasCost The upper bound on the gas cost of calling onExecuteJob.
+    function getExecutionGasCost() external view returns (uint256);
 }

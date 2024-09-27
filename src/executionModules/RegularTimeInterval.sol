@@ -25,7 +25,7 @@ contract RegularTimeInterval is IRegularTimeInterval {
      * @param _executionWindow The amount of time the job can be executed within.
      * @return executionTime The time the job can be executed from.
      */
-    function onExecuteJob(uint256 _index, uint32 _executionWindow, bytes calldata /* _verificationData */ )
+    function onExecuteJob(uint256 _index, uint32 _executionWindow)
         external
         override
         onlyJobRegistry
@@ -85,7 +85,7 @@ contract RegularTimeInterval is IRegularTimeInterval {
     }
 
     /**
-     * @notice COmputes whether a job is expired.
+     * @notice Computes whether a job is expired.
      * @param _index The index of the job in the jobs array in JobRegistry contract.
      * @param _executionWindow The amount of time the job can be executed within.
      * @return isExpired Whether the job is expired.

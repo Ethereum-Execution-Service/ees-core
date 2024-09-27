@@ -7,12 +7,9 @@ interface IExecutionModule {
      * @dev Called by JobRegistry contract upon execution of a job with this executable.
      * @param _index The index of the job in the jobs array in the JobRegistry contract.
      * @param _executionWindow The time in seconds where the job can be executed within before expiring.
-     * @param _verificationData Arbitrary data to be verified by the module.
      * @return executionTime The time from which the job can be executed.
      */
-    function onExecuteJob(uint256 _index, uint32 _executionWindow, bytes calldata _verificationData)
-        external
-        returns (uint256);
+    function onExecuteJob(uint256 _index, uint32 _executionWindow) external returns (uint256);
 
     /**
      * @dev Should be restricted to only be called by the JobRegistry contract.

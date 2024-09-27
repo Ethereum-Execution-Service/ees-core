@@ -3,12 +3,12 @@ pragma solidity 0.8.27;
 
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
-import {IStaking} from "./interfaces/IStaking.sol";
+import {IExecutionManager} from "./interfaces/IExecutionManager.sol";
 import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 
-contract Staking is IStaking, Owned {
+contract ExecutionManager is IExecutionManager, Owned {
     using SafeTransferLib for ERC20;
 
     address public jobRegistry;
@@ -19,13 +19,13 @@ contract Staking is IStaking, Owned {
 
     uint256 public epochEndTime;
 
-    uint40 public numberOfActiveStakers;
+    uint40 public numberOfActiveExecutors;
 
     address internal immutable stakingToken;
     uint256 internal immutable stakingAmount;
     // minimum amount of staking balance required to be eligible to execute
     uint256 internal immutable stakingBalanceThreshold;
-    // amount to slash from the staker upon inactivity.
+    // amount to slash from the executor upon inactivity.
     uint256 internal immutable inactiveSlashingAmount;
 
     // amount to slash for committing without revealing
@@ -50,15 +50,15 @@ contract Staking is IStaking, Owned {
     // slashing phase
     uint8 internal immutable slashingDuration;
 
-    address[] public activeStakers;
-    mapping(address => StakerInfo) public stakerInfo;
+    address[] public activeExecutors;
+    mapping(address => Executor) public executorInfo;
 
     bytes32 public seed;
     uint192 public epoch;
 
     mapping(address => CommitData) public commitmentMap;
 
-    constructor(StakingSpec memory _spec, address _treasury) Owned(_treasury) {
+    constructor(InitSpec memory _spec, address _treasury) Owned(_treasury) {
         require(
             _spec.stakingBalanceThreshold <= _spec.stakingAmount,
             "Staking: threshold must be less than or equal to staking amount"
@@ -76,6 +76,7 @@ contract Staking is IStaking, Owned {
             "Staking: invalid slashing amounts"
         );
         require(_spec.roundsPerEpoch > 0, "Staking: rounds per epoch must be greater than 0");
+        require(_spec.roundsPerEpoch < 256, "Staking: rounds per epoch must be less than 256");
         roundDuration = _spec.roundDuration;
         roundsPerEpoch = _spec.roundsPerEpoch;
         roundBuffer = _spec.roundBuffer;
@@ -96,20 +97,20 @@ contract Staking is IStaking, Owned {
      * @notice This function does not revert if any of the calls to execute jobs reverts.
      * @param _indices The indices of the jobs to execute.
      * @param _feeRecipient The address to receive excution fees.
-     * @param _checkIn If true, the the lastCheckInEpoch is updated such that the executor cannot be slashed for inactivity. The executor will be rewarded with the pool cut. Is only relevant if block.timestamp is within a round where the caller is the selected executor.
-     * @param _verificationData The verification data for each job.
+     * @param _checkIn If true, the the lastCheckinEpoch is updated such that the executor cannot be slashed for inactivity. The executor will be rewarded with the pool cut. Is only relevant if block.timestamp is within a round where the caller is the selected executor.
      */
     function executeBatch(
         uint256[] calldata _indices,
+        uint256[] calldata _gasLimits,
         address _feeRecipient,
-        bool _checkIn,
-        bytes[] calldata _verificationData
+        bool _checkIn
     ) public returns (uint256 numberOfExecutedJobs) {
-        // check that caller is active staker
-        StakerInfo storage executor = stakerInfo[msg.sender];
-        if (!executor.active) revert NotActiveStaker();
+        // check that caller is active executor
+        Executor memory executor = executorInfo[msg.sender];
+        if (!executor.active) revert NotActiveExecutor();
 
         bool inRound = false;
+        uint8 round;
         if (block.timestamp < epochEndTime && block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration)
         {
             // we are in an epoch
@@ -121,55 +122,83 @@ contract Staking is IStaking, Owned {
                 // current round within the epoch
                 inRound = timeIntoRounds % totalRoundDuration < roundDuration;
             }
+            if (_checkIn && !inRound) revert CheckInOutsideRound();
 
             if (inRound) {
-                uint256 round;
                 unchecked {
-                    // totalRoundDuration is > 0 becasue of constructor check on totalRoundDuration
-                    round = timeIntoRounds / totalRoundDuration;
+                    // totalRoundDuration is > 0 because of constructor check on totalRoundDuration
+                    // guarantee on no uint8 overflow?
+                    round = uint8(timeIntoRounds / totalRoundDuration);
                 }
-                uint256 stakerIndex = uint256(keccak256(abi.encodePacked(seed, round))) % numberOfActiveStakers;
-                if (activeStakers[stakerIndex] != msg.sender) revert StakerNotSelectedForRound();
+
+                uint256 executorIndex = uint256(keccak256(abi.encodePacked(seed, round))) % numberOfActiveExecutors;
+                if (activeExecutors[executorIndex] != msg.sender) revert ExecutorNotSelectedForRound();
             }
         }
 
         address jobRegistryCache = jobRegistry;
-        // execute each job, only pay tax on those which succeed. We have to wrap this in a try-catch. Maybe make a helper function?
-        for (uint256 i = 0; i < _indices.length; ++i) {
+        uint256 indicesLength = _indices.length;
+        for (uint256 i = 0; i < indicesLength;) {
             uint256 _index = _indices[i];
 
-            try IJobRegistry(jobRegistryCache).execute(_index, msg.sender, _verificationData[i]) {
-                numberOfExecutedJobs++;
-            } catch {}
+            (bool success,) = jobRegistryCache.call{gas: _gasLimits[i]}(
+                abi.encodeWithSelector(IJobRegistry(jobRegistryCache).execute.selector, _index, _feeRecipient)
+            );
+            unchecked {
+                if (success) {
+                    // cannot exceed uint256 max in practise
+                    ++numberOfExecutedJobs;
+                }
+                // starts at 0, cannot exceed uint256 max in practise
+                ++i;
+            }
         }
 
         if (inRound) {
             if (_checkIn) {
-                // what if an executor is selected twice? currently they can only get rewarded once
-                // check that this is first time in epoch caller is checking in
-                if (executor.lastCheckInEpoch == epoch) revert AlreadyCheckedIn();
-                executor.lastCheckInEpoch = epoch;
+                // check that this is first time in this epoch and round that caller is checking in
+                if (executor.lastCheckinEpoch == epoch && executor.lastCheckinRound == round) revert AlreadyCheckedIn();
+                // set lastCheckinEpoch and lastCheckinRound in one storage write
+                assembly {
+                    let epochValue := sload(epoch.slot)
+                    let slot := executorInfo.slot
+                    mstore(0x00, caller())
+                    mstore(0x20, slot)
+                    let executorSlot := keccak256(0x00, 0x40)
+                    let currentValue := sload(add(executorSlot, 1))
+                    // make 25 bytes of checking round and epoch
+                    let checkinVals := shl(0, round)
+                    checkinVals := or(checkinVals, shl(8, epochValue))
+                    // and(currentValue, 0xFFFFFFFFFFFFFF) keeps the first 7 bytes
+                    let finalVal := or(and(currentValue, 0xFFFFFFFFFFFFFF), shl(56, checkinVals))
+                    sstore(add(executorSlot, 1), finalVal)
+                }
 
                 uint256 poolReward = epochPoolBalance / roundsPerEpoch;
                 uint256 totalProtocolTax = protocolTax * numberOfExecutedJobs;
 
                 if (poolReward >= totalProtocolTax) {
                     unchecked {
-                        executor.balance += poolReward - totalProtocolTax;
+                        // balance will not exceed uint256 max value
+                        executorInfo[msg.sender].balance += poolReward - totalProtocolTax;
                     }
                 } else {
-                    executor.balance -= totalProtocolTax - poolReward;
+                    executorInfo[msg.sender].balance -= totalProtocolTax - poolReward;
+                }
+                unchecked {
+                    // should never underflow as epochPoolBalance / roundsPerEpoch <= epochPoolBalance
+                    epochPoolBalance -= poolReward;
                 }
             } else {
                 // not checking in, pay protocol tax
                 if (numberOfExecutedJobs > 0) {
-                    executor.balance -= protocolTax * numberOfExecutedJobs;
+                    executorInfo[msg.sender].balance -= protocolTax * numberOfExecutedJobs;
                 }
             }
         } else {
             if (numberOfExecutedJobs > 0) {
                 // executor pays protocol and executor tax
-                executor.balance -= (protocolTax + executorTax) * numberOfExecutedJobs;
+                executorInfo[msg.sender].balance -= (protocolTax + executorTax) * numberOfExecutedJobs;
                 // update pool balance for next epoch
                 unchecked {
                     // nextEpochPoolBalance will never exceed uint256 max value since there are not enough tokens in existence
@@ -181,10 +210,10 @@ contract Staking is IStaking, Owned {
     }
 
     /**
-     * @notice Stakes the stakingToken transfering the stakingAmount to the contract and activates the staker to be able to execute jobs.
-     * @notice Caller must not be an already initialized staker. To increase balance use topup instead.
+     * @notice Stakes the stakingToken transfering the stakingAmount to the contract and activates the executor to be able to execute jobs.
+     * @notice Caller must not be an already initialized executor. To increase balance use topup instead.
      * @notice Cannot be called during execution rounds and slashing window.
-     * @dev Activates the staker, adding it to stakerInfo and  and increments numberOfActiveStakers.
+     * @dev Activates the executor, adding it to executorInfo and  and increments numberOfActiveExecutors.
      */
     function stake() public {
         if (
@@ -193,24 +222,25 @@ contract Staking is IStaking, Owned {
         ) {
             revert InvalidBlockTime();
         }
-        if (stakerInfo[msg.sender].initialized) revert AlreadyStaked();
+        if (executorInfo[msg.sender].initialized) revert AlreadyStaked();
 
         ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), stakingAmount);
 
-        stakerInfo[msg.sender] = StakerInfo({
+        executorInfo[msg.sender] = Executor({
             balance: stakingAmount,
             active: true,
             initialized: true,
-            arrayIndex: numberOfActiveStakers,
-            lastCheckInEpoch: 0
+            arrayIndex: numberOfActiveExecutors,
+            lastCheckinRound: 0,
+            lastCheckinEpoch: 0
         });
-        _activateStaker(msg.sender);
+        _activateExecutor(msg.sender);
     }
 
     /**
-     * @notice Unstakes the stakingToken and transfers the balance from the contract to the staker and deactivates the staker.
+     * @notice Unstakes the stakingToken and transfers the balance from the contract to the executor and deactivates the executor.
      * @notice Cannot be called during reveal phase, execution rounds and slashing duration.
-     * @dev If the staker is active it is deactivated removing it from activeStakers and numberOfActiveStakers is decremented. The staker is removed from stakerInfo.
+     * @dev If the executor is active it is deactivated removing it from activeExecutors and numberOfActiveExecutors is decremented. The executor is removed from executorInfo.
      */
     function unstake() public {
         if (
@@ -220,20 +250,20 @@ contract Staking is IStaking, Owned {
             revert InvalidBlockTime();
         }
 
-        StakerInfo memory staker = stakerInfo[msg.sender];
-        if (!staker.initialized) revert NotActiveStaker();
-        delete stakerInfo[msg.sender];
+        Executor memory executor = executorInfo[msg.sender];
+        if (!executor.initialized) revert NotActiveExecutor();
+        delete executorInfo[msg.sender];
         delete commitmentMap[msg.sender];
 
-        if (staker.active) {
-            address lastStaker = _deactivateStaker(staker.arrayIndex);
-            stakerInfo[lastStaker].arrayIndex = staker.arrayIndex;
+        if (executor.active) {
+            address lastExecutor = _deactivateExecutor(executor.arrayIndex);
+            executorInfo[lastExecutor].arrayIndex = executor.arrayIndex;
         }
-        ERC20(stakingToken).safeTransfer(msg.sender, staker.balance);
+        ERC20(stakingToken).safeTransfer(msg.sender, executor.balance);
     }
 
     /**
-     * @notice Increases the staking balance of the staker by the given amount and activates the staker if end balance is above threshold.
+     * @notice Increases the staking balance of the executor by the given amount and activates the executor if end balance is above threshold.
      * @notice Cannot be called during execution rounds and slashing window.
      * @param _amount The amount to topup the staking balance with stakingToken.
      */
@@ -245,61 +275,61 @@ contract Staking is IStaking, Owned {
             revert InvalidBlockTime();
         }
 
-        StakerInfo storage staker = stakerInfo[msg.sender];
-        if (!staker.initialized) revert NotActiveStaker();
+        Executor storage executor = executorInfo[msg.sender];
+        if (!executor.initialized) revert NotActiveExecutor();
         ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), _amount);
         unchecked {
             // sum of all user balances will never exceed uint256 max value
-            staker.balance += _amount;
+            executor.balance += _amount;
         }
-        if (!staker.active && staker.balance >= stakingAmount) {
-            staker.active = true;
-            _activateStaker(msg.sender);
+        if (!executor.active && executor.balance >= stakingAmount) {
+            executor.active = true;
+            _activateExecutor(msg.sender);
         }
     }
 
     /**
-     * @notice Slashes the staker for not executing in the given round with inactiveSlashingAmount.
-     * @notice If stakers balance goes below threshold, staker is deactivated.
+     * @notice Slashes the executor for not executing in the given round with inactiveSlashingAmount.
+     * @notice If executor's balance goes below threshold, executor is deactivated.
      * @notice Cannot only be called during slashing window.
-     * @param _staker The address of the staker to be slashed.
-     * @param _round The round the staker is being slashed for.
+     * @param _executor The address of the executor to be slashed.
+     * @param _round The round the executor is being slashed for.
      */
-    function slashRoundInactiveStaker(address _staker, uint8 _round) public {
+    function slashRoundInactiveExecutor(address _executor, uint8 _round) public {
         if (block.timestamp >= epochEndTime + slashingDuration || block.timestamp < epochEndTime) {
             revert InvalidBlockTime();
         }
         if (_round >= roundsPerEpoch) revert RoundExceedingTotal();
 
-        // check if the staker did execute this epoch
-        StakerInfo storage staker = stakerInfo[_staker];
-        // do we have to check if staker is active? no, becasue we verify that staker.arayIndex is selected
-        // verify staker.arrayIndex is selected
-        uint256 stakerIndex = uint256(keccak256(abi.encodePacked(seed, _round))) % uint256(numberOfActiveStakers);
-        if (staker.arrayIndex != stakerIndex) revert StakerNotSelectedForRound();
-        if (staker.lastCheckInEpoch == epoch) revert RoundExecuted();
+        // check if the executor did execute this epoch
+        Executor storage executor = executorInfo[_executor];
+        // do we have to check if executor is active? no, becasue we verify that executor.arayIndex is selected
+        // verify executor.arrayIndex is selected
+        uint256 executorIndex = uint256(keccak256(abi.encodePacked(seed, _round))) % uint256(numberOfActiveExecutors);
+        if (executor.arrayIndex != executorIndex) revert ExecutorNotSelectedForRound();
+        if (executor.lastCheckinEpoch == epoch) revert RoundExecuted();
 
         // prevent from slashing again
-        staker.lastCheckInEpoch = epoch;
+        executor.lastCheckinEpoch = epoch;
 
-        _slash(inactiveSlashingAmount, _staker, msg.sender);
+        _slash(inactiveSlashingAmount, _executor, msg.sender);
     }
 
     /**
-     * @notice Slashes the staker for committing without revealing with commitSlashingAmount.
-     * @notice If stakers balance goes below threshold, staker is deactivated.
+     * @notice Slashes the executor for committing without revealing with commitSlashingAmount.
+     * @notice If executor's balance goes below threshold, executor is deactivated.
      * @notice Cannot only be called during slashing window.
-     * @param _committer The address of the staker to be slashed.
+     * @param _executor The address of the executor to be slashed.
      */
-    function slashCommitter(address _committer) public {
+    function slashCommitter(address _executor) public {
         if (block.timestamp >= epochEndTime + slashingDuration || block.timestamp < epochEndTime) {
             revert InvalidBlockTime();
         }
-        CommitData storage commitData = commitmentMap[_committer];
+        CommitData storage commitData = commitmentMap[_executor];
         if (commitData.epoch != epoch) revert OldEpoch();
         if (commitData.revealed) revert CommitmentRevealed();
         // slash the committer
-        _slash(commitSlashingAmount, _committer, msg.sender);
+        _slash(commitSlashingAmount, _executor, msg.sender);
         commitData.revealed = true;
     }
 
@@ -319,26 +349,29 @@ contract Staking is IStaking, Owned {
             emit EpochInitiated(++epoch);
         }
         seed = keccak256(abi.encodePacked(block.timestamp, block.number, seed));
-        epochPoolBalance = nextEpochPoolBalance;
+        unchecked {
+            // balances will never overflow uint256
+            epochPoolBalance += nextEpochPoolBalance;
+        }
         nextEpochPoolBalance = 0;
     }
 
     /**
-     * @notice Commits the stakers siganture of the current epoch.
+     * @notice Commits the executor's siganture of the current epoch.
      * @notice Can only be called during commit phase.
-     * @param _commitment The commitment to be stored for the staker.
+     * @param _commitment The commitment to be stored for the executor.
      */
     function commit(bytes32 _commitment) public {
         if (block.timestamp >= epochEndTime - epochDuration + commitPhaseDuration) {
             revert InvalidBlockTime();
         }
-        if (!stakerInfo[msg.sender].active) revert NotActiveStaker();
+        if (!executorInfo[msg.sender].active) revert NotActiveExecutor();
 
         commitmentMap[msg.sender] = CommitData({commitment: _commitment, epoch: epoch, revealed: false});
     }
 
     /**
-     * @notice Reveals the stakers signature of the current epoch.
+     * @notice Reveals the executors signature of the current epoch.
      * @notice Can only be called during reveal phase.
      * @notice Caller must have committed in the same epoch.
      * @param _signature The signature to be verified and used to update the seed.
@@ -367,65 +400,65 @@ contract Staking is IStaking, Owned {
     }
 
     /**
-     * @notice Activates the staker, adding it to activeStakers and increments numberOfActiveStakers.
-     * @dev Should only be used together with setting stakerInfo.active to true.
-     * @param _staker The address of the staker to be activated.
+     * @notice Activates the executor, adding it to activeExecutors and increments numberOfActiveExecutors.
+     * @dev Should only be used together with setting executor.active to true.
+     * @param _executor The address of the executor to be activated.
      */
-    function _activateStaker(address _staker) private {
-        if (numberOfActiveStakers < activeStakers.length) {
+    function _activateExecutor(address _executor) private {
+        if (numberOfActiveExecutors < activeExecutors.length) {
             // find the first empty slot and insert
-            activeStakers[numberOfActiveStakers] = _staker;
+            activeExecutors[numberOfActiveExecutors] = _executor;
         } else {
             // push at the end of the array
-            activeStakers.push(_staker);
+            activeExecutors.push(_executor);
         }
         unchecked {
-            // number of active stakers will never be more than uint40 max value in practise
-            numberOfActiveStakers++;
+            // number of active executors will never be more than uint40 max value in practise
+            ++numberOfActiveExecutors;
         }
     }
 
     /**
-     * @notice Deactivates the staker, removing it from activeStakers and decrements numberOfActiveStakers.
-     * @dev Should only be called when the staker is active.
-     * @dev Should only be used together with setting stakerInfo.active to false or deleting stakingInfo entry.
-     * @param _index The index of the staker in activeStakers.
-     * @return lastStaker The address of the last staker in activeStakers.
+     * @notice Deactivates the executor, removing it from activeExecutors and decrements numberOfActiveExecutors.
+     * @dev Should only be called when the executor is active.
+     * @dev Should only be used together with setting executor.active to false or deleting executorInfo entry.
+     * @param _index The index of the executor in activeExecutors.
+     * @return lastExecutor The address of the last executor in activeExecutors.
      */
-    function _deactivateStaker(uint40 _index) private returns (address) {
-        uint40 newNumberOfActiveStakers;
+    function _deactivateExecutor(uint40 _index) private returns (address) {
+        uint40 newNumberOfActiveExecutors;
         unchecked {
-            // here the staker is active, so numberOfActiveStakers should be greater than 0
-            newNumberOfActiveStakers = --numberOfActiveStakers;
+            // here the executor is active, so numberOfActiveExecutors should be greater than 0
+            newNumberOfActiveExecutors = --numberOfActiveExecutors;
         }
-        address lastStaker = activeStakers[newNumberOfActiveStakers];
-        activeStakers[_index] = lastStaker;
-        delete activeStakers[newNumberOfActiveStakers];
-        return lastStaker;
+        address lastExecutor = activeExecutors[newNumberOfActiveExecutors];
+        activeExecutors[_index] = lastExecutor;
+        delete activeExecutors[newNumberOfActiveExecutors];
+        return lastExecutor;
     }
 
     /**
-     * @notice Slashes the staker for the given amount and sends half to the recipient.
-     * @dev Should only be called when the staker is active.
-     * @param _amount The amount to slash from the staker.
-     * @param _stakerAddress The address of the staker to be slashed.
+     * @notice Slashes the executor for the given amount and sends half to the recipient.
+     * @dev Should only be called when the executor is active.
+     * @param _amount The amount to slash from the executor's balance.
+     * @param _executor The address of the executor to be slashed.
      * @param _recipient The address to send half of the slashed amount to.
      */
-    function _slash(uint256 _amount, address _stakerAddress, address _recipient) private {
-        StakerInfo storage staker = stakerInfo[_stakerAddress];
+    function _slash(uint256 _amount, address _executor, address _recipient) private {
+        Executor storage executor = executorInfo[_executor];
 
-        if ((staker.balance -= _amount) < stakingBalanceThreshold) {
+        if ((executor.balance -= _amount) < stakingBalanceThreshold) {
             // index in activeStakers array
-            address lastStakerAddress = _deactivateStaker(staker.arrayIndex);
-            stakerInfo[lastStakerAddress].arrayIndex = staker.arrayIndex;
-            staker.active = false;
+            address lastExecutor = _deactivateExecutor(executor.arrayIndex);
+            executorInfo[lastExecutor].arrayIndex = executor.arrayIndex;
+            executor.active = false;
         }
         // reward slasher, how about putting it in the fee mapping? then it needs access
         ERC20(stakingToken).safeTransfer(_recipient, _amount / 2);
     }
 
     /**
-     * @notice Verifies the signature of the staker for the given epoch and chainId.
+     * @notice Verifies the signature of the executor for the given epoch and chainId.
      * @param _epochNum The epoch number to verify the signature for.
      * @param _chainId The chainId to verify the signature for.
      * @param _signature The signature to verify.

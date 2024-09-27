@@ -10,6 +10,7 @@ contract DummyApplication is IApplication {
 
     uint256 public counter;
     bool revertOnDelete;
+    bool revertOnExecute;
 
     constructor(JobRegistry _jobRegistry) {
         jobRegistry = _jobRegistry;
@@ -29,10 +30,21 @@ contract DummyApplication is IApplication {
     }
 
     function onExecuteJob(uint256 _index, address _owner, uint48 _executionNumber) external override {
+        if (revertOnExecute) {
+            revert("DummyApplication: onExecuteJob failed");
+        }
         counter++;
+    }
+
+    function getExecutionGasCost() external view override returns (uint256) {
+        return 100000;
     }
 
     function setRevertOnDelete(bool _revertOnDelete) public {
         revertOnDelete = _revertOnDelete;
+    }
+
+    function setRevertOnExecute(bool _revertOnExecute) public {
+        revertOnExecute = _revertOnExecute;
     }
 }

@@ -4,6 +4,7 @@ pragma solidity 0.8.27;
 import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {IExecutionModule} from "./interfaces/IExecutionModule.sol";
 import {IFeeModule} from "./interfaces/IFeeModule.sol";
+import {IApplication} from "./interfaces/IApplication.sol";
 import {SignatureVerification} from "./libraries/SignatureVerification.sol";
 import {JobSpecificationHash} from "./libraries/JobSpecificationHash.sol";
 import {FeeModuleInputHash} from "./libraries/FeeModuleInputHash.sol";
@@ -28,7 +29,11 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
 
     address internal immutable executionContract;
 
+    uint256 private constant _EXECUTION_GAS_OVERHEAD = 200000;
+
     mapping(address => mapping(uint256 => uint256)) public nonceBitmap;
+
+    mapping(uint256 => uint256) public inactiveGracePeriodEnds;
 
     constructor(address _treasury, address _executionContract) Owned(_treasury) {
         executionContract = _executionContract;
@@ -56,6 +61,8 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
             _sponsorSignature.verify(_hashTypedData(_specification.hash()), _sponsor);
         }
 
+        if (_specification.inactiveGracePeriod > 400 days) revert InvalidInactiveGracePeriod();
+
         bool reuseIndex = _index < jobs.length;
         index = reuseIndex ? _index : jobs.length;
 
@@ -69,10 +76,17 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
         _specification.application.onCreateJob(
             index, _specification.executionModule, msg.sender, _specification.applicationInput
         );
-
+        bool active = true;
         if (initialExecution) {
             _specification.application.onExecuteJob(index, msg.sender, 0);
-            emit JobExecuted(index, msg.sender, address(_specification.application), 0, 0, address(0));
+            emit JobExecuted(index, msg.sender, address(_specification.application), true, 0, 0, address(0));
+            // can have initial execution and maxExecution = 1. However would be useless if theres no grace period as it can be deleted immediately after
+            if (_specification.maxExecutions == 1) {
+                active = false;
+                if (_specification.inactiveGracePeriod > 0) {
+                    inactiveGracePeriodEnds[index] = block.timestamp + _specification.inactiveGracePeriod;
+                }
+            }
         }
 
         Job memory newJob = Job({
@@ -81,6 +95,9 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
             application: _specification.application,
             executionCounter: initialExecution ? 1 : 0,
             maxExecutions: _specification.maxExecutions,
+            active: active,
+            inactiveGracePeriod: _specification.inactiveGracePeriod,
+            ignoreAppRevert: _specification.ignoreAppRevert,
             executionModule: _specification.executionModule,
             feeModule: _specification.feeModule,
             executionWindow: _specification.executionWindow
@@ -103,38 +120,72 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
      * @param _index Index of the job in the jobs array.
      * @param _feeRecipient Address who receives execution fee tokens.
      */
-    function execute(uint256 _index, address _feeRecipient, bytes calldata _verificationData) external override {
+    function execute(uint256 _index, address _feeRecipient) external override {
         if (msg.sender != executionContract) revert Unauthorized();
         Job memory job = jobs[_index];
 
         // job.owner can only be 0 if job was deleted
         if (job.owner == address(0)) revert JobIsDeleted();
-
-        // check number of executions does not exceed max
-        // maxExecutions = 0 means no limit
-        if (job.maxExecutions != 0 && job.executionCounter >= job.maxExecutions) {
-            revert MaxExecutionsExceeded();
-        }
+        if (!job.active) revert JobNotActive();
 
         IExecutionModule executionModule = executionModules[uint8(job.executionModule)];
         IFeeModule feeModule = feeModules[uint8(job.feeModule)];
 
-        uint256 gasBefore = gasleft();
+        uint256 executionTime = executionModule.onExecuteJob(_index, job.executionWindow);
 
-        uint256 executionTime = executionModule.onExecuteJob(_index, job.executionWindow, _verificationData);
-        job.application.onExecuteJob(_index, job.owner, job.executionCounter);
+        // it is applications reponsibility that this doesnt revert. Sponsor pays fee either way
+        IApplication application = job.application;
+        uint256 applicationGas = application.getExecutionGasCost();
+        (bool success,) = address(application).call{gas: applicationGas}(
+            abi.encodeWithSelector(application.onExecuteJob.selector, _index, job.owner, job.executionCounter)
+        );
+
+        bool maxExecutionsReached;
+        if (success) {
+            // only increment if successfully executed
+            maxExecutionsReached = ++jobs[_index].executionCounter == job.maxExecutions;
+        }
+        if ((!success && !job.ignoreAppRevert) || maxExecutionsReached) {
+            // inactivate job
+            jobs[_index].active = false;
+            // we dont delete the job here because we want more predictable gas consumption
+            if (job.inactiveGracePeriod > 0) {
+                inactiveGracePeriodEnds[_index] = block.timestamp + job.inactiveGracePeriod;
+            }
+        }
 
         (uint256 executionFee, address executionFeeToken) =
-            feeModule.onExecuteJob(_index, job.executionWindow, executionTime, gasBefore - gasleft());
+            feeModule.onExecuteJob(_index, job.executionWindow, executionTime, _EXECUTION_GAS_OVERHEAD + applicationGas);
 
         // transfer fee to recipient
         ERC20(executionFeeToken).safeTransferFrom(job.sponsor, _feeRecipient, executionFee);
 
         emit JobExecuted(
-            _index, job.owner, address(job.application), job.executionCounter, executionFee, executionFeeToken
+            _index,
+            job.owner,
+            address(job.application),
+            success,
+            success ? job.executionCounter + 1 : job.executionCounter,
+            executionFee,
+            executionFeeToken
         );
+    }
 
-        jobs[_index].executionCounter++;
+    /**
+     * @notice Deactivates a job. If the job has an inactiveGracePeriod, it can be deleted by anyone only after the grace period ends.
+     * @notice Deactivated jobs cannot be executed.
+     * @param _index Index of the job in the jobs array.
+     */
+    function deactivateJob(uint256 _index) public override {
+        Job storage job = jobs[_index];
+        if (msg.sender != job.owner) revert Unauthorized();
+        job.active = false;
+
+        if (job.inactiveGracePeriod == 0) {
+            deleteJob(_index);
+        } else {
+            inactiveGracePeriodEnds[_index] = block.timestamp + job.inactiveGracePeriod;
+        }
     }
 
     /**
@@ -144,19 +195,21 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
     function deleteJob(uint256 _index) public override {
         Job memory job = jobs[_index];
 
-        // executionModule, feeModule, owner, executinCounter, maxExecutions, executionWindow, application
-        // NO sponsor
         IExecutionModule executionModule = executionModules[uint8(job.executionModule)];
         IFeeModule feeModule = feeModules[uint8(job.feeModule)];
 
-        // if the job is expired or max executions hit, anyone can delete the job
-        if (
-            !(msg.sender == job.owner) && !executionModule.jobIsExpired(_index, job.executionWindow)
-                && (job.maxExecutions == 0 || job.executionCounter < job.maxExecutions)
-        ) {
-            revert Unauthorized();
+        // job can always be deleted by owner
+        // it can be deleted by anyone only if the job is (expired or inactive) and not in grace period
+        if (!(msg.sender == job.owner)) {
+            if (inactiveGracePeriodEnds[_index] > block.timestamp) {
+                revert JobInGracePeriod();
+            }
+            if (!executionModule.jobIsExpired(_index, job.executionWindow) && job.active) {
+                revert JobNotExpiredOrActive();
+            }
         }
         delete jobs[_index];
+        delete inactiveGracePeriodEnds[_index];
 
         // these should never revert, the owner should always be able to delete a job
         executionModule.onDeleteJob(_index);

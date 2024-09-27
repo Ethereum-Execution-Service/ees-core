@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import {Staking} from "../../src/Staking.sol";
+import {ExecutionManager} from "../../src/ExecutionManager.sol";
 /// @author Victor Brevig
 
-contract MockStaking is Staking {
-    constructor(StakingSpec memory _spec, address _treasury) Staking(_spec, _treasury) {}
+contract MockExecutionManager is ExecutionManager {
+    constructor(InitSpec memory _spec, address _treasury) ExecutionManager(_spec, _treasury) {}
 
     function setSeed(bytes32 _seed) public {
         seed = _seed;
     }
 
-    function setStakerInfo(StakerInfo memory _stakerInfo, address _staker) public {
-        stakerInfo[_staker] = _stakerInfo;
+    function setExecutorInfo(Executor memory _executorInfo, address _executor) public {
+        executorInfo[_executor] = _executorInfo;
     }
 
     function setEpochEndTime(uint256 _epochEndTime) public {
@@ -47,12 +47,12 @@ contract MockStaking is Staking {
         epoch = _epoch;
     }
 
-    function setNumberOfActiveStakers(uint40 _numberOfActiveStakers) public {
-        numberOfActiveStakers = _numberOfActiveStakers;
+    function setNumberOfActiveExecutors(uint40 _numberOfActiveExecutors) public {
+        numberOfActiveExecutors = _numberOfActiveExecutors;
     }
 
-    function getActiveStakersLength() public view returns (uint256) {
-        return activeStakers.length;
+    function getActiveExecutorsLength() public view returns (uint256) {
+        return activeExecutors.length;
     }
 
     function getEpochDuration() public view returns (uint256) {
@@ -67,7 +67,7 @@ contract MockStaking is Staking {
         return totalRoundDuration;
     }
 
-    function getNumberOfActiveStakers() public view returns (uint40) {
-        return numberOfActiveStakers;
+    function getNumberOfActiveExecutors() public view returns (uint40) {
+        return numberOfActiveExecutors;
     }
 }

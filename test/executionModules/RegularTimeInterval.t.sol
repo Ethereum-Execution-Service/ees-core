@@ -42,7 +42,7 @@ contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignatu
         vm.warp(defaultStartTime + secondsInCooldown);
         vm.prank(address(jobRegistry));
         vm.expectRevert(abi.encodeWithSelector(IRegularTimeInterval.NotEnoughTimePast.selector));
-        executionModule.onExecuteJob(0, defaultExecutionWindow, "");
+        executionModule.onExecuteJob(0, defaultExecutionWindow);
     }
 
     function test_ImmediateExecution(uint40 initialExecutionTime, uint40 creationTime) public {
@@ -67,7 +67,7 @@ contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignatu
 
         vm.warp(executionTime + 1800);
         vm.prank(address(jobRegistry));
-        executionModule.onExecuteJob(0, defaultExecutionWindow, "");
+        executionModule.onExecuteJob(0, defaultExecutionWindow);
     }
 
     function test_ExecutionAfterExpiry(uint40 startWindowTime, uint40 executionTime) public {
@@ -81,7 +81,7 @@ contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignatu
         vm.warp(executionTime + 1800);
         vm.prank(address(jobRegistry));
         vm.expectRevert(abi.encodeWithSelector(IRegularTimeInterval.JobExpired.selector));
-        executionModule.onExecuteJob(0, defaultExecutionWindow, "");
+        executionModule.onExecuteJob(0, defaultExecutionWindow);
     }
 
     function test_ExecuteNotJobRegistry(address caller) public {
@@ -89,7 +89,7 @@ contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignatu
         vm.assume(caller != address(jobRegistry));
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IRegularTimeInterval.NotJobRegistry.selector));
-        executionModule.onExecuteJob(0, defaultExecutionWindow, "");
+        executionModule.onExecuteJob(0, defaultExecutionWindow);
     }
 
     function test_CreateJobNotJobRegistry(address caller) public {

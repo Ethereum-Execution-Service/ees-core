@@ -12,8 +12,8 @@ contract DummyPriceOracle is IPriceOracle {
         price = _price;
     }
 
-    function getPrice(address _token, bytes calldata _data) public view override returns (uint256) {
-        return price;
+    function getPrice(address _token, bytes calldata _data) public view override returns (uint256, uint256) {
+        return (price, price);
     }
 
     function setPrice(uint256 _price) public {

@@ -344,4 +344,16 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
 
         if (flipped & bit == 0) revert InvalidNonce();
     }
+
+    /**
+     * @notice Exports the configuration of the JobRegistry contract
+     * @dev This function encodes and returns key configuration parameters of the contract
+     * @return config bytes array containing the encoded configuration data:
+     *         - _EXECUTION_GAS_OVERHEAD: The constant gas overhead for job execution
+     *         - executionModules.length: The number of execution modules
+     *         - feeModules.length: The number of fee modules
+     */
+    function exportConfig() public view returns (bytes memory) {
+        return abi.encode(_EXECUTION_GAS_OVERHEAD, executionModules.length, feeModules.length);
+    }
 }

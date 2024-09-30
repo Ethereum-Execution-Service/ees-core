@@ -8,7 +8,8 @@ interface IPriceOracle {
      * @notice Get the token/ETH price in wei.
      * @param _token The token to get the price of.
      * @param _data Additional data for the price oracle.
-     * @return price The price of the token in wei.
+     * @return priceETH The price of the token in wei.
+     * @return priceUSD the price of the token in USD.
      */
-    function getPrice(address _token, bytes calldata _data) external view returns (uint256);
+    function getPrice(address _token, bytes calldata _data) external view returns (uint256, uint256);
 }

@@ -147,19 +147,19 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         executionManager.setEpoch(10);
         executionManager.setEpochPoolBalance(epochPoolBalance);
 
+        uint256 prevPoolBalance = executionManager.getEpochPoolBalance();
+
         vm.warp(
             defaultEpochEndTime - executionManager.getEpochDuration() + executionManager.getSelectionPhaseDuration()
         );
         vm.prank(executor);
         uint256 numberOfExecutedJobs = executionManager.executeBatch(indices, gasLimits, executor, true);
         (uint256 balance,,,, uint8 lastCheckinRound, uint192 lastCheckinEpoch) = executionManager.executorInfo(executor);
+        uint256 newPoolBalance = executionManager.getEpochPoolBalance();
+        assertEq(newPoolBalance, prevPoolBalance - prevPoolBalance / roundsPerEpoch);
 
         assertEq(numberOfExecutedJobs, 1, "number of executed jobs mismatch");
-        assertEq(
-            balance,
-            stakingAmount + (executionManager.getEpochPoolBalance() / roundsPerEpoch) - protocolTax,
-            "executor balance mismatch"
-        );
+        assertEq(balance, stakingAmount + (prevPoolBalance - newPoolBalance) - protocolTax, "executor balance mismatch");
         assertEq(lastCheckinEpoch, 10, "latest executed epoch mismatch");
         assertEq(lastCheckinRound, 0, "latest executed round mismatch");
         assertEq(executionManager.getNextEpochPoolBalance(), 0, "next epoch pool balance mismatch");
@@ -575,7 +575,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
 
         vm.warp(time);
         vm.prank(slasher);
-        executionManager.slashRoundInactiveExecutor(executor, 0);
+        executionManager.slashInactiveExecutor(executor, 0);
         uint256 endBalanceSlasher = token0.balanceOf(slasher);
         (uint256 balance, bool active, bool initialized, uint40 arrayIndex,,) = executionManager.executorInfo(executor);
         assertEq(balance, stakingAmount - inactiveSlashingAmount, "balance mismatch");
@@ -604,7 +604,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
 
         vm.prank(slasher);
         vm.expectRevert(IExecutionManager.RoundExecuted.selector);
-        executionManager.slashRoundInactiveExecutor(executor, 0);
+        executionManager.slashInactiveExecutor(executor, 0);
     }
 
     function test_SlashingEndBalanceBelowThreshold(address slasher) public {
@@ -629,7 +629,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         uint256 startBalanceSlasher = token0.balanceOf(slasher);
         vm.warp(defaultEpochEndTime);
         vm.prank(slasher);
-        executionManager.slashRoundInactiveExecutor(executor, 0);
+        executionManager.slashInactiveExecutor(executor, 0);
         uint256 endBalanceSlasher = token0.balanceOf(slasher);
         (uint256 balance, bool active, bool initialized, uint40 arrayIndex,,) = executionManager.executorInfo(executor);
         assertEq(balance, stakingBalanceThreshold + 1 - inactiveSlashingAmount, "balance mismatch");
@@ -646,7 +646,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
 
         vm.warp(time);
         vm.expectRevert(IExecutionManager.InvalidBlockTime.selector);
-        executionManager.slashRoundInactiveExecutor(executor, 0);
+        executionManager.slashInactiveExecutor(executor, 0);
     }
 
     function test_SlashingAfterTime(uint256 time) public {
@@ -657,7 +657,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
 
         vm.warp(time);
         vm.expectRevert(IExecutionManager.InvalidBlockTime.selector);
-        executionManager.slashRoundInactiveExecutor(executor, 0);
+        executionManager.slashInactiveExecutor(executor, 0);
     }
 
     function test_SlashingNotSelectedExecutor(bytes32 seed, uint8 round, uint40 numOfactiveExecutors) public {
@@ -673,7 +673,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         vm.warp(defaultEpochEndTime);
         vm.prank(executor);
         vm.expectRevert(IExecutionManager.ExecutorNotSelectedForRound.selector);
-        executionManager.slashRoundInactiveExecutor(executor, round);
+        executionManager.slashInactiveExecutor(executor, round);
     }
 
     function test_SlashingRoundExceedingTotal(uint8 round) public {
@@ -681,7 +681,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         vm.warp(defaultEpochEndTime);
         vm.prank(executor);
         vm.expectRevert(IExecutionManager.RoundExceedingTotal.selector);
-        executionManager.slashRoundInactiveExecutor(executor, round);
+        executionManager.slashInactiveExecutor(executor, round);
     }
 
     function test_InitiateEpoch(address caller, uint256 time) public {

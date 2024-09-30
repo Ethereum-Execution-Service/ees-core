@@ -13,7 +13,6 @@ contract ExecutionManager is IExecutionManager, Owned {
 
     address public jobRegistry;
 
-    uint256 public roundEndBlock;
     bool public executionInRound;
     bool public epochRequested;
 
@@ -158,7 +157,7 @@ contract ExecutionManager is IExecutionManager, Owned {
             if (_checkIn) {
                 // check that this is first time in this epoch and round that caller is checking in
                 if (executor.lastCheckinEpoch == epoch && executor.lastCheckinRound == round) revert AlreadyCheckedIn();
-                // set lastCheckinEpoch and lastCheckinRound in one storage write
+                // set lastCheckinEpoch to epoch and lastCheckinRound to round in one storage write (they reside in same slot)
                 assembly {
                     let epochValue := sload(epoch.slot)
                     let slot := executorInfo.slot
@@ -174,7 +173,13 @@ contract ExecutionManager is IExecutionManager, Owned {
                     sstore(add(executorSlot, 1), finalVal)
                 }
 
-                uint256 poolReward = epochPoolBalance / roundsPerEpoch;
+                // calculates fraction of *current* epochPoolBalance.
+                uint8 roundDiff;
+                unchecked {
+                    // round should never be more that roundsPerEpoch
+                    roundDiff = roundsPerEpoch - round;
+                }
+                uint256 poolReward = epochPoolBalance / roundDiff;
                 uint256 totalProtocolTax = protocolTax * numberOfExecutedJobs;
 
                 if (poolReward >= totalProtocolTax) {
@@ -295,7 +300,7 @@ contract ExecutionManager is IExecutionManager, Owned {
      * @param _executor The address of the executor to be slashed.
      * @param _round The round the executor is being slashed for.
      */
-    function slashRoundInactiveExecutor(address _executor, uint8 _round) public {
+    function slashInactiveExecutor(address _executor, uint8 _round) public {
         if (block.timestamp >= epochEndTime + slashingDuration || block.timestamp < epochEndTime) {
             revert InvalidBlockTime();
         }
@@ -357,7 +362,7 @@ contract ExecutionManager is IExecutionManager, Owned {
     }
 
     /**
-     * @notice Commits the executor's siganture of the current epoch.
+     * @notice Commits a hash of the executor's siganture of the current epoch.
      * @notice Can only be called during commit phase.
      * @param _commitment The commitment to be stored for the executor.
      */
@@ -490,5 +495,27 @@ contract ExecutionManager is IExecutionManager, Owned {
             s := mload(add(_sig, 64))
             v := byte(0, mload(add(_sig, 96)))
         }
+    }
+
+    /**
+     * @notice Exports the configuration of the ExecutionManager contract
+     * @return config A bytes array containing the encoded configuration data
+     */
+    function exportConfig() public view returns (bytes memory) {
+        return abi.encode(
+            stakingToken,
+            stakingAmount,
+            stakingBalanceThreshold,
+            inactiveSlashingAmount,
+            commitSlashingAmount,
+            roundsPerEpoch,
+            executorTax,
+            protocolTax,
+            roundDuration,
+            roundBuffer,
+            slashingDuration,
+            commitPhaseDuration,
+            revealPhaseDuration
+        );
     }
 }

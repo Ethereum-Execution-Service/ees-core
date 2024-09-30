@@ -20,6 +20,29 @@ interface IJobRegistry {
         uint32 executionWindow;
     }
 
+    struct JobSpecification {
+        uint256 nonce;
+        uint256 deadline;
+        IApplication application;
+        uint32 executionWindow;
+        uint48 maxExecutions;
+        uint40 inactiveGracePeriod;
+        bool ignoreAppRevert;
+        bytes1 executionModule;
+        bytes1 feeModule;
+        bytes executionModuleInput;
+        bytes feeModuleInput;
+        bytes applicationInput;
+    }
+
+    struct FeeModuleInput {
+        uint256 nonce;
+        uint256 deadline;
+        uint256 index;
+        bytes1 feeModule;
+        bytes feeModuleInput;
+    }
+
     function createJob(
         JobSpecification calldata _specification,
         address _sponsor,
@@ -95,27 +118,4 @@ interface IJobRegistry {
 
     /// @notice Thrown when the job is not expired or is active
     error JobNotExpiredOrActive();
-
-    struct JobSpecification {
-        uint256 nonce;
-        uint256 deadline;
-        IApplication application;
-        uint32 executionWindow;
-        uint48 maxExecutions;
-        uint40 inactiveGracePeriod;
-        bool ignoreAppRevert;
-        bytes1 executionModule;
-        bytes1 feeModule;
-        bytes executionModuleInput;
-        bytes feeModuleInput;
-        bytes applicationInput;
-    }
-
-    struct FeeModuleInput {
-        uint256 nonce;
-        uint256 deadline;
-        uint256 index;
-        bytes1 feeModule;
-        bytes feeModuleInput;
-    }
 }

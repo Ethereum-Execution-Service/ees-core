@@ -9,6 +9,9 @@ import {LinearAuction} from "../src/feeModules/LinearAuction.sol";
 import {PeggedLinearAuction} from "../src/feeModules/PeggedLinearAuction.sol";
 import {ExecutionManager} from "../src/ExecutionManager.sol";
 import {IExecutionManager} from "../src/interfaces/IExecutionManager.sol";
+// move to periphery
+import {Querier} from "../src/Querier.sol";
+import {ConfigProvider} from "../src/ConfigProvider.sol";
 
 contract DeployAll is Script {
     address treasury;
@@ -55,7 +58,9 @@ contract DeployAll is Script {
             JobRegistry jobRegistry,
             RegularTimeInterval regularTimeInterval,
             LinearAuction linearAuction,
-            PeggedLinearAuction peggedLinearAuction
+            PeggedLinearAuction peggedLinearAuction,
+            Querier querier,
+            ConfigProvider configProvider
         )
     {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -81,6 +86,12 @@ contract DeployAll is Script {
         jobRegistry.addExecutionModule(regularTimeInterval);
         jobRegistry.addFeeModule(linearAuction);
         jobRegistry.addFeeModule(peggedLinearAuction);
+
+        querier = new Querier(jobRegistry);
+        console2.log("Querier Deployed:", address(querier));
+
+        configProvider = new ConfigProvider(jobRegistry, executionManager, querier);
+        console2.log("ConfigProvider Deployed:", address(configProvider));
 
         vm.stopBroadcast();
     }

@@ -32,6 +32,8 @@ contract DeployAll is Script {
             stakingToken: 0x7139F4601480d20d43Fa77780B67D295805aD31a,
             // 1000 USDC
             stakingAmount: 1000000000,
+            // 30 seconds, should probably be something like 30 days in prod
+            minimumStakingPeriod: 30 seconds,
             // 400 USDC
             stakingBalanceThreshold: 400000000,
             // 200 USDC

@@ -27,6 +27,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
 
     uint256 stakingAmount = 1000;
     uint256 stakingBalanceThreshold = 300;
+    uint256 minimumStakingPeriod = 2;
     uint256 inactiveSlashingAmount = 200;
     uint256 commitSlashingAmount = 50;
     uint8 roundDuration = 15;
@@ -49,6 +50,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         IExecutionManager.InitSpec memory spec = IExecutionManager.InitSpec({
             stakingToken: defaultStakingToken,
             stakingAmount: stakingAmount,
+            minimumStakingPeriod: minimumStakingPeriod,
             stakingBalanceThreshold: stakingBalanceThreshold,
             inactiveSlashingAmount: inactiveSlashingAmount,
             commitSlashingAmount: commitSlashingAmount,
@@ -106,7 +108,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         vm.warp(time);
         vm.prank(executor);
         uint256 numberOfExecutedJobs = executionManager.executeBatch(indices, gasLimits, executor, false);
-        (uint256 balance,,,,,) = executionManager.executorInfo(executor);
+        (uint256 balance,,,,,,) = executionManager.executorInfo(executor);
 
         assertEq(numberOfExecutedJobs, 1, "number of executed jobs mismatch");
         assertEq(balance, stakingAmount - (executorTax + protocolTax), "executor balance mismatch");
@@ -154,7 +156,8 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         );
         vm.prank(executor);
         uint256 numberOfExecutedJobs = executionManager.executeBatch(indices, gasLimits, executor, true);
-        (uint256 balance,,,, uint8 lastCheckinRound, uint192 lastCheckinEpoch) = executionManager.executorInfo(executor);
+        (uint256 balance,,,, uint8 lastCheckinRound, uint192 lastCheckinEpoch,) =
+            executionManager.executorInfo(executor);
         uint256 newPoolBalance = executionManager.getEpochPoolBalance();
         assertEq(newPoolBalance, prevPoolBalance - prevPoolBalance / roundsPerEpoch);
 
@@ -183,7 +186,8 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
                 initialized: true,
                 arrayIndex: 0,
                 lastCheckinEpoch: 10,
-                lastCheckinRound: 0
+                lastCheckinRound: 0,
+                stakingTimestamp: block.timestamp
             }),
             executor
         );
@@ -216,7 +220,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         vm.warp(time);
         vm.prank(executor);
         uint256 numberOfExecutedJobs = executionManager.executeBatch(indices, gasLimits, executor, false);
-        (uint256 balance,,,,,) = executionManager.executorInfo(executor);
+        (uint256 balance,,,,,,) = executionManager.executorInfo(executor);
 
         assertEq(numberOfExecutedJobs, 1, "number of executed jobs mismatch");
         assertEq(balance, stakingAmount - protocolTax, "executor balance mismatch");
@@ -236,7 +240,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         vm.warp(defaultEpochEndTime);
         vm.prank(executor);
         uint256 numberOfExecutedJobs = executionManager.executeBatch(indices, gasLimits, executor, false);
-        (uint256 balance,,,,,) = executionManager.executorInfo(executor);
+        (uint256 balance,,,,,,) = executionManager.executorInfo(executor);
 
         assertEq(numberOfExecutedJobs, 0, "number of executed jobs mismatch");
         assertEq(balance, stakingAmount, "executor balance mismatch");
@@ -259,7 +263,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         vm.warp(time);
         vm.prank(executor);
         uint256 numberOfExecutedJobs = executionManager.executeBatch(indices, gasLimits, executor, false);
-        (uint256 balance,,,,,) = executionManager.executorInfo(executor);
+        (uint256 balance,,,,,,) = executionManager.executorInfo(executor);
 
         assertEq(numberOfExecutedJobs, 1, "number of executed jobs mismatch");
         assertEq(balance, stakingAmount - (executorTax + protocolTax), "executor balance mismatch");
@@ -278,7 +282,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         vm.warp(time);
         vm.prank(executor);
         uint256 numberOfExecutedJobs = executionManager.executeBatch(indices, gasLimits, executor, false);
-        (uint256 balance,,,,,) = executionManager.executorInfo(executor);
+        (uint256 balance,,,,,,) = executionManager.executorInfo(executor);
 
         assertEq(numberOfExecutedJobs, 1, "number of executed jobs mismatch");
         assertEq(balance, stakingAmount - (executorTax + protocolTax), "executor balance mismatch");
@@ -316,7 +320,8 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
             bool initialized,
             uint40 arrayIndex,
             uint8 lastCheckinRound,
-            uint192 lastCheckinEpoch
+            uint192 lastCheckinEpoch,
+            uint256 stakingTimestamp
         ) = executionManager.executorInfo(executor);
         assertTrue(active, "not active");
         assertTrue(initialized, "not initialized");
@@ -328,6 +333,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         assertEq(lastCheckinEpoch, 0, "latest executed epoch mismatch");
         assertEq(lastCheckinRound, 0, "latest executed round mismatch");
         assertEq(executionManager.getNumberOfActiveExecutors(), 1, "number of active executors mismatch");
+        assertEq(stakingTimestamp, time, "staking timestamp mismatch");
     }
 
     function test_StakeInvalidTime(uint256 time) public {
@@ -387,6 +393,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
     }
 
     function test_UnstakeActiveExecutor(uint192 time) public {
+        vm.assume(time > minimumStakingPeriod);
         vm.assume(
             time < defaultEpochEndTime - executionManager.getEpochDuration() + commitPhaseDuration
                 || time >= defaultEpochEndTime + executionManager.getSlashingDuration()
@@ -395,6 +402,8 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         uint256 startBalanceProtocol = token0.balanceOf(address(executionManager));
         vm.prank(executor);
         executionManager.stake();
+
+        executionManager.setStakingTimestamp(time - minimumStakingPeriod, executor);
 
         vm.warp(time);
         vm.prank(executor);
@@ -408,7 +417,8 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
             bool initialized,
             uint40 arrayIndex,
             uint8 lastCheckinRound,
-            uint192 lastCheckinEpoch
+            uint192 lastCheckinEpoch,
+            uint256 stakingTimestamp
         ) = executionManager.executorInfo(executor);
         assertFalse(active, "active");
         assertFalse(initialized, "initialized");
@@ -420,6 +430,24 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         assertEq(lastCheckinEpoch, 0, "latest executed epoch mismatch");
         assertEq(lastCheckinRound, 0, "latest executed round mismatch");
         assertEq(executionManager.getNumberOfActiveExecutors(), 0, "number of active executors mismatch");
+        assertEq(stakingTimestamp, 0, "staking timestamp mismatch");
+    }
+
+    function test_UnstakeBeforeMinimumStakingPeriod(uint192 time) public {
+        vm.assume(time > 1);
+        vm.assume(
+            time < defaultEpochEndTime - executionManager.getEpochDuration() + commitPhaseDuration
+                || time >= defaultEpochEndTime + executionManager.getSlashingDuration()
+        );
+
+        vm.warp(time - 1);
+        vm.prank(executor);
+        executionManager.stake();
+
+        vm.warp(time);
+        vm.prank(executor);
+        vm.expectRevert(IExecutionManager.MinimumStakingPeriodNotOver.selector);
+        executionManager.unstake();
     }
 
     function test_UnstakeInactiveExecutor() public {
@@ -436,7 +464,8 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
                 initialized: true,
                 arrayIndex: 0,
                 lastCheckinEpoch: 0,
-                lastCheckinRound: 0
+                lastCheckinRound: 0,
+                stakingTimestamp: 0
             }),
             executor
         );
@@ -482,7 +511,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
                 || time >= defaultEpochEndTime + executionManager.getSlashingDuration()
         );
         startingBalance = bound(startingBalance, 0, stakingBalanceThreshold - 1);
-        topUpAmount = bound(topUpAmount, stakingAmount, token0.balanceOf(executor));
+        topUpAmount = bound(topUpAmount, stakingAmount - startingBalance, token0.balanceOf(executor));
         executionManager.setExecutorInfo(
             IExecutionManager.Executor({
                 balance: startingBalance,
@@ -490,7 +519,8 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
                 initialized: true,
                 arrayIndex: 0,
                 lastCheckinEpoch: 0,
-                lastCheckinRound: 0
+                lastCheckinRound: 0,
+                stakingTimestamp: 0
             }),
             executor
         );
@@ -502,7 +532,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         uint256 endBalanceExecutor = token0.balanceOf(executor);
         uint256 endBalanceProtocol = token0.balanceOf(address(executionManager));
 
-        (uint256 balance, bool active, bool initialized, uint40 arrayIndex,,) = executionManager.executorInfo(executor);
+        (uint256 balance, bool active, bool initialized, uint40 arrayIndex,,,) = executionManager.executorInfo(executor);
         assertTrue(active, "not active");
         assertEq(balance, startingBalance + topUpAmount, "balance mismatch");
         assertEq(endBalanceExecutor, startBalanceExecutor - topUpAmount, "executor balance mismatch");
@@ -521,22 +551,14 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
                 initialized: true,
                 arrayIndex: 0,
                 lastCheckinEpoch: 0,
-                lastCheckinRound: 0
+                lastCheckinRound: 0,
+                stakingTimestamp: 0
             }),
             executor
         );
-        uint256 startBalanceExecutor = token0.balanceOf(executor);
-        uint256 startBalanceProtocol = token0.balanceOf(address(executionManager));
         vm.prank(executor);
+        vm.expectRevert(IExecutionManager.TopupBelowMinimum.selector);
         executionManager.topup(topUpAmount);
-        uint256 endBalanceExecutor = token0.balanceOf(executor);
-        uint256 endBalanceProtocol = token0.balanceOf(address(executionManager));
-
-        (uint256 balance, bool active, bool initialized, uint40 arrayIndex,,) = executionManager.executorInfo(executor);
-        assertFalse(active, "active");
-        assertEq(balance, startingBalance + topUpAmount, "balance mismatch");
-        assertEq(endBalanceExecutor, startBalanceExecutor - topUpAmount, "executor balance mismatch");
-        assertEq(endBalanceProtocol, startBalanceProtocol + topUpAmount, "protocol balance mismatch");
     }
 
     function test_TopupNotAnExecutor() public {
@@ -577,7 +599,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         vm.prank(slasher);
         executionManager.slashInactiveExecutor(executor, 0);
         uint256 endBalanceSlasher = token0.balanceOf(slasher);
-        (uint256 balance, bool active, bool initialized, uint40 arrayIndex,,) = executionManager.executorInfo(executor);
+        (uint256 balance, bool active, bool initialized, uint40 arrayIndex,,,) = executionManager.executorInfo(executor);
         assertEq(balance, stakingAmount - inactiveSlashingAmount, "balance mismatch");
         assertTrue(active, "not active");
         assertEq(endBalanceSlasher, startBalanceSlasher + inactiveSlashingAmount / 2, "slasher balance mismatch");
@@ -597,7 +619,8 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
                 initialized: true,
                 arrayIndex: 0,
                 lastCheckinEpoch: epoch,
-                lastCheckinRound: 0
+                lastCheckinRound: 0,
+                stakingTimestamp: 0
             }),
             executor
         );
@@ -622,7 +645,8 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
                 initialized: true,
                 arrayIndex: 0,
                 lastCheckinEpoch: 0,
-                lastCheckinRound: 0
+                lastCheckinRound: 0,
+                stakingTimestamp: 0
             }),
             executor
         );
@@ -631,7 +655,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         vm.prank(slasher);
         executionManager.slashInactiveExecutor(executor, 0);
         uint256 endBalanceSlasher = token0.balanceOf(slasher);
-        (uint256 balance, bool active, bool initialized, uint40 arrayIndex,,) = executionManager.executorInfo(executor);
+        (uint256 balance, bool active, bool initialized, uint40 arrayIndex,,,) = executionManager.executorInfo(executor);
         assertEq(balance, stakingBalanceThreshold + 1 - inactiveSlashingAmount, "balance mismatch");
         assertFalse(active, "active");
         assertEq(endBalanceSlasher, startBalanceSlasher + inactiveSlashingAmount / 2, "slasher balance mismatch");
@@ -991,7 +1015,7 @@ contract ExecutionManagerTest is Test, TokenProvider, SignatureGenerator, GasSna
         uint256 endBalanceSlasher = token0.balanceOf(slasher);
 
         (,, bool revealed) = executionManager.commitmentMap(executor);
-        (uint256 balance, bool active,,,,) = executionManager.executorInfo(executor);
+        (uint256 balance, bool active,,,,,) = executionManager.executorInfo(executor);
         assertEq(balance, stakingAmount - commitSlashingAmount, "balance mismatch");
         assertTrue(active, "not active");
         assertTrue(revealed, "not revealed");

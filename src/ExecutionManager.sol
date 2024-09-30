@@ -22,6 +22,7 @@ contract ExecutionManager is IExecutionManager, Owned {
 
     address internal immutable stakingToken;
     uint256 internal immutable stakingAmount;
+    uint256 internal immutable minimumStakingPeriod;
     // minimum amount of staking balance required to be eligible to execute
     uint256 internal immutable stakingBalanceThreshold;
     // amount to slash from the executor upon inactivity.
@@ -67,6 +68,7 @@ contract ExecutionManager is IExecutionManager, Owned {
 
         stakingToken = _spec.stakingToken;
         stakingAmount = _spec.stakingAmount;
+        minimumStakingPeriod = _spec.minimumStakingPeriod;
         stakingBalanceThreshold = _spec.stakingBalanceThreshold;
         inactiveSlashingAmount = _spec.inactiveSlashingAmount;
         commitSlashingAmount = _spec.commitSlashingAmount;
@@ -237,7 +239,8 @@ contract ExecutionManager is IExecutionManager, Owned {
             initialized: true,
             arrayIndex: numberOfActiveExecutors,
             lastCheckinRound: 0,
-            lastCheckinEpoch: 0
+            lastCheckinEpoch: 0,
+            stakingTimestamp: block.timestamp
         });
         _activateExecutor(msg.sender);
     }
@@ -257,6 +260,12 @@ contract ExecutionManager is IExecutionManager, Owned {
 
         Executor memory executor = executorInfo[msg.sender];
         if (!executor.initialized) revert NotActiveExecutor();
+        unchecked {
+            // should never overflow uint256 in practise, stakingTimestamp can only be set to block.timestamp
+            if (block.timestamp < executor.stakingTimestamp + minimumStakingPeriod) {
+                revert MinimumStakingPeriodNotOver();
+            }
+        }
         delete executorInfo[msg.sender];
         delete commitmentMap[msg.sender];
 
@@ -282,6 +291,8 @@ contract ExecutionManager is IExecutionManager, Owned {
 
         Executor storage executor = executorInfo[msg.sender];
         if (!executor.initialized) revert NotActiveExecutor();
+        if (executor.balance + _amount < stakingAmount) revert TopupBelowMinimum();
+
         ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), _amount);
         unchecked {
             // sum of all user balances will never exceed uint256 max value
@@ -505,6 +516,7 @@ contract ExecutionManager is IExecutionManager, Owned {
         return abi.encode(
             stakingToken,
             stakingAmount,
+            minimumStakingPeriod,
             stakingBalanceThreshold,
             inactiveSlashingAmount,
             commitSlashingAmount,

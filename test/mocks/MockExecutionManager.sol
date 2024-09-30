@@ -15,6 +15,10 @@ contract MockExecutionManager is ExecutionManager {
         executorInfo[_executor] = _executorInfo;
     }
 
+    function setStakingTimestamp(uint256 _stakingTimestamp, address _executor) public {
+        executorInfo[_executor].stakingTimestamp = _stakingTimestamp;
+    }
+
     function setEpochEndTime(uint256 _epochEndTime) public {
         epochEndTime = _epochEndTime;
     }

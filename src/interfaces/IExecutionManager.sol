@@ -9,6 +9,7 @@ interface IExecutionManager {
         uint40 arrayIndex;
         uint8 lastCheckinRound;
         uint192 lastCheckinEpoch;
+        uint256 stakingTimestamp;
     }
 
     struct CommitData {
@@ -20,6 +21,7 @@ interface IExecutionManager {
     struct InitSpec {
         address stakingToken;
         uint256 stakingAmount;
+        uint256 minimumStakingPeriod;
         uint256 stakingBalanceThreshold;
         uint256 inactiveSlashingAmount;
         uint256 commitSlashingAmount;
@@ -49,4 +51,6 @@ interface IExecutionManager {
     error RoundExceedingTotal();
     error AlreadyCheckedIn();
     error CheckInOutsideRound();
+    error MinimumStakingPeriodNotOver();
+    error TopupBelowMinimum();
 }

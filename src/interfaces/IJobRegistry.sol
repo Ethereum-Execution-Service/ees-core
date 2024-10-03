@@ -50,7 +50,7 @@ interface IJobRegistry {
         bool _hasSponsorship,
         uint256 _index
     ) external returns (uint256 index);
-    function execute(uint256 _index, address _feeRecipient) external;
+    function execute(uint256 _index, address _feeRecipient) external returns (uint256, address);
     function deleteJob(uint256 _index) external;
     function deactivateJob(uint256 _index) external;
     function revokeSponsorship(uint256 _index) external;

@@ -12,11 +12,12 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
     JobRegistry public immutable jobRegistry;
     mapping(uint256 => Params) public params;
 
+    uint256 private constant _GAS_OVERHEAD = 100_000;
+
     // 0.1 USDC
     uint256 private constant _EXECUTOR_TAX = 100_000;
     address private constant _EXECUTOR_TAX_TOKEN = 0x7139F4601480d20d43Fa77780B67D295805aD31a;
     uint256 private constant _BASE_BPS = 10_000;
-    uint256 private constant _EXECUTION_GAS_CONSUMPTION = 50_000;
 
     constructor(JobRegistry _jobRegistry) {
         jobRegistry = _jobRegistry;
@@ -56,7 +57,7 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
         // wei / gas
         uint256 baseFee = block.basefee;
         // gas
-        uint256 totalGasConsumption = _variableGasConsumption + _EXECUTION_GAS_CONSUMPTION;
+        uint256 totalGasConsumption = _variableGasConsumption + _GAS_OVERHEAD;
         // tokens
         uint256 totalFeeBase = priceETH * baseFee * totalGasConsumption;
 
@@ -143,5 +144,13 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
         return abi.encode(
             param.executionFeeToken, param.priceOracle, param.minOverheadBps, param.maxOverheadBps, param.oracleData
         );
+    }
+
+    /**
+     * @notice Returns the gas overhead of calling onExecuteJob.
+     * @return gasOverhead The gas overhead of calling onExecuteJob.
+     */
+    function getGasOverhead() external pure override returns (uint256) {
+        return _GAS_OVERHEAD;
     }
 }

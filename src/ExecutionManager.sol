@@ -88,6 +88,7 @@ contract ExecutionManager is IExecutionManager, Owned {
         revealPhaseDuration = _spec.revealPhaseDuration;
         executorTax = _spec.executorTax;
         protocolTax = _spec.protocolTax;
+        epochEndTime = block.timestamp;
     }
 
     /**
@@ -105,7 +106,7 @@ contract ExecutionManager is IExecutionManager, Owned {
         uint256[] calldata _gasLimits,
         address _feeRecipient,
         bool _checkIn
-    ) public returns (uint256 numberOfExecutedJobs) {
+    ) public returns (uint256[] memory failedIndices) {
         // check that caller is active executor
         Executor memory executor = executorInfo[msg.sender];
         if (!executor.active) revert NotActiveExecutor();
@@ -136,23 +137,48 @@ contract ExecutionManager is IExecutionManager, Owned {
                 if (activeExecutors[executorIndex] != msg.sender) revert ExecutorNotSelectedForRound();
             }
         }
-
+        // could put these in assembly in memory, but be careful not to override anything
         address jobRegistryCache = jobRegistry;
         uint256 indicesLength = _indices.length;
-        for (uint256 i = 0; i < indicesLength;) {
-            uint256 _index = _indices[i];
+        assembly {
+            // Get the current free memory pointer
+            let inputPtr := mload(0x40)
 
-            (bool success,) = jobRegistryCache.call{gas: _gasLimits[i]}(
-                abi.encodeWithSelector(IJobRegistry(jobRegistryCache).execute.selector, _index, _feeRecipient)
-            );
-            unchecked {
-                if (success) {
-                    // cannot exceed uint256 max in practise
-                    ++numberOfExecutedJobs;
+            // the next 3 slots (0x60 bytes) are reserved for the function selector, index, and gas limit
+            // function selector doesnt change, so we can store it in memory once
+            mstore(inputPtr, shl(224, 0xc032dc30)) // Function selector for execute(uint256,address)
+
+            // Store the pointer to the start of our data
+            failedIndices := add(inputPtr, 0x60)
+
+            // Reserve 32 bytes for length, start writing data after that
+            let writePtr := add(failedIndices, 0x20)
+            let failedCount := 0
+            let i := 0
+            for {} lt(i, indicesLength) {} {
+                let index := calldataload(add(_indices.offset, mul(i, 0x20)))
+                let gasLimit := calldataload(add(_gasLimits.offset, mul(i, 0x20)))
+
+                mstore(add(inputPtr, 0x04), index)
+                mstore(add(inputPtr, 0x24), _feeRecipient)
+
+                let success := call(gasLimit, jobRegistryCache, 0, inputPtr, 0x44, 0, 0)
+
+                if iszero(success) {
+                    mstore(writePtr, index)
+                    writePtr := add(writePtr, 32)
+                    failedCount := add(failedCount, 1)
                 }
-                // starts at 0, cannot exceed uint256 max in practise
-                ++i;
+                i := add(i, 1)
             }
+            mstore(failedIndices, failedCount)
+            mstore(0x40, writePtr)
+        }
+
+        uint256 numberOfExecutedJobs;
+        unchecked {
+            // cannot underflow as failedIndices.length <= indicesLength
+            numberOfExecutedJobs = indicesLength - failedIndices.length;
         }
 
         if (inRound) {
@@ -213,7 +239,6 @@ contract ExecutionManager is IExecutionManager, Owned {
                 }
             }
         }
-        return numberOfExecutedJobs;
     }
 
     /**

@@ -36,10 +36,6 @@ contract DummyApplication is IApplication {
         counter++;
     }
 
-    function getExecutionGasCost() external view override returns (uint256) {
-        return 100000;
-    }
-
     function setRevertOnDelete(bool _revertOnDelete) public {
         revertOnDelete = _revertOnDelete;
     }

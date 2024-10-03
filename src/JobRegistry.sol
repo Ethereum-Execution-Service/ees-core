@@ -120,7 +120,7 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
      * @param _index Index of the job in the jobs array.
      * @param _feeRecipient Address who receives execution fee tokens.
      */
-    function execute(uint256 _index, address _feeRecipient) external override {
+    function execute(uint256 _index, address _feeRecipient) external override returns (uint256, address) {
         if (msg.sender != executionContract) revert Unauthorized();
         Job memory job = jobs[_index];
 
@@ -131,14 +131,14 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
         IExecutionModule executionModule = executionModules[uint8(job.executionModule)];
         IFeeModule feeModule = feeModules[uint8(job.feeModule)];
 
+        uint256 startVariableGas = gasleft();
         uint256 executionTime = executionModule.onExecuteJob(_index, job.executionWindow);
 
         // it is applications reponsibility that this doesnt revert. Sponsor pays fee either way
-        IApplication application = job.application;
-        uint256 applicationGas = application.getExecutionGasCost();
-        (bool success,) = address(application).call{gas: applicationGas}(
-            abi.encodeWithSelector(application.onExecuteJob.selector, _index, job.owner, job.executionCounter)
-        );
+        bool success;
+        try job.application.onExecuteJob(_index, job.owner, job.executionCounter) {
+            success = true;
+        } catch {}
 
         bool maxExecutionsReached;
         if (success) {
@@ -154,8 +154,14 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
             }
         }
 
+        uint256 totalGas;
+        unchecked {
+            // startVariableGas < gasleft() and shouldnt overflow uint256 with _EXECUTION_GAS_OVERHEAD
+            totalGas = _EXECUTION_GAS_OVERHEAD + startVariableGas - gasleft();
+        }
+        // fee module monitors its own gas usage
         (uint256 executionFee, address executionFeeToken) =
-            feeModule.onExecuteJob(_index, job.executionWindow, executionTime, _EXECUTION_GAS_OVERHEAD + applicationGas);
+            feeModule.onExecuteJob(_index, job.executionWindow, executionTime, totalGas);
 
         // transfer fee to recipient
         ERC20(executionFeeToken).safeTransferFrom(job.sponsor, _feeRecipient, executionFee);
@@ -169,6 +175,8 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
             executionFee,
             executionFeeToken
         );
+
+        return (executionFee, executionFeeToken);
     }
 
     /**

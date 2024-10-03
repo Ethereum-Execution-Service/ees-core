@@ -13,6 +13,13 @@ interface IPeggedLinearAuction is IFeeModule {
         bytes oracleData;
     }
 
+    /**
+     * @notice Returns the gas overhead of calling onExecuteJob.
+     * @notice This should be the value used to compute fee if the fee is based on gas usage.
+     * @return gasOverhead The gas overhead of calling onExecuteJob.
+     */
+    function getGasOverhead() external view returns (uint256);
+
     /// @notice Thrown when the caller is not authorized to the action on the job
     error Unauthorized();
 

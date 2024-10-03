@@ -22,10 +22,11 @@ contract DummyJobRegistry is IJobRegistry {
         return 0;
     }
 
-    function execute(uint256 _index, address _feeRecipient) external {
+    function execute(uint256 _index, address _feeRecipient) external returns (uint256, address) {
         if (revertOnExecute) {
             revert("DummyJobRegistry: Revert on execute");
         }
+        return (0, address(0));
     }
 
     function deleteJob(uint256 _index) external {}

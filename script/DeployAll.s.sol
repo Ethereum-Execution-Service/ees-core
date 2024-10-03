@@ -30,26 +30,26 @@ contract DeployAll is Script {
         initSpec = IExecutionManager.InitSpec({
             // Base sepolia USDC copy
             stakingToken: 0x7139F4601480d20d43Fa77780B67D295805aD31a,
-            // 1000 USDC
-            stakingAmount: 1000000000,
+            // 1000 USDC - 1000000000
+            stakingAmount: 100,
             // 30 seconds, should probably be something like 30 days in prod
             minimumStakingPeriod: 30 seconds,
-            // 400 USDC
-            stakingBalanceThreshold: 400000000,
-            // 200 USDC
-            inactiveSlashingAmount: 200000000,
-            // 100 USDC
-            commitSlashingAmount: 100000000,
-            roundDuration: 15,
+            // 400 USDC - 400000000
+            stakingBalanceThreshold: 40,
+            // 200 USDC - 200000000
+            inactiveSlashingAmount: 20,
+            // 100 USDC - 100000000
+            commitSlashingAmount: 10,
+            roundDuration: 20,
             roundsPerEpoch: 5,
             roundBuffer: 15,
-            commitPhaseDuration: 15,
-            revealPhaseDuration: 15,
+            commitPhaseDuration: 20,
+            revealPhaseDuration: 20,
             slashingDuration: 15,
-            // 0.05 USDC
-            executorTax: 50000,
-            // 0.05 USDC
-            protocolTax: 50000
+            // 0.05 USDC - 50000
+            executorTax: 1,
+            // 0.05 USDC - 50000
+            protocolTax: 1
         });
     }
 

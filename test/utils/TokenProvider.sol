@@ -7,15 +7,13 @@ import {MockERC20} from "../mocks/MockERC20.sol";
 contract TokenProvider {
     uint256 public constant MINT_AMOUNT_ERC20 = 100 ** 18;
 
-    uint256 public constant TRANSFER_AMOUNT_ERC20 = 30 ** 18;
-
     MockERC20 token0;
     MockERC20 token1;
 
     address faucet = address(0x98765);
 
     function initializeERC20Tokens() public {
-        token0 = new MockERC20("Test0", "TEST0", 18);
+        token0 = new MockERC20("Test0", "TEST0", 6);
         token1 = new MockERC20("Test1", "TEST1", 18);
     }
 

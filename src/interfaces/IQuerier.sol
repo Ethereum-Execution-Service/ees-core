@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {IApplication} from "./IApplication.sol";
-import {IExecutionManager} from "./IExecutionManager.sol";
+import {ICoordinator} from "./ICoordinator.sol";
 
 interface IQuerier {
     struct JobData {
@@ -36,17 +36,14 @@ interface IQuerier {
      * @param _executors Array of addresses of executors to query data from.
      * @return data Array of Executor structs containing information of the executors. The executor info for executor at index _executors[i] will be stored in data[i].
      */
-    function getExecutors(address[] calldata _executors) external view returns (IExecutionManager.Executor[] memory);
+    function getExecutors(address[] calldata _executors) external view returns (ICoordinator.Executor[] memory);
 
     /**
      * @notice Fetches the commitment data for the given executors in _executors.
      * @param _executors Array of addresses of executors to query data from.
      * @return data Array of CommitData structs containing information of the executor's last commitment. The commitment data for executor at index _executors[i] will be stored in data[i].
      */
-    function getCommitData(address[] calldata _executors)
-        external
-        view
-        returns (IExecutionManager.CommitData[] memory);
+    function getCommitData(address[] calldata _executors) external view returns (ICoordinator.CommitData[] memory);
 
     /**
      * @notice Fetches the current epoch info.

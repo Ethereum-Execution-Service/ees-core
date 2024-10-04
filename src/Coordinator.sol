@@ -3,12 +3,12 @@ pragma solidity 0.8.27;
 
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
-import {IExecutionManager} from "./interfaces/IExecutionManager.sol";
+import {ICoordinator} from "./interfaces/ICoordinator.sol";
 import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 
-contract ExecutionManager is IExecutionManager, Owned {
+contract Coordinator is ICoordinator, Owned {
     using SafeTransferLib for ERC20;
 
     address internal jobRegistry;

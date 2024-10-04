@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.27;
 
-import {ExecutionManager} from "../../src/ExecutionManager.sol";
+import {Coordinator} from "../../src/Coordinator.sol";
 /// @author Victor Brevig
 
-contract MockExecutionManager is ExecutionManager {
-    constructor(InitSpec memory _spec, address _treasury) ExecutionManager(_spec, _treasury) {}
+contract MockCoordinator is Coordinator {
+    constructor(InitSpec memory _spec, address _treasury) Coordinator(_spec, _treasury) {}
 
     function setSeed(bytes32 _seed) public {
         seed = _seed;

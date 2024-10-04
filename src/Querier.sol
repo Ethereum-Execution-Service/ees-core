@@ -7,16 +7,16 @@ import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {IExecutionModule} from "./interfaces/IExecutionModule.sol";
 import {IFeeModule} from "./interfaces/IFeeModule.sol";
 import {IApplication} from "./interfaces/IApplication.sol";
-import {ExecutionManager} from "./ExecutionManager.sol";
-import {IExecutionManager} from "./interfaces/IExecutionManager.sol";
+import {Coordinator} from "./Coordinator.sol";
+import {ICoordinator} from "./interfaces/ICoordinator.sol";
 
 contract Querier is IQuerier {
     JobRegistry jobRegistry;
-    ExecutionManager executionManager;
+    Coordinator coordinator;
 
-    constructor(JobRegistry _jobRegistry, ExecutionManager _executionManager) {
+    constructor(JobRegistry _jobRegistry, Coordinator _coordinator) {
         jobRegistry = _jobRegistry;
-        executionManager = _executionManager;
+        coordinator = _coordinator;
     }
 
     function getJobs(uint256[] calldata _indices) public view override returns (JobData[] memory) {
@@ -69,9 +69,9 @@ contract Querier is IQuerier {
         public
         view
         override
-        returns (IExecutionManager.Executor[] memory)
+        returns (ICoordinator.Executor[] memory)
     {
-        IExecutionManager.Executor[] memory executors = new IExecutionManager.Executor[](_executors.length);
+        ICoordinator.Executor[] memory executors = new ICoordinator.Executor[](_executors.length);
         for (uint256 i; i < _executors.length;) {
             (
                 uint256 balance,
@@ -81,8 +81,8 @@ contract Querier is IQuerier {
                 uint8 lastCheckinRound,
                 uint192 lastCheckinEpoch,
                 uint256 stakingTimestamp
-            ) = executionManager.executorInfo(_executors[i]);
-            IExecutionManager.Executor memory executor = IExecutionManager.Executor({
+            ) = coordinator.executorInfo(_executors[i]);
+            ICoordinator.Executor memory executor = ICoordinator.Executor({
                 balance: balance,
                 active: active,
                 initialized: initialized,
@@ -103,13 +103,13 @@ contract Querier is IQuerier {
         public
         view
         override
-        returns (IExecutionManager.CommitData[] memory)
+        returns (ICoordinator.CommitData[] memory)
     {
-        IExecutionManager.CommitData[] memory commitData = new IExecutionManager.CommitData[](_executors.length);
+        ICoordinator.CommitData[] memory commitData = new ICoordinator.CommitData[](_executors.length);
         for (uint256 i; i < _executors.length;) {
-            (bytes32 commitment, uint192 epoch, bool revealed) = executionManager.commitmentMap(_executors[i]);
-            IExecutionManager.CommitData memory data =
-                IExecutionManager.CommitData({commitment: commitment, epoch: epoch, revealed: revealed});
+            (bytes32 commitment, uint192 epoch, bool revealed) = coordinator.commitmentMap(_executors[i]);
+            ICoordinator.CommitData memory data =
+                ICoordinator.CommitData({commitment: commitment, epoch: epoch, revealed: revealed});
             commitData[i] = data;
             unchecked {
                 ++i;
@@ -119,11 +119,11 @@ contract Querier is IQuerier {
     }
 
     function getCurrentEpochInfo() public view override returns (uint192, uint256, bytes32, uint40, address[] memory) {
-        uint192 epoch = executionManager.epoch();
-        uint40 numberOfActiveExecutors = executionManager.numberOfActiveExecutors();
-        bytes32 seed = executionManager.seed();
+        uint192 epoch = coordinator.epoch();
+        uint40 numberOfActiveExecutors = coordinator.numberOfActiveExecutors();
+        bytes32 seed = coordinator.seed();
 
-        bytes memory config = executionManager.exportConfig();
+        bytes memory config = coordinator.exportConfig();
         // Decode the config to get roundsPerEpoch
         (
             ,
@@ -161,8 +161,8 @@ contract Querier is IQuerier {
         address[] memory selectedExecutors = new address[](roundsPerEpoch);
         for (uint256 i; i < roundsPerEpoch; i++) {
             uint256 executorIndex = uint256(keccak256(abi.encodePacked(seed, i))) % uint256(numberOfActiveExecutors);
-            selectedExecutors[i] = executionManager.activeExecutors(executorIndex);
+            selectedExecutors[i] = coordinator.activeExecutors(executorIndex);
         }
-        return (epoch, executionManager.epochEndTime(), seed, numberOfActiveExecutors, selectedExecutors);
+        return (epoch, coordinator.epochEndTime(), seed, numberOfActiveExecutors, selectedExecutors);
     }
 }

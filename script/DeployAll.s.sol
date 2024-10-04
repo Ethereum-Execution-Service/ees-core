@@ -7,8 +7,8 @@ import {JobRegistry} from "../src/JobRegistry.sol";
 import {RegularTimeInterval} from "../src/executionModules/RegularTimeInterval.sol";
 import {LinearAuction} from "../src/feeModules/LinearAuction.sol";
 import {PeggedLinearAuction} from "../src/feeModules/PeggedLinearAuction.sol";
-import {ExecutionManager} from "../src/ExecutionManager.sol";
-import {IExecutionManager} from "../src/interfaces/IExecutionManager.sol";
+import {Coordinator} from "../src/Coordinator.sol";
+import {ICoordinator} from "../src/interfaces/ICoordinator.sol";
 // move to periphery
 import {Querier} from "../src/Querier.sol";
 import {ConfigProvider} from "../src/ConfigProvider.sol";
@@ -20,14 +20,14 @@ contract DeployAll is Script {
     // owner is deployer
     address owner;
 
-    IExecutionManager.InitSpec initSpec;
+    ICoordinator.InitSpec initSpec;
 
     function setUp() public {
         // set to treasury
         treasury = 0x303cAE9641B868722194Bd9517eaC5ca2ad6e71a;
         treasuryBasisPoints = 2000;
 
-        initSpec = IExecutionManager.InitSpec({
+        initSpec = ICoordinator.InitSpec({
             // Base sepolia USDC copy
             stakingToken: 0x7139F4601480d20d43Fa77780B67D295805aD31a,
             // 1000 USDC - 1000000000
@@ -56,7 +56,7 @@ contract DeployAll is Script {
     function run()
         public
         returns (
-            ExecutionManager executionManager,
+            Coordinator coordinator,
             JobRegistry jobRegistry,
             RegularTimeInterval regularTimeInterval,
             LinearAuction linearAuction,
@@ -68,13 +68,13 @@ contract DeployAll is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        executionManager = new ExecutionManager(initSpec, treasury);
-        console2.log("ExecutionManager Deployed:", address(executionManager));
+        coordinator = new Coordinator(initSpec, treasury);
+        console2.log("Coordinator Deployed:", address(coordinator));
 
-        jobRegistry = new JobRegistry(treasury, address(executionManager));
+        jobRegistry = new JobRegistry(treasury, address(coordinator));
         console2.log("JobRegistry Deployed:", address(jobRegistry));
 
-        executionManager.setJobRegistry(address(jobRegistry));
+        coordinator.setJobRegistry(address(jobRegistry));
 
         regularTimeInterval = new RegularTimeInterval(jobRegistry);
         console2.log("RegularTimeInterval Deployed:", address(regularTimeInterval));
@@ -89,10 +89,10 @@ contract DeployAll is Script {
         jobRegistry.addFeeModule(linearAuction);
         jobRegistry.addFeeModule(peggedLinearAuction);
 
-        querier = new Querier(jobRegistry, executionManager);
+        querier = new Querier(jobRegistry, coordinator);
         console2.log("Querier Deployed:", address(querier));
 
-        configProvider = new ConfigProvider(jobRegistry, executionManager, querier);
+        configProvider = new ConfigProvider(jobRegistry, coordinator, querier);
         console2.log("ConfigProvider Deployed:", address(configProvider));
 
         vm.stopBroadcast();

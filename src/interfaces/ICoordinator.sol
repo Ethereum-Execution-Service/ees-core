@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-interface IExecutionManager {
+interface ICoordinator {
     struct Executor {
         uint256 balance;
         bool active;

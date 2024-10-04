@@ -2,25 +2,25 @@
 pragma solidity 0.8.27;
 
 import {JobRegistry} from "./JobRegistry.sol";
-import {ExecutionManager} from "./ExecutionManager.sol";
+import {Coordinator} from "./Coordinator.sol";
 import {Querier} from "./Querier.sol";
 
 contract ConfigProvider {
     JobRegistry public jobRegistry;
-    ExecutionManager public executionManager;
+    Coordinator public coordinator;
     Querier public querier;
 
-    constructor(JobRegistry _jobRegistry, ExecutionManager _executionManager, Querier _querier) {
+    constructor(JobRegistry _jobRegistry, Coordinator _coordinator, Querier _querier) {
         jobRegistry = _jobRegistry;
-        executionManager = _executionManager;
+        coordinator = _coordinator;
         querier = _querier;
     }
 
     function getConfig() public view returns (bytes memory, bytes memory, bytes memory) {
         return (
-            abi.encode(address(jobRegistry), address(executionManager), address(querier)),
+            abi.encode(address(jobRegistry), address(coordinator), address(querier)),
             jobRegistry.exportConfig(),
-            executionManager.exportConfig()
+            coordinator.exportConfig()
         );
     }
 }

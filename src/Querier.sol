@@ -7,12 +7,16 @@ import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {IExecutionModule} from "./interfaces/IExecutionModule.sol";
 import {IFeeModule} from "./interfaces/IFeeModule.sol";
 import {IApplication} from "./interfaces/IApplication.sol";
+import {ExecutionManager} from "./ExecutionManager.sol";
+import {IExecutionManager} from "./interfaces/IExecutionManager.sol";
 
 contract Querier is IQuerier {
     JobRegistry jobRegistry;
+    ExecutionManager executionManager;
 
-    constructor(JobRegistry _jobRegistry) {
+    constructor(JobRegistry _jobRegistry, ExecutionManager _executionManager) {
         jobRegistry = _jobRegistry;
+        executionManager = _executionManager;
     }
 
     function getJobs(uint256[] calldata _indices) public view override returns (JobData[] memory) {
@@ -59,5 +63,106 @@ contract Querier is IQuerier {
         }
 
         return jobsData;
+    }
+
+    function getExecutors(address[] calldata _executors)
+        public
+        view
+        override
+        returns (IExecutionManager.Executor[] memory)
+    {
+        IExecutionManager.Executor[] memory executors = new IExecutionManager.Executor[](_executors.length);
+        for (uint256 i; i < _executors.length;) {
+            (
+                uint256 balance,
+                bool active,
+                bool initialized,
+                uint40 arrayIndex,
+                uint8 lastCheckinRound,
+                uint192 lastCheckinEpoch,
+                uint256 stakingTimestamp
+            ) = executionManager.executorInfo(_executors[i]);
+            IExecutionManager.Executor memory executor = IExecutionManager.Executor({
+                balance: balance,
+                active: active,
+                initialized: initialized,
+                arrayIndex: arrayIndex,
+                lastCheckinRound: lastCheckinRound,
+                lastCheckinEpoch: lastCheckinEpoch,
+                stakingTimestamp: stakingTimestamp
+            });
+            executors[i] = executor;
+            unchecked {
+                ++i;
+            }
+        }
+        return executors;
+    }
+
+    function getCommitData(address[] calldata _executors)
+        public
+        view
+        override
+        returns (IExecutionManager.CommitData[] memory)
+    {
+        IExecutionManager.CommitData[] memory commitData = new IExecutionManager.CommitData[](_executors.length);
+        for (uint256 i; i < _executors.length;) {
+            (bytes32 commitment, uint192 epoch, bool revealed) = executionManager.commitmentMap(_executors[i]);
+            IExecutionManager.CommitData memory data =
+                IExecutionManager.CommitData({commitment: commitment, epoch: epoch, revealed: revealed});
+            commitData[i] = data;
+            unchecked {
+                ++i;
+            }
+        }
+        return commitData;
+    }
+
+    function getCurrentEpochInfo() public view override returns (uint192, uint256, bytes32, uint40, address[] memory) {
+        uint192 epoch = executionManager.epoch();
+        uint40 numberOfActiveExecutors = executionManager.numberOfActiveExecutors();
+        bytes32 seed = executionManager.seed();
+
+        bytes memory config = executionManager.exportConfig();
+        // Decode the config to get roundsPerEpoch
+        (
+            ,
+            ,
+            ,
+            ,
+            ,
+            , // Skip the first 6 parameters
+            uint8 roundsPerEpoch,
+            ,
+            ,
+            ,
+            ,
+            ,
+            , // Skip the remaining parameters
+        ) = abi.decode(
+            config,
+            (
+                address,
+                uint256,
+                uint256,
+                uint256,
+                uint256,
+                uint256,
+                uint8,
+                uint256,
+                uint256,
+                uint8,
+                uint8,
+                uint8,
+                uint8,
+                uint8
+            )
+        );
+        address[] memory selectedExecutors = new address[](roundsPerEpoch);
+        for (uint256 i; i < roundsPerEpoch; i++) {
+            uint256 executorIndex = uint256(keccak256(abi.encodePacked(seed, i))) % uint256(numberOfActiveExecutors);
+            selectedExecutors[i] = executionManager.activeExecutors(executorIndex);
+        }
+        return (epoch, executionManager.epochEndTime(), seed, numberOfActiveExecutors, selectedExecutors);
     }
 }

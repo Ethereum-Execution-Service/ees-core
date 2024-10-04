@@ -65,7 +65,10 @@ interface IJobRegistry {
     function getJobsArrayLength() external view returns (uint256);
 
     event JobCreated(uint256 indexed index, address indexed owner, address indexed application, bool initialExecution);
-    event JobDeleted(uint256 indexed index, address indexed owner, address indexed application);
+    event JobDeleted(
+        uint256 indexed index, address indexed owner, address indexed application, bool applicationRevertedOnDelete
+    );
+    event JobDeactivated(uint256 indexed index, address indexed owner, address indexed application);
     event JobExecuted(
         uint256 indexed index,
         address indexed owner,
@@ -76,9 +79,6 @@ interface IJobRegistry {
         address executionFeeToken
     );
     event FeeModuleUpdate(uint256 indexed index, address indexed owner, address indexed sponsor);
-    event ApplicationRevertedUponJobDeletion(
-        uint256 indexed index, address indexed owner, address application, bytes revertData
-    );
 
     /// @notice Emits an event when the owner successfully invalidates an unordered nonce.
     event UnorderedNonceInvalidation(address indexed owner, uint256 word, uint256 mask);

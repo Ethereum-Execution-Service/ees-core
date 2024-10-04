@@ -194,6 +194,8 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
         } else {
             inactiveGracePeriodEnds[_index] = block.timestamp + job.inactiveGracePeriod;
         }
+
+        emit JobDeactivated(_index, job.owner, address(job.application));
     }
 
     /**
@@ -223,11 +225,12 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
         executionModule.onDeleteJob(_index);
         feeModule.onDeleteJob(_index);
 
-        try job.application.onDeleteJob(_index, job.owner) {
-            emit JobDeleted(_index, job.owner, address(job.application));
-        } catch (bytes memory revertData) {
-            emit ApplicationRevertedUponJobDeletion(_index, job.owner, address(job.application), revertData);
+        bool revertOnDelete;
+        try job.application.onDeleteJob(_index, job.owner) {}
+        catch {
+            revertOnDelete = true;
         }
+        emit JobDeleted(_index, job.owner, address(job.application), revertOnDelete);
     }
 
     /**

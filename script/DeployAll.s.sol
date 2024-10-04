@@ -89,7 +89,7 @@ contract DeployAll is Script {
         jobRegistry.addFeeModule(linearAuction);
         jobRegistry.addFeeModule(peggedLinearAuction);
 
-        querier = new Querier(jobRegistry);
+        querier = new Querier(jobRegistry, executionManager);
         console2.log("Querier Deployed:", address(querier));
 
         configProvider = new ConfigProvider(jobRegistry, executionManager, querier);

@@ -11,13 +11,10 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 contract ExecutionManager is IExecutionManager, Owned {
     using SafeTransferLib for ERC20;
 
-    address public jobRegistry;
-
-    bool public executionInRound;
-    bool public epochRequested;
-
+    address internal jobRegistry;
+    bytes32 public seed;
+    uint192 public epoch;
     uint256 public epochEndTime;
-
     uint40 public numberOfActiveExecutors;
 
     address internal immutable stakingToken;
@@ -52,9 +49,6 @@ contract ExecutionManager is IExecutionManager, Owned {
 
     address[] public activeExecutors;
     mapping(address => Executor) public executorInfo;
-
-    bytes32 public seed;
-    uint192 public epoch;
 
     mapping(address => CommitData) public commitmentMap;
 
@@ -181,6 +175,7 @@ contract ExecutionManager is IExecutionManager, Owned {
             numberOfExecutedJobs = indicesLength - failedIndices.length;
         }
 
+        uint256 newBalance = executor.balance;
         if (inRound) {
             if (_checkIn) {
                 // check that this is first time in this epoch and round that caller is checking in
@@ -213,10 +208,10 @@ contract ExecutionManager is IExecutionManager, Owned {
                 if (poolReward >= totalProtocolTax) {
                     unchecked {
                         // balance will not exceed uint256 max value
-                        executorInfo[msg.sender].balance += poolReward - totalProtocolTax;
+                        newBalance = (executorInfo[msg.sender].balance += poolReward - totalProtocolTax);
                     }
                 } else {
-                    executorInfo[msg.sender].balance -= totalProtocolTax - poolReward;
+                    newBalance = (executorInfo[msg.sender].balance -= totalProtocolTax - poolReward);
                 }
                 unchecked {
                     // should never underflow as epochPoolBalance / roundsPerEpoch <= epochPoolBalance
@@ -225,19 +220,27 @@ contract ExecutionManager is IExecutionManager, Owned {
             } else {
                 // not checking in, pay protocol tax
                 if (numberOfExecutedJobs > 0) {
-                    executorInfo[msg.sender].balance -= protocolTax * numberOfExecutedJobs;
+                    newBalance = (executorInfo[msg.sender].balance -= protocolTax * numberOfExecutedJobs);
                 }
             }
         } else {
             if (numberOfExecutedJobs > 0) {
                 // executor pays protocol and executor tax
-                executorInfo[msg.sender].balance -= (protocolTax + executorTax) * numberOfExecutedJobs;
+                newBalance = (executorInfo[msg.sender].balance -= (protocolTax + executorTax) * numberOfExecutedJobs);
                 // update pool balance for next epoch
                 unchecked {
                     // nextEpochPoolBalance will never exceed uint256 max value since there are not enough tokens in existence
                     nextEpochPoolBalance += executorTax * numberOfExecutedJobs;
                 }
             }
+        }
+
+        // check if executor balance is below threshold and deactivate if true
+        // OBS, executor is in MEMORY and not updated
+        if (newBalance < stakingBalanceThreshold) {
+            address lastExecutor = _deactivateExecutor(executor.arrayIndex);
+            executorInfo[lastExecutor].arrayIndex = executor.arrayIndex;
+            executorInfo[msg.sender].active = false;
         }
     }
 

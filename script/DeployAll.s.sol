@@ -12,6 +12,7 @@ import {ICoordinator} from "../src/interfaces/ICoordinator.sol";
 // move to periphery
 import {Querier} from "../src/Querier.sol";
 import {ConfigProvider} from "../src/ConfigProvider.sol";
+import {BatchSlasher} from "../src/BatchSlasher.sol";
 
 contract DeployAll is Script {
     address treasury;
@@ -62,7 +63,8 @@ contract DeployAll is Script {
             LinearAuction linearAuction,
             PeggedLinearAuction peggedLinearAuction,
             Querier querier,
-            ConfigProvider configProvider
+            ConfigProvider configProvider,
+            BatchSlasher batchSlasher
         )
     {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -92,7 +94,10 @@ contract DeployAll is Script {
         querier = new Querier(jobRegistry, coordinator);
         console2.log("Querier Deployed:", address(querier));
 
-        configProvider = new ConfigProvider(jobRegistry, coordinator, querier);
+        batchSlasher = new BatchSlasher(address(coordinator));
+        console2.log("BatchSlasher Deployed:", address(batchSlasher));
+
+        configProvider = new ConfigProvider(jobRegistry, coordinator, querier, batchSlasher);
         console2.log("ConfigProvider Deployed:", address(configProvider));
 
         vm.stopBroadcast();

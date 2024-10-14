@@ -6,9 +6,9 @@ import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 import {ICoordinator} from "./interfaces/ICoordinator.sol";
 import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
-import {Owned} from "solmate/src/auth/Owned.sol";
+import {TaxHandler} from "./TaxHandler.sol";
 
-contract Coordinator is ICoordinator, Owned {
+contract Coordinator is ICoordinator, TaxHandler {
     using SafeTransferLib for ERC20;
 
     address internal jobRegistry;
@@ -30,9 +30,6 @@ contract Coordinator is ICoordinator, Owned {
 
     uint8 internal immutable roundsPerEpoch;
 
-    uint256 internal immutable executorTax;
-    uint256 internal immutable protocolTax;
-
     uint256 internal epochPoolBalance;
     uint256 internal nextEpochPoolBalance;
 
@@ -52,7 +49,7 @@ contract Coordinator is ICoordinator, Owned {
 
     mapping(address => CommitData) public commitmentMap;
 
-    constructor(InitSpec memory _spec, address _treasury) Owned(_treasury) {
+    constructor(InitSpec memory _spec, address _treasury) TaxHandler(_treasury, _spec.protocolTax, _spec.executorTax) {
         require(
             _spec.stakingBalanceThreshold <= _spec.stakingAmount,
             "Staking: threshold must be less than or equal to staking amount"
@@ -80,8 +77,6 @@ contract Coordinator is ICoordinator, Owned {
         epochDuration = selectionPhaseDuration + totalRoundDuration * roundsPerEpoch;
         commitPhaseDuration = _spec.commitPhaseDuration;
         revealPhaseDuration = _spec.revealPhaseDuration;
-        executorTax = _spec.executorTax;
-        protocolTax = _spec.protocolTax;
         epochEndTime = block.timestamp;
     }
 
@@ -217,6 +212,8 @@ contract Coordinator is ICoordinator, Owned {
                     // should never underflow as epochPoolBalance / roundsPerEpoch <= epochPoolBalance
                     epochPoolBalance -= poolReward;
                 }
+
+                emit CheckIn(msg.sender, epoch, round);
             } else {
                 // not checking in, pay protocol tax
                 if (numberOfExecutedJobs > 0) {
@@ -236,19 +233,20 @@ contract Coordinator is ICoordinator, Owned {
         }
 
         // check if executor balance is below threshold and deactivate if true
-        // OBS, executor is in MEMORY and not updated
         if (newBalance < stakingBalanceThreshold) {
             address lastExecutor = _deactivateExecutor(executor.arrayIndex);
             executorInfo[lastExecutor].arrayIndex = executor.arrayIndex;
             executorInfo[msg.sender].active = false;
         }
+
+        emit BatchExecution(failedIndices);
     }
 
     /**
      * @notice Stakes the stakingToken transfering the stakingAmount to the contract and activates the executor to be able to execute jobs.
      * @notice Caller must not be an already initialized executor. To increase balance use topup instead.
      * @notice Cannot be called during execution rounds and slashing window.
-     * @dev Activates the executor, adding it to executorInfo and  and increments numberOfActiveExecutors.
+     * @dev Activates the executor, adding it to executorInfo and increments numberOfActiveExecutors.
      */
     function stake() public {
         if (
@@ -338,25 +336,30 @@ contract Coordinator is ICoordinator, Owned {
      * @notice Cannot only be called during slashing window.
      * @param _executor The address of the executor to be slashed.
      * @param _round The round the executor is being slashed for.
+     * @param _recipient The address to send slashing reward to.
      */
-    function slashInactiveExecutor(address _executor, uint8 _round) public {
+    function slashInactiveExecutor(address _executor, uint8 _round, address _recipient) public {
         if (block.timestamp >= epochEndTime + slashingDuration || block.timestamp < epochEndTime) {
             revert InvalidBlockTime();
         }
         if (_round >= roundsPerEpoch) revert RoundExceedingTotal();
 
+        uint192 currentEpoch = epoch;
+
         // check if the executor did execute this epoch
         Executor storage executor = executorInfo[_executor];
-        // do we have to check if executor is active? no, becasue we verify that executor.arayIndex is selected
-        // verify executor.arrayIndex is selected
+        // dont have to check if executor is active becasue we verify that executor.arayIndex is selected
         uint256 executorIndex = uint256(keccak256(abi.encodePacked(seed, _round))) % uint256(numberOfActiveExecutors);
         if (executor.arrayIndex != executorIndex) revert ExecutorNotSelectedForRound();
-        if (executor.lastCheckinEpoch == epoch) revert RoundExecuted();
+        if (executor.lastCheckinEpoch == currentEpoch) revert RoundExecuted();
 
         // prevent from slashing again
-        executor.lastCheckinEpoch = epoch;
+        executor.lastCheckinEpoch = currentEpoch;
 
-        _slash(inactiveSlashingAmount, _executor, msg.sender);
+        uint256 slashAmount = inactiveSlashingAmount;
+        _slash(slashAmount, executor, _recipient);
+
+        emit SlashInactiveExecutor(_executor, _recipient, currentEpoch, _round, slashAmount);
     }
 
     /**
@@ -364,17 +367,24 @@ contract Coordinator is ICoordinator, Owned {
      * @notice If executor's balance goes below threshold, executor is deactivated.
      * @notice Cannot only be called during slashing window.
      * @param _executor The address of the executor to be slashed.
+     * @param _recipient The address to send slashing reward to.
      */
-    function slashCommitter(address _executor) public {
+    function slashCommitter(address _executor, address _recipient) public {
         if (block.timestamp >= epochEndTime + slashingDuration || block.timestamp < epochEndTime) {
             revert InvalidBlockTime();
         }
+        uint192 currentEpoch = epoch;
         CommitData storage commitData = commitmentMap[_executor];
-        if (commitData.epoch != epoch) revert OldEpoch();
+        if (commitData.epoch != currentEpoch) revert OldEpoch();
         if (commitData.revealed) revert CommitmentRevealed();
+
+        uint256 slashAmount = commitSlashingAmount;
         // slash the committer
-        _slash(commitSlashingAmount, _executor, msg.sender);
+        Executor storage executor = executorInfo[_executor];
+        _slash(slashAmount, executor, _recipient);
         commitData.revealed = true;
+
+        emit SlashCommitter(_executor, _recipient, currentEpoch, slashAmount);
     }
 
     /**
@@ -412,6 +422,8 @@ contract Coordinator is ICoordinator, Owned {
         if (!executorInfo[msg.sender].active) revert NotActiveExecutor();
 
         commitmentMap[msg.sender] = CommitData({commitment: _commitment, epoch: epoch, revealed: false});
+
+        emit Commitment(msg.sender, epoch);
     }
 
     /**
@@ -437,6 +449,8 @@ contract Coordinator is ICoordinator, Owned {
 
         commitData.revealed = true;
         seed = keccak256(abi.encodePacked(seed, _signature));
+
+        emit Reveal(msg.sender, epoch);
     }
 
     function setJobRegistry(address _jobRegistry) public onlyOwner {
@@ -486,19 +500,21 @@ contract Coordinator is ICoordinator, Owned {
      * @dev Should only be called when the executor is active.
      * @param _amount The amount to slash from the executor's balance.
      * @param _executor The address of the executor to be slashed.
-     * @param _recipient The address to send half of the slashed amount to.
+     * @param _recipient The address to reward half of the slashed amount to. Must be an active executor.
      */
-    function _slash(uint256 _amount, address _executor, address _recipient) private {
-        Executor storage executor = executorInfo[_executor];
+    function _slash(uint256 _amount, Executor storage _executor, address _recipient) private {
+        if (!executorInfo[_recipient].active) revert NotActiveExecutor();
 
-        if ((executor.balance -= _amount) < stakingBalanceThreshold) {
+        if ((_executor.balance -= _amount) < stakingBalanceThreshold) {
             // index in activeStakers array
-            address lastExecutor = _deactivateExecutor(executor.arrayIndex);
-            executorInfo[lastExecutor].arrayIndex = executor.arrayIndex;
-            executor.active = false;
+            address lastExecutor = _deactivateExecutor(_executor.arrayIndex);
+            executorInfo[lastExecutor].arrayIndex = _executor.arrayIndex;
+            _executor.active = false;
         }
-        // reward slasher, how about putting it in the fee mapping? then it needs access
-        ERC20(stakingToken).safeTransfer(_recipient, _amount / 2);
+        unchecked {
+            // no division by zero. Total token balances will not exceed uint256 max value
+            executorInfo[_recipient].balance += _amount / 2;
+        }
     }
 
     /**

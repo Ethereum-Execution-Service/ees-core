@@ -573,7 +573,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         coordinator.topup(stakingAmount);
     }
 
-    function test_Slashing(address slasher, uint256 time) public {
+    function test_InactiveSlashing(address slasher, uint256 time, bytes32 seed) public {
         // should slash executor balance and slasher should receive half of slashed amount. Executor should still be active in this case
         vm.assume(slasher != executor);
         vm.assume(slasher != address(coordinator));
@@ -581,25 +581,46 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.prank(executor);
         coordinator.stake();
-        uint256 startBalanceSlasher = token0.balanceOf(slasher);
+
+        setERC20TestTokens(slasher);
+        setERC20TestTokenApprovals(vm, slasher, address(coordinator));
+        vm.prank(slasher);
+        coordinator.stake();
+
+        (uint256 startBalanceSlasher,,,,,,) = coordinator.executorInfo(slasher);
+
+        // assume executor is selected for round 0
+        coordinator.setSeed(seed);
+        vm.assume(uint256(keccak256(abi.encodePacked(seed, uint8(0)))) % 2 == 0);
 
         coordinator.setEpoch(1);
 
         vm.warp(time);
         vm.prank(slasher);
-        coordinator.slashInactiveExecutor(executor, 0);
-        uint256 endBalanceSlasher = token0.balanceOf(slasher);
+        coordinator.slashInactiveExecutor(executor, 0, slasher);
+        (uint256 endBalanceSlasher,,,,,,) = coordinator.executorInfo(slasher);
         (uint256 balance, bool active, bool initialized, uint40 arrayIndex,,,) = coordinator.executorInfo(executor);
         assertEq(balance, stakingAmount - inactiveSlashingAmount, "balance mismatch");
         assertTrue(active, "not active");
         assertEq(endBalanceSlasher, startBalanceSlasher + inactiveSlashingAmount / 2, "slasher balance mismatch");
     }
 
-    function test_SlashingRoundExecuted(address slasher, uint40 epoch) public {
+    function test_SlashingRoundExecuted(address slasher, uint40 epoch, bytes32 seed) public {
         // should revert with RoundExecuted if round was executed
+        vm.assume(slasher != executor);
         vm.prank(executor);
         coordinator.stake();
+
+        setERC20TestTokens(slasher);
+        setERC20TestTokenApprovals(vm, slasher, address(coordinator));
+        vm.prank(slasher);
+        coordinator.stake();
+
         vm.warp(defaultEpochEndTime);
+
+        // assume executor is selected for round 0
+        coordinator.setSeed(seed);
+        vm.assume(uint256(keccak256(abi.encodePacked(seed, uint8(0)))) % 2 == 0);
 
         coordinator.setEpoch(epoch);
         coordinator.setExecutorInfo(
@@ -617,15 +638,24 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.prank(slasher);
         vm.expectRevert(ICoordinator.RoundExecuted.selector);
-        coordinator.slashInactiveExecutor(executor, 0);
+        coordinator.slashInactiveExecutor(executor, 0, slasher);
     }
 
-    function test_SlashingEndBalanceBelowThreshold(address slasher) public {
+    function test_SlashingEndBalanceBelowThreshold(address slasher, bytes32 seed) public {
         // should slash executor balance and slasher should receive half of slashed amount. Executor should still be active in this case
         vm.assume(slasher != executor);
         vm.assume(slasher != address(coordinator));
         vm.prank(executor);
         coordinator.stake();
+
+        setERC20TestTokens(slasher);
+        setERC20TestTokenApprovals(vm, slasher, address(coordinator));
+        vm.prank(slasher);
+        coordinator.stake();
+
+        // assume executor is selected for round 0
+        coordinator.setSeed(seed);
+        vm.assume(uint256(keccak256(abi.encodePacked(seed, uint8(0)))) % 2 == 0);
 
         coordinator.setEpoch(1);
         coordinator.setExecutorInfo(
@@ -640,16 +670,16 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
             }),
             executor
         );
-        uint256 startBalanceSlasher = token0.balanceOf(slasher);
+        (uint256 startBalanceSlasher,,,,,,) = coordinator.executorInfo(slasher);
         vm.warp(defaultEpochEndTime);
         vm.prank(slasher);
-        coordinator.slashInactiveExecutor(executor, 0);
-        uint256 endBalanceSlasher = token0.balanceOf(slasher);
+        coordinator.slashInactiveExecutor(executor, 0, slasher);
+        (uint256 endBalanceSlasher,,,,,,) = coordinator.executorInfo(slasher);
         (uint256 balance, bool active, bool initialized, uint40 arrayIndex,,,) = coordinator.executorInfo(executor);
         assertEq(balance, stakingBalanceThreshold + 1 - inactiveSlashingAmount, "balance mismatch");
         assertFalse(active, "active");
         assertEq(endBalanceSlasher, startBalanceSlasher + inactiveSlashingAmount / 2, "slasher balance mismatch");
-        assertEq(coordinator.getNumberOfActiveExecutors(), 0, "number of active executors mismatch");
+        assertEq(coordinator.getNumberOfActiveExecutors(), 1, "number of active executors mismatch");
     }
 
     function test_SlashingBeforeTime(uint256 time) public {
@@ -658,9 +688,12 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         vm.prank(executor);
         coordinator.stake();
 
+        vm.prank(secondExecutor);
+        coordinator.stake();
+
         vm.warp(time);
         vm.expectRevert(ICoordinator.InvalidBlockTime.selector);
-        coordinator.slashInactiveExecutor(executor, 0);
+        coordinator.slashInactiveExecutor(executor, 0, secondExecutor);
     }
 
     function test_SlashingAfterTime(uint256 time) public {
@@ -669,9 +702,12 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         vm.prank(executor);
         coordinator.stake();
 
+        vm.prank(secondExecutor);
+        coordinator.stake();
+
         vm.warp(time);
         vm.expectRevert(ICoordinator.InvalidBlockTime.selector);
-        coordinator.slashInactiveExecutor(executor, 0);
+        coordinator.slashInactiveExecutor(executor, 0, secondExecutor);
     }
 
     function test_SlashingNotSelectedExecutor(bytes32 seed, uint8 round, uint40 numOfactiveExecutors) public {
@@ -680,6 +716,10 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         round = uint8(bound(round, 0, roundsPerEpoch - 1));
         vm.prank(executor);
         coordinator.stake();
+
+        vm.prank(secondExecutor);
+        coordinator.stake();
+
         coordinator.setSeed(seed);
         coordinator.setNumberOfActiveExecutors(numOfactiveExecutors);
         vm.assume(uint256(keccak256(abi.encodePacked(seed, round))) % uint256(numOfactiveExecutors) != 0);
@@ -687,15 +727,21 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         vm.warp(defaultEpochEndTime);
         vm.prank(executor);
         vm.expectRevert(ICoordinator.ExecutorNotSelectedForRound.selector);
-        coordinator.slashInactiveExecutor(executor, round);
+        coordinator.slashInactiveExecutor(executor, round, secondExecutor);
     }
 
     function test_SlashingRoundExceedingTotal(uint8 round) public {
         round = uint8(bound(round, roundsPerEpoch, type(uint8).max));
-        vm.warp(defaultEpochEndTime);
+
         vm.prank(executor);
+        coordinator.stake();
+
+        vm.prank(secondExecutor);
+        coordinator.stake();
+
+        vm.warp(defaultEpochEndTime);
         vm.expectRevert(ICoordinator.RoundExceedingTotal.selector);
-        coordinator.slashInactiveExecutor(executor, round);
+        coordinator.slashInactiveExecutor(executor, round, secondExecutor);
     }
 
     function test_InitiateEpoch(address caller, uint256 time) public {
@@ -976,14 +1022,19 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         vm.prank(executor);
         coordinator.stake();
 
+        setERC20TestTokens(slasher);
+        setERC20TestTokenApprovals(vm, slasher, address(coordinator));
+        vm.prank(slasher);
+        coordinator.stake();
+
         coordinator.setCommitment(ICoordinator.CommitData({commitment: 0, epoch: 0, revealed: false}), executor);
 
-        uint256 startBalanceSlasher = token0.balanceOf(slasher);
+        (uint256 startBalanceSlasher,,,,,,) = coordinator.executorInfo(slasher);
 
         vm.warp(time);
         vm.prank(slasher);
-        coordinator.slashCommitter(executor);
-        uint256 endBalanceSlasher = token0.balanceOf(slasher);
+        coordinator.slashCommitter(executor, slasher);
+        (uint256 endBalanceSlasher,,,,,,) = coordinator.executorInfo(slasher);
 
         (,, bool revealed) = coordinator.commitmentMap(executor);
         (uint256 balance, bool active,,,,,) = coordinator.executorInfo(executor);
@@ -998,12 +1049,14 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         vm.prank(executor);
         coordinator.stake();
 
+        vm.prank(secondExecutor);
+        coordinator.stake();
+
         coordinator.setCommitment(ICoordinator.CommitData({commitment: 0, epoch: 0, revealed: false}), executor);
 
         vm.warp(time);
-        vm.prank(executor);
         vm.expectRevert(ICoordinator.InvalidBlockTime.selector);
-        coordinator.slashCommitter(executor);
+        coordinator.slashCommitter(executor, secondExecutor);
     }
 
     function test_SlashCommitterAfterTime(uint256 time) public {
@@ -1011,34 +1064,43 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         vm.prank(executor);
         coordinator.stake();
 
+        vm.prank(secondExecutor);
+        coordinator.stake();
+
         coordinator.setCommitment(ICoordinator.CommitData({commitment: 0, epoch: 0, revealed: false}), executor);
 
         vm.warp(time);
-        vm.prank(executor);
         vm.expectRevert(ICoordinator.InvalidBlockTime.selector);
-        coordinator.slashCommitter(executor);
+        coordinator.slashCommitter(executor, secondExecutor);
     }
 
-    function test_SlashCommitterOldEpoch(address slasher, uint192 epochNum, uint192 secondEpochNum) public {
+    function test_SlashCommitterOldEpoch(uint192 epochNum, uint192 secondEpochNum) public {
         vm.assume(epochNum != secondEpochNum);
         vm.prank(executor);
+        coordinator.stake();
+
+        vm.prank(secondExecutor);
         coordinator.stake();
 
         coordinator.setCommitment(
             ICoordinator.CommitData({commitment: 0, epoch: secondEpochNum, revealed: false}), executor
         );
 
-        uint256 startBalanceSlasher = token0.balanceOf(slasher);
-
         coordinator.setEpoch(epochNum);
-        vm.prank(slasher);
+
         vm.warp(defaultEpochEndTime);
         vm.expectRevert(ICoordinator.OldEpoch.selector);
-        coordinator.slashCommitter(executor);
+        coordinator.slashCommitter(executor, secondExecutor);
     }
 
     function test_SlashCommitterCommitmentRevealed(address slasher) public {
+        vm.assume(slasher != executor);
         vm.prank(executor);
+        coordinator.stake();
+
+        setERC20TestTokens(slasher);
+        setERC20TestTokenApprovals(vm, slasher, address(coordinator));
+        vm.prank(slasher);
         coordinator.stake();
 
         coordinator.setCommitment(ICoordinator.CommitData({commitment: 0, epoch: 0, revealed: true}), executor);
@@ -1048,6 +1110,6 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         vm.prank(slasher);
         vm.warp(defaultEpochEndTime);
         vm.expectRevert(ICoordinator.CommitmentRevealed.selector);
-        coordinator.slashCommitter(executor);
+        coordinator.slashCommitter(executor, slasher);
     }
 }

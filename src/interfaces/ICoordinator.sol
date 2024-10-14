@@ -35,7 +35,30 @@ interface ICoordinator {
         uint256 protocolTax;
     }
 
+    function executeBatch(
+        uint256[] calldata _indices,
+        uint256[] calldata _gasLimits,
+        address _feeRecipient,
+        bool _checkIn
+    ) external returns (uint256[] memory failedIndices);
+    function stake() external;
+    function unstake() external;
+    function topup(uint256 _amount) external;
+    function slashInactiveExecutor(address _executor, uint8 _round, address _recipient) external;
+    function slashCommitter(address _executor, address _recipient) external;
+    function initiateEpoch() external;
+    function commit(bytes32 _commitment) external;
+    function reveal(bytes calldata _signature) external;
+
+    event BatchExecution(uint256[] failedIndices);
     event EpochInitiated(uint192 epoch);
+    event SlashInactiveExecutor(
+        address indexed executor, address indexed slasher, uint192 indexed epoch, uint8 round, uint256 amount
+    );
+    event SlashCommitter(address indexed executor, address indexed slasher, uint192 indexed epoch, uint256 amount);
+    event Commitment(address indexed executor, uint192 indexed epoch);
+    event Reveal(address indexed executor, uint192 indexed epoch);
+    event CheckIn(address indexed executor, uint192 indexed epoch, uint8 round);
 
     error NotActiveExecutor();
     error AlreadyStaked();

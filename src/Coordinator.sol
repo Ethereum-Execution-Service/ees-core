@@ -8,6 +8,8 @@ import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 import {TaxHandler} from "./TaxHandler.sol";
 
+/// @author Victor Brevig
+/// @notice Coordinator is responsible for coordination of executors including job execution, staking and slashing.
 contract Coordinator is ICoordinator, TaxHandler {
     using SafeTransferLib for ERC20;
 

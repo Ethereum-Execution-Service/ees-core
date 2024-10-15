@@ -15,7 +15,7 @@ import {ERC20} from "solmate/src/tokens/ERC20.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 
 /// @author Victor Brevig
-/// @notice JobRegistry keeps track of all jobs in the EES. It is through this contract jobs are created, executed and deleted.
+/// @notice JobRegistry keeps track of all jobs in the EES. It is through this contract jobs are created, managed and deleted.
 contract JobRegistry is IJobRegistry, EIP712, Owned {
     using SafeTransferLib for ERC20;
     using SignatureVerification for bytes;

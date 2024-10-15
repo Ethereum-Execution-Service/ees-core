@@ -3,6 +3,8 @@ pragma solidity 0.8.27;
 
 import {Owned} from "solmate/src/auth/Owned.sol";
 
+/// @author Victor Brevig
+/// @notice TaxHandler is responsible for handling tax updates for EES.
 contract TaxHandler is Owned {
     uint256 internal lastProtocolTaxUpdate;
     uint256 internal lastExecutorTaxUpdate;

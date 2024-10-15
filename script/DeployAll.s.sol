@@ -9,10 +9,6 @@ import {LinearAuction} from "../src/feeModules/LinearAuction.sol";
 import {PeggedLinearAuction} from "../src/feeModules/PeggedLinearAuction.sol";
 import {Coordinator} from "../src/Coordinator.sol";
 import {ICoordinator} from "../src/interfaces/ICoordinator.sol";
-// move to periphery
-import {Querier} from "../src/Querier.sol";
-import {ConfigProvider} from "../src/ConfigProvider.sol";
-import {BatchSlasher} from "../src/BatchSlasher.sol";
 
 contract DeployAll is Script {
     address treasury;
@@ -61,10 +57,7 @@ contract DeployAll is Script {
             JobRegistry jobRegistry,
             RegularTimeInterval regularTimeInterval,
             LinearAuction linearAuction,
-            PeggedLinearAuction peggedLinearAuction,
-            Querier querier,
-            ConfigProvider configProvider,
-            BatchSlasher batchSlasher
+            PeggedLinearAuction peggedLinearAuction
         )
     {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -90,15 +83,6 @@ contract DeployAll is Script {
         jobRegistry.addExecutionModule(regularTimeInterval);
         jobRegistry.addFeeModule(linearAuction);
         jobRegistry.addFeeModule(peggedLinearAuction);
-
-        querier = new Querier(jobRegistry, coordinator);
-        console2.log("Querier Deployed:", address(querier));
-
-        batchSlasher = new BatchSlasher(address(coordinator));
-        console2.log("BatchSlasher Deployed:", address(batchSlasher));
-
-        configProvider = new ConfigProvider(jobRegistry, coordinator, querier, batchSlasher);
-        console2.log("ConfigProvider Deployed:", address(configProvider));
 
         vm.stopBroadcast();
     }

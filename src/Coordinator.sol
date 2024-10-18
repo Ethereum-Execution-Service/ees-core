@@ -400,16 +400,20 @@ contract Coordinator is ICoordinator, TaxHandler {
             epochEndTime = block.timestamp + epochDuration;
         }
 
+        uint192 newEpoch;
+
         unchecked {
             // number of epochs should not exceed uint192
-            emit EpochInitiated(++epoch);
+            newEpoch = ++epoch;
         }
-        seed = keccak256(abi.encodePacked(block.timestamp, block.number, seed));
+        
+        seed = keccak256(abi.encodePacked(newEpoch));
         unchecked {
             // balances will never overflow uint256
             epochPoolBalance += nextEpochPoolBalance;
         }
         nextEpochPoolBalance = 0;
+        emit EpochInitiated(newEpoch);
     }
 
     /**

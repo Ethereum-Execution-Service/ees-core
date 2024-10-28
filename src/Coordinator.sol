@@ -76,7 +76,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         roundBuffer = _spec.roundBuffer;
         slashingDuration = _spec.slashingDuration;
         selectionPhaseDuration = _spec.commitPhaseDuration + _spec.revealPhaseDuration;
-        epochDuration = selectionPhaseDuration + totalRoundDuration * roundsPerEpoch;
+        epochDuration = selectionPhaseDuration + totalRoundDuration * roundsPerEpoch + slashingDuration;
         commitPhaseDuration = _spec.commitPhaseDuration;
         revealPhaseDuration = _spec.revealPhaseDuration;
         epochEndTime = block.timestamp;
@@ -104,7 +104,7 @@ contract Coordinator is ICoordinator, TaxHandler {
 
         bool inRound = false;
         uint8 round;
-        if (block.timestamp < epochEndTime && block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration)
+        if (block.timestamp < epochEndTime - slashingDuration && block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration)
         {
             // we are in an epoch
             uint256 timeIntoRounds;
@@ -253,7 +253,7 @@ contract Coordinator is ICoordinator, TaxHandler {
     function stake() public {
         if (
             block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
-                && block.timestamp < epochEndTime + slashingDuration
+                && block.timestamp < epochEndTime
         ) {
             revert InvalidBlockTime();
         }
@@ -281,7 +281,7 @@ contract Coordinator is ICoordinator, TaxHandler {
     function unstake() public {
         if (
             block.timestamp >= epochEndTime - epochDuration + commitPhaseDuration
-                && block.timestamp < epochEndTime + slashingDuration
+                && block.timestamp < epochEndTime
         ) {
             revert InvalidBlockTime();
         }
@@ -312,7 +312,7 @@ contract Coordinator is ICoordinator, TaxHandler {
     function topup(uint256 _amount) public {
         if (
             block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
-                && block.timestamp < epochEndTime + slashingDuration
+                && block.timestamp < epochEndTime
         ) {
             revert InvalidBlockTime();
         }
@@ -341,7 +341,7 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @param _recipient The address to send slashing reward to.
      */
     function slashInactiveExecutor(address _executor, uint8 _round, address _recipient) public {
-        if (block.timestamp >= epochEndTime + slashingDuration || block.timestamp < epochEndTime) {
+        if (block.timestamp >= epochEndTime || block.timestamp < epochEndTime - slashingDuration) {
             revert InvalidBlockTime();
         }
         if (_round >= roundsPerEpoch) revert RoundExceedingTotal();
@@ -372,7 +372,7 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @param _recipient The address to send slashing reward to.
      */
     function slashCommitter(address _executor, address _recipient) public {
-        if (block.timestamp >= epochEndTime + slashingDuration || block.timestamp < epochEndTime) {
+        if (block.timestamp >= epochEndTime || block.timestamp < epochEndTime - slashingDuration) {
             revert InvalidBlockTime();
         }
         uint192 currentEpoch = epoch;
@@ -394,7 +394,7 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @notice Cannot be called before last epoch is done plut slashing duration has passed.
      */
     function initiateEpoch() public {
-        if (block.timestamp < epochEndTime + slashingDuration) revert InvalidBlockTime();
+        if (block.timestamp < epochEndTime) revert InvalidBlockTime();
         unchecked {
             // block.timestamp + uint8 will not reach uint256
             epochEndTime = block.timestamp + epochDuration;
@@ -456,7 +456,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         commitData.revealed = true;
         seed = keccak256(abi.encodePacked(seed, _signature));
 
-        emit Reveal(msg.sender, epoch);
+        emit Reveal(msg.sender, epoch, seed);
     }
 
     function setJobRegistry(address _jobRegistry) public onlyOwner {

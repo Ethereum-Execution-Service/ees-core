@@ -163,7 +163,7 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
         (uint256 executionFee, address executionFeeToken) =
             feeModule.onExecuteJob(_index, job.executionWindow, executionTime, totalGas);
 
-        // transfer fee to recipient
+        // transfer fee to fee recipient
         ERC20(executionFeeToken).safeTransferFrom(job.sponsor, _feeRecipient, executionFee);
 
         emit JobExecuted(

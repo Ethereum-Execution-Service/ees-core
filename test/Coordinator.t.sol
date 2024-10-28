@@ -197,7 +197,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         time = bound(
             time,
             defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration(),
-            defaultEpochEndTime - 1
+            defaultEpochEndTime - coordinator.getSlashingDuration() - 1
         );
         uint256 timeIntoRounds =
             coordinator.getEpochDuration() - coordinator.getSelectionPhaseDuration() - (defaultEpochEndTime - time);
@@ -331,7 +331,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         time = bound(
             time,
             defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration(),
-            defaultEpochEndTime + coordinator.getSlashingDuration() - 1
+            defaultEpochEndTime - 1
         );
         vm.warp(time);
         vm.prank(executor);
@@ -475,7 +475,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         time = bound(
             time,
             defaultEpochEndTime - coordinator.getEpochDuration() + commitPhaseDuration,
-            defaultEpochEndTime + coordinator.getSlashingDuration() - 1
+            defaultEpochEndTime - 1
         );
         vm.prank(executor);
         coordinator.stake();
@@ -562,7 +562,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         time = bound(
             time,
             defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration(),
-            defaultEpochEndTime + coordinator.getSlashingDuration() - 1
+            defaultEpochEndTime - 1
         );
         vm.prank(executor);
         coordinator.stake();
@@ -577,7 +577,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         // should slash executor balance and slasher should receive half of slashed amount. Executor should still be active in this case
         vm.assume(slasher != executor);
         vm.assume(slasher != address(coordinator));
-        time = bound(time, defaultEpochEndTime, defaultEpochEndTime + coordinator.getSlashingDuration() - 1);
+        time = bound(time, defaultEpochEndTime - coordinator.getSlashingDuration(), defaultEpochEndTime - 1);
 
         vm.prank(executor);
         coordinator.stake();
@@ -616,7 +616,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         vm.prank(slasher);
         coordinator.stake();
 
-        vm.warp(defaultEpochEndTime);
+        vm.warp(defaultEpochEndTime - coordinator.getSlashingDuration());
 
         // assume executor is selected for round 0
         coordinator.setSeed(seed);
@@ -671,7 +671,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
             executor
         );
         (uint256 startBalanceSlasher,,,,,,) = coordinator.executorInfo(slasher);
-        vm.warp(defaultEpochEndTime);
+        vm.warp(defaultEpochEndTime - coordinator.getSlashingDuration());
         vm.prank(slasher);
         coordinator.slashInactiveExecutor(executor, 0, slasher);
         (uint256 endBalanceSlasher,,,,,,) = coordinator.executorInfo(slasher);
@@ -683,7 +683,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
     }
 
     function test_SlashingBeforeTime(uint256 time) public {
-        time = bound(time, 0, defaultEpochEndTime - 1);
+        time = bound(time, 0, defaultEpochEndTime - coordinator.getSlashingDuration() - 1);
 
         vm.prank(executor);
         coordinator.stake();
@@ -724,7 +724,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         coordinator.setNumberOfActiveExecutors(numOfactiveExecutors);
         vm.assume(uint256(keccak256(abi.encodePacked(seed, round))) % uint256(numOfactiveExecutors) != 0);
 
-        vm.warp(defaultEpochEndTime);
+        vm.warp(defaultEpochEndTime - coordinator.getSlashingDuration());
         vm.prank(executor);
         vm.expectRevert(ICoordinator.ExecutorNotSelectedForRound.selector);
         coordinator.slashInactiveExecutor(executor, round, secondExecutor);
@@ -739,7 +739,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         vm.prank(secondExecutor);
         coordinator.stake();
 
-        vm.warp(defaultEpochEndTime);
+        vm.warp(defaultEpochEndTime - coordinator.getSlashingDuration());
         vm.expectRevert(ICoordinator.RoundExceedingTotal.selector);
         coordinator.slashInactiveExecutor(executor, round, secondExecutor);
     }
@@ -757,7 +757,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
     function test_InitiateBeforeTime(address caller, uint256 time) public {
         // should revert with EpochNotEnded if epochEndTime is not reached
-        time = bound(time, 0, defaultEpochEndTime + coordinator.getSlashingDuration() - 1);
+        time = bound(time, 0, defaultEpochEndTime - 1);
         vm.warp(time);
         vm.prank(caller);
         vm.expectRevert(ICoordinator.InvalidBlockTime.selector);
@@ -1018,7 +1018,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
     function test_SlashCommitter(address slasher, uint256 time) public {
         vm.assume(slasher != executor);
         vm.assume(slasher != address(coordinator));
-        time = bound(time, defaultEpochEndTime, defaultEpochEndTime + coordinator.getSlashingDuration() - 1);
+        time = bound(time, defaultEpochEndTime - coordinator.getSlashingDuration(), defaultEpochEndTime - 1);
         vm.prank(executor);
         coordinator.stake();
 
@@ -1045,7 +1045,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
     }
 
     function test_SlashCommitterBeforeTime(uint256 time) public {
-        time = bound(time, 0, defaultEpochEndTime - 1);
+        time = bound(time, 0, defaultEpochEndTime - coordinator.getSlashingDuration() - 1);
         vm.prank(executor);
         coordinator.stake();
 
@@ -1088,7 +1088,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         coordinator.setEpoch(epochNum);
 
-        vm.warp(defaultEpochEndTime);
+        vm.warp(defaultEpochEndTime - coordinator.getSlashingDuration());
         vm.expectRevert(ICoordinator.OldEpoch.selector);
         coordinator.slashCommitter(executor, secondExecutor);
     }
@@ -1108,7 +1108,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         uint256 startBalanceSlasher = token0.balanceOf(slasher);
 
         vm.prank(slasher);
-        vm.warp(defaultEpochEndTime);
+        vm.warp(defaultEpochEndTime - coordinator.getSlashingDuration());
         vm.expectRevert(ICoordinator.CommitmentRevealed.selector);
         coordinator.slashCommitter(executor, slasher);
     }

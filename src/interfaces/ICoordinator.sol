@@ -57,7 +57,7 @@ interface ICoordinator {
     );
     event SlashCommitter(address indexed executor, address indexed slasher, uint192 indexed epoch, uint256 amount);
     event Commitment(address indexed executor, uint192 indexed epoch);
-    event Reveal(address indexed executor, uint192 indexed epoch);
+    event Reveal(address indexed executor, uint192 indexed epoch, bytes32 newSeed);
     event CheckIn(address indexed executor, uint192 indexed epoch, uint8 round);
 
     error NotActiveExecutor();

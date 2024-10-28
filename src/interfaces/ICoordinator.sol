@@ -50,7 +50,7 @@ interface ICoordinator {
     function commit(bytes32 _commitment) external;
     function reveal(bytes calldata _signature) external;
 
-    event BatchExecution(uint256[] failedIndices);
+    event BatchExecution(uint256[] failedIndices, uint256 totalProtocolTax, uint256 totalExecutorTax, uint256 taxPoolReward);
     event EpochInitiated(uint192 epoch);
     event SlashInactiveExecutor(
         address indexed executor, address indexed slasher, uint192 indexed epoch, uint8 round, uint256 amount

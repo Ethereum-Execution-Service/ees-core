@@ -172,6 +172,9 @@ contract Coordinator is ICoordinator, TaxHandler {
             numberOfExecutedJobs = indicesLength - failedIndices.length;
         }
 
+        uint256 totalProtocolTax;
+        uint256 totalExecutorTax;
+        uint256 poolReward;
         uint256 newBalance = executor.balance;
         if (inRound) {
             if (_checkIn) {
@@ -199,8 +202,8 @@ contract Coordinator is ICoordinator, TaxHandler {
                     // round should never be more that roundsPerEpoch
                     roundDiff = roundsPerEpoch - round;
                 }
-                uint256 poolReward = epochPoolBalance / roundDiff;
-                uint256 totalProtocolTax = protocolTax * numberOfExecutedJobs;
+                poolReward = epochPoolBalance / roundDiff;
+                totalProtocolTax = protocolTax * numberOfExecutedJobs;
 
                 if (poolReward >= totalProtocolTax) {
                     unchecked {
@@ -219,17 +222,28 @@ contract Coordinator is ICoordinator, TaxHandler {
             } else {
                 // not checking in, pay protocol tax
                 if (numberOfExecutedJobs > 0) {
-                    newBalance = (executorInfo[msg.sender].balance -= protocolTax * numberOfExecutedJobs);
+                    unchecked {
+                        // totalProtocolTax will never exceed uint256 max value
+                        totalProtocolTax = protocolTax * numberOfExecutedJobs;
+                    }
+                    newBalance = (executorInfo[msg.sender].balance -= totalProtocolTax);
                 }
             }
         } else {
             if (numberOfExecutedJobs > 0) {
                 // executor pays protocol and executor tax
-                newBalance = (executorInfo[msg.sender].balance -= (protocolTax + executorTax) * numberOfExecutedJobs);
+                uint256 totalTax;
+                unchecked {
+                    // totalProtocolTax and totalExecutorTax or sum of those will never exceed uint256 max value    
+                    totalProtocolTax = protocolTax * numberOfExecutedJobs;
+                    totalExecutorTax = executorTax * numberOfExecutedJobs;
+                    totalTax = totalProtocolTax + totalExecutorTax;
+                }
+                newBalance = (executorInfo[msg.sender].balance -= totalTax);
                 // update pool balance for next epoch
                 unchecked {
                     // nextEpochPoolBalance will never exceed uint256 max value since there are not enough tokens in existence
-                    nextEpochPoolBalance += executorTax * numberOfExecutedJobs;
+                    nextEpochPoolBalance += totalExecutorTax;
                 }
             }
         }
@@ -242,7 +256,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             emit ExecutorDeactivated(deactivatedExecutor);
         }
 
-        emit BatchExecution(failedIndices);
+        emit BatchExecution(failedIndices, totalProtocolTax, totalExecutorTax, poolReward);
     }
 
     /**

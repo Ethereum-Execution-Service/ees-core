@@ -236,9 +236,10 @@ contract Coordinator is ICoordinator, TaxHandler {
 
         // check if executor balance is below threshold and deactivate if true
         if (newBalance < stakingBalanceThreshold) {
-            address lastExecutor = _deactivateExecutor(executor.arrayIndex);
+            (address deactivatedExecutor, address lastExecutor) = _deactivateExecutor(executor.arrayIndex);
             executorInfo[lastExecutor].arrayIndex = executor.arrayIndex;
             executorInfo[msg.sender].active = false;
+            emit ExecutorDeactivated(deactivatedExecutor);
         }
 
         emit BatchExecution(failedIndices);
@@ -271,6 +272,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             stakingTimestamp: block.timestamp
         });
         _activateExecutor(msg.sender);
+        emit ExecutorActivated(msg.sender);
     }
 
     /**
@@ -298,8 +300,9 @@ contract Coordinator is ICoordinator, TaxHandler {
         delete commitmentMap[msg.sender];
 
         if (executor.active) {
-            address lastExecutor = _deactivateExecutor(executor.arrayIndex);
+            (address deactivatedExecutor, address lastExecutor) = _deactivateExecutor(executor.arrayIndex);
             executorInfo[lastExecutor].arrayIndex = executor.arrayIndex;
+            emit ExecutorDeactivated(deactivatedExecutor);
         }
         ERC20(stakingToken).safeTransfer(msg.sender, executor.balance);
     }
@@ -329,6 +332,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         if (!executor.active && executor.balance >= stakingAmount) {
             executor.active = true;
             _activateExecutor(msg.sender);
+            emit ExecutorActivated(msg.sender);
         }
     }
 
@@ -487,18 +491,20 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @dev Should only be called when the executor is active.
      * @dev Should only be used together with setting executor.active to false or deleting executorInfo entry.
      * @param _index The index of the executor in activeExecutors.
+     * @return executorAtIndex The address of the executor at the given index.
      * @return lastExecutor The address of the last executor in activeExecutors.
      */
-    function _deactivateExecutor(uint40 _index) private returns (address) {
+    function _deactivateExecutor(uint40 _index) private returns (address, address) {
         uint40 newNumberOfActiveExecutors;
         unchecked {
             // here the executor is active, so numberOfActiveExecutors should be greater than 0
             newNumberOfActiveExecutors = --numberOfActiveExecutors;
         }
         address lastExecutor = activeExecutors[newNumberOfActiveExecutors];
+	    address deactivatedExecutor = activeExecutors[_index];
         activeExecutors[_index] = lastExecutor;
         delete activeExecutors[newNumberOfActiveExecutors];
-        return lastExecutor;
+        return (deactivatedExecutor, lastExecutor);
     }
 
     /**
@@ -513,9 +519,10 @@ contract Coordinator is ICoordinator, TaxHandler {
 
         if ((_executor.balance -= _amount) < stakingBalanceThreshold) {
             // index in activeStakers array
-            address lastExecutor = _deactivateExecutor(_executor.arrayIndex);
+            (address deactivatedExecutor,address lastExecutor) = _deactivateExecutor(_executor.arrayIndex);
             executorInfo[lastExecutor].arrayIndex = _executor.arrayIndex;
             _executor.active = false;
+            emit ExecutorDeactivated(deactivatedExecutor);
         }
         unchecked {
             // no division by zero. Total token balances will not exceed uint256 max value

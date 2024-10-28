@@ -59,6 +59,8 @@ interface ICoordinator {
     event Commitment(address indexed executor, uint192 indexed epoch);
     event Reveal(address indexed executor, uint192 indexed epoch, bytes32 newSeed);
     event CheckIn(address indexed executor, uint192 indexed epoch, uint8 round);
+    event ExecutorDeactivated(address indexed executor);
+    event ExecutorActivated(address indexed executor);
 
     error NotActiveExecutor();
     error AlreadyStaked();

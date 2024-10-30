@@ -28,15 +28,15 @@ contract DeployAll is Script {
             // Base sepolia USDC copy
             stakingToken: 0x7139F4601480d20d43Fa77780B67D295805aD31a,
             // 1000 USDC - 1000000000
-            stakingAmount: 100,
+            stakingAmount: 1000000000,
             // 30 seconds, should probably be something like 30 days in prod
             minimumStakingPeriod: 30 seconds,
             // 400 USDC - 400000000
-            stakingBalanceThreshold: 40,
+            stakingBalanceThreshold: 400000000,
             // 200 USDC - 200000000
-            inactiveSlashingAmount: 20,
+            inactiveSlashingAmount: 200000000,
             // 100 USDC - 100000000
-            commitSlashingAmount: 10,
+            commitSlashingAmount: 100000000,
             roundDuration: 20,
             roundsPerEpoch: 5,
             roundBuffer: 15,
@@ -44,9 +44,9 @@ contract DeployAll is Script {
             revealPhaseDuration: 20,
             slashingDuration: 15,
             // 0.05 USDC - 50000
-            executorTax: 1,
+            executorTax: 50000,
             // 0.05 USDC - 50000
-            protocolTax: 1
+            protocolTax: 50000
         });
     }
 

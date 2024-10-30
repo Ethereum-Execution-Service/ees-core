@@ -107,7 +107,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(time);
         vm.prank(executor);
-        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, false);
+        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor);
         (uint256 balance,,,,,,) = coordinator.executorInfo(executor);
 
         assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
@@ -133,7 +133,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         vm.warp(defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration());
         vm.prank(secondExecutor);
         vm.expectRevert(ICoordinator.ExecutorNotSelectedForRound.selector);
-        coordinator.executeBatch(indices, gasLimits, secondExecutor, false);
+        coordinator.executeBatch(indices, gasLimits, secondExecutor);
     }
 
     function test_ExecuteBatchInRoundCheckIn(uint256 epochPoolBalance) public {
@@ -151,7 +151,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration());
         vm.prank(executor);
-        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, true);
+        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor);
         (uint256 balance,,,, uint8 lastCheckinRound, uint192 lastCheckinEpoch,) = coordinator.executorInfo(executor);
         uint256 newPoolBalance = coordinator.getEpochPoolBalance();
         assertEq(newPoolBalance, prevPoolBalance - prevPoolBalance / roundsPerEpoch);
@@ -189,8 +189,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration());
         vm.prank(executor);
-        vm.expectRevert(ICoordinator.AlreadyCheckedIn.selector);
-        coordinator.executeBatch(indices, gasLimits, executor, true);
+        coordinator.executeBatch(indices, gasLimits, executor);
     }
 
     function test_ExecuteBatchInRoundNoCheckIn(uint256 time) public {
@@ -212,7 +211,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(time);
         vm.prank(executor);
-        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, false);
+        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor);
         (uint256 balance,,,,,,) = coordinator.executorInfo(executor);
 
         assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
@@ -232,7 +231,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(defaultEpochEndTime);
         vm.prank(executor);
-        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, false);
+        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor);
         (uint256 balance,,,,,,) = coordinator.executorInfo(executor);
 
         assertEq(failedJobs.length, 1, "number of failed jobs mismatch");
@@ -254,7 +253,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(time);
         vm.prank(executor);
-        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, false);
+        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor);
         (uint256 balance,,,,,,) = coordinator.executorInfo(executor);
 
         assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
@@ -273,7 +272,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(time);
         vm.prank(executor);
-        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, false);
+        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor);
         (uint256 balance,,,,,,) = coordinator.executorInfo(executor);
 
         assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
@@ -288,7 +287,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         gasLimits[0] = 500_000;
         vm.prank(executor);
         vm.expectRevert(ICoordinator.NotActiveExecutor.selector);
-        coordinator.executeBatch(indices, gasLimits, executor, false);
+        coordinator.executeBatch(indices, gasLimits, executor);
     }
 
     function test_Stake(uint256 time) public {

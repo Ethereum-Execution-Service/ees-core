@@ -38,8 +38,7 @@ interface ICoordinator {
     function executeBatch(
         uint256[] calldata _indices,
         uint256[] calldata _gasLimits,
-        address _feeRecipient,
-        bool _checkIn
+        address _feeRecipient
     ) external returns (uint256[] memory failedIndices);
     function stake() external;
     function unstake() external;

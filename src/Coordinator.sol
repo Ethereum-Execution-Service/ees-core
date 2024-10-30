@@ -86,17 +86,15 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @notice Executes the jobs with the given indices.
      * @notice Outside rounds the executor pays the protocol tax and the executor tax.
      * @notice If the current block.timestamp is in a round, only the selected executor can call and pays no executor tax.
-     * @notice If checkIn is true, the executor will be rewarded with the pool cut.
+     * @notice If executor checks in, the executor will be rewarded with the pool cut.
      * @notice This function does not revert if any of the calls to execute jobs reverts.
      * @param _indices The indices of the jobs to execute.
      * @param _feeRecipient The address to receive excution fees.
-     * @param _checkIn If true, the the lastCheckinEpoch is updated such that the executor cannot be slashed for inactivity. The executor will be rewarded with the pool cut. Is only relevant if block.timestamp is within a round where the caller is the selected executor.
      */
     function executeBatch(
         uint256[] calldata _indices,
         uint256[] calldata _gasLimits,
-        address _feeRecipient,
-        bool _checkIn
+        address _feeRecipient
     ) public returns (uint256[] memory failedIndices) {
         // check that caller is active executor
         Executor memory executor = executorInfo[msg.sender];
@@ -115,7 +113,6 @@ contract Coordinator is ICoordinator, TaxHandler {
                 // current round within the epoch
                 inRound = timeIntoRounds % totalRoundDuration < roundDuration;
             }
-            if (_checkIn && !inRound) revert CheckInOutsideRound();
 
             if (inRound) {
                 unchecked {
@@ -177,9 +174,19 @@ contract Coordinator is ICoordinator, TaxHandler {
         uint256 poolReward;
         uint256 newBalance = executor.balance;
         if (inRound) {
-            if (_checkIn) {
-                // check that this is first time in this epoch and round that caller is checking in
-                if (executor.lastCheckinEpoch == epoch && executor.lastCheckinRound == round) revert AlreadyCheckedIn();
+            // check that this is first time in this epoch and round that caller is checking in
+            if (executor.lastCheckinEpoch == epoch && executor.lastCheckinRound == round) {
+                // not checking in, only pay protocol tax
+                if (numberOfExecutedJobs > 0) {
+                    unchecked {
+                        // totalProtocolTax will never exceed uint256 max value
+                        totalProtocolTax = protocolTax * numberOfExecutedJobs;
+                    }
+                    newBalance = (executorInfo[msg.sender].balance -= totalProtocolTax);
+                }
+            }
+            else {
+                // we check in for this epoch and round
                 // set lastCheckinEpoch to epoch and lastCheckinRound to round in one storage write (they reside in same slot)
                 assembly {
                     let epochValue := sload(epoch.slot)
@@ -217,17 +224,7 @@ contract Coordinator is ICoordinator, TaxHandler {
                     // should never underflow as epochPoolBalance / roundsPerEpoch <= epochPoolBalance
                     epochPoolBalance -= poolReward;
                 }
-
                 emit CheckIn(msg.sender, epoch, round);
-            } else {
-                // not checking in, pay protocol tax
-                if (numberOfExecutedJobs > 0) {
-                    unchecked {
-                        // totalProtocolTax will never exceed uint256 max value
-                        totalProtocolTax = protocolTax * numberOfExecutedJobs;
-                    }
-                    newBalance = (executorInfo[msg.sender].balance -= totalProtocolTax);
-                }
             }
         } else {
             if (numberOfExecutedJobs > 0) {
@@ -356,7 +353,7 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @notice Cannot only be called during slashing window.
      * @param _executor The address of the executor to be slashed.
      * @param _round The round the executor is being slashed for.
-     * @param _recipient The address to send slashing reward to.
+     * @param _recipient The address to send slashing reward to. Must be an active executor.
      */
     function slashInactiveExecutor(address _executor, uint8 _round, address _recipient) public {
         if (block.timestamp >= epochEndTime || block.timestamp < epochEndTime - slashingDuration) {
@@ -371,10 +368,22 @@ contract Coordinator is ICoordinator, TaxHandler {
         // dont have to check if executor is active becasue we verify that executor.arayIndex is selected
         uint256 executorIndex = uint256(keccak256(abi.encodePacked(seed, _round))) % uint256(numberOfActiveExecutors);
         if (executor.arrayIndex != executorIndex) revert ExecutorNotSelectedForRound();
-        if (executor.lastCheckinEpoch == currentEpoch) revert RoundExecuted();
+        if (executor.lastCheckinEpoch == currentEpoch && executor.lastCheckinRound == _round) revert RoundExecuted();
 
-        // prevent from slashing again
-        executor.lastCheckinEpoch = currentEpoch;
+        // prevent from slashing again - set lastCheckinEpoch to currentEpoch and lastCheckinRound to _round in one storage write (they reside in same slot)
+        assembly {
+            let slot := executorInfo.slot
+            mstore(0x00, _executor)
+            mstore(0x20, slot)
+            let executorSlot := keccak256(0x00, 0x40)
+            let currentValue := sload(add(executorSlot, 1))
+            // make 25 bytes of checking round and epoch
+            let checkinVals := shl(0, _round)
+            checkinVals := or(checkinVals, shl(8, currentEpoch))
+            // and(currentValue, 0xFFFFFFFFFFFFFF) keeps the first 7 bytes
+            let finalVal := or(and(currentValue, 0xFFFFFFFFFFFFFF), shl(56, checkinVals))
+            sstore(add(executorSlot, 1), finalVal)
+        }
 
         uint256 slashAmount = inactiveSlashingAmount;
         _slash(slashAmount, executor, _recipient);
@@ -387,7 +396,7 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @notice If executor's balance goes below threshold, executor is deactivated.
      * @notice Cannot only be called during slashing window.
      * @param _executor The address of the executor to be slashed.
-     * @param _recipient The address to send slashing reward to.
+     * @param _recipient The address to send slashing reward to. Must be an active executor.
      */
     function slashCommitter(address _executor, address _recipient) public {
         if (block.timestamp >= epochEndTime || block.timestamp < epochEndTime - slashingDuration) {

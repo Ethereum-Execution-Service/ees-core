@@ -10,6 +10,9 @@ interface IJobRegistry {
         address owner;
         bool active;
         bool ignoreAppRevert;
+        // having both sponsorFallbackToOwner and sponsorCanUpdateFeeModule is dangerous as sponsor can update fee module and revoke immediately
+        bool sponsorFallbackToOwner;
+        bool sponsorCanUpdateFeeModule;
         uint40 inactiveGracePeriod;
         address sponsor;
         uint48 executionCounter;
@@ -23,6 +26,9 @@ interface IJobRegistry {
     struct JobSpecification {
         uint256 nonce;
         uint256 deadline;
+        bool reusableNonce;
+        bool sponsorFallbackToOwner;
+        bool sponsorCanUpdateFeeModule;
         IApplication application;
         uint32 executionWindow;
         uint48 maxExecutions;
@@ -38,6 +44,7 @@ interface IJobRegistry {
     struct FeeModuleInput {
         uint256 nonce;
         uint256 deadline;
+        bool reusableNonce;
         uint256 index;
         bytes1 feeModule;
         bytes feeModuleInput;
@@ -58,8 +65,7 @@ interface IJobRegistry {
     function updateFeeModule(
         FeeModuleInput calldata _feeModuleInput,
         address _sponsor,
-        bytes calldata _sponsorSignature,
-        bool _hasSponsorship
+        bytes calldata _sponsorSignature
     ) external;
     function getJobsArrayLength() external view returns (uint256);
 

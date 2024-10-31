@@ -13,79 +13,79 @@ contract NonceBitmapTest is Test {
     }
 
     function test_LowNonces() public {
-        jobRegistry.useUnorderedNonce(address(this), 5);
-        jobRegistry.useUnorderedNonce(address(this), 0);
-        jobRegistry.useUnorderedNonce(address(this), 1);
+        jobRegistry.useUnorderedNonce(address(this), 5, true);
+        jobRegistry.useUnorderedNonce(address(this), 0, true);
+        jobRegistry.useUnorderedNonce(address(this), 1, true);
 
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 1);
+        jobRegistry.useUnorderedNonce(address(this), 1, true);
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 5);
+        jobRegistry.useUnorderedNonce(address(this), 5, true);
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 0);
-        jobRegistry.useUnorderedNonce(address(this), 4);
+        jobRegistry.useUnorderedNonce(address(this), 0, true);
+        jobRegistry.useUnorderedNonce(address(this), 4, true);
     }
 
     function test_NonceWordBoundary() public {
-        jobRegistry.useUnorderedNonce(address(this), 255);
-        jobRegistry.useUnorderedNonce(address(this), 256);
+        jobRegistry.useUnorderedNonce(address(this), 255, true);
+        jobRegistry.useUnorderedNonce(address(this), 256, true);
 
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 255);
+        jobRegistry.useUnorderedNonce(address(this), 255, true);
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 256);
+        jobRegistry.useUnorderedNonce(address(this), 256, true);
     }
 
     function test_HighNonces() public {
-        jobRegistry.useUnorderedNonce(address(this), 2 ** 240);
-        jobRegistry.useUnorderedNonce(address(this), 2 ** 240 + 1);
+        jobRegistry.useUnorderedNonce(address(this), 2 ** 240, true);
+        jobRegistry.useUnorderedNonce(address(this), 2 ** 240 + 1, true);
 
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 2 ** 240);
+        jobRegistry.useUnorderedNonce(address(this), 2 ** 240, true);
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 2 ** 240 + 1);
+        jobRegistry.useUnorderedNonce(address(this), 2 ** 240 + 1, true);
     }
 
     function test_InvalidateFullWord() public {
         jobRegistry.invalidateUnorderedNonces(0, 2 ** 256 - 1);
 
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 0);
+        jobRegistry.useUnorderedNonce(address(this), 0, true);
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 1);
+        jobRegistry.useUnorderedNonce(address(this), 1, true);
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 254);
+        jobRegistry.useUnorderedNonce(address(this), 254, true);
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 255);
-        jobRegistry.useUnorderedNonce(address(this), 256);
+        jobRegistry.useUnorderedNonce(address(this), 255, true);
+        jobRegistry.useUnorderedNonce(address(this), 256, true);
     }
 
     function test_InvalidateNonzeroWord() public {
         jobRegistry.invalidateUnorderedNonces(1, 2 ** 256 - 1);
 
-        jobRegistry.useUnorderedNonce(address(this), 0);
-        jobRegistry.useUnorderedNonce(address(this), 254);
-        jobRegistry.useUnorderedNonce(address(this), 255);
+        jobRegistry.useUnorderedNonce(address(this), 0, true);
+        jobRegistry.useUnorderedNonce(address(this), 254, true);
+        jobRegistry.useUnorderedNonce(address(this), 255, true);
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 256);
+        jobRegistry.useUnorderedNonce(address(this), 256, true);
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), 511);
-        jobRegistry.useUnorderedNonce(address(this), 512);
+        jobRegistry.useUnorderedNonce(address(this), 511, true);
+        jobRegistry.useUnorderedNonce(address(this), 512, true);
     }
 
     function test_UsingNonceTwiceFails(uint256 nonce) public {
-        jobRegistry.useUnorderedNonce(address(this), nonce);
+        jobRegistry.useUnorderedNonce(address(this), nonce, true);
         vm.expectRevert(InvalidNonce.selector);
-        jobRegistry.useUnorderedNonce(address(this), nonce);
+        jobRegistry.useUnorderedNonce(address(this), nonce, true);
     }
 
     function test_UseTwoRandomNonces(uint256 first, uint256 second) public {
-        jobRegistry.useUnorderedNonce(address(this), first);
+        jobRegistry.useUnorderedNonce(address(this), first, true);
         if (first == second) {
             vm.expectRevert(InvalidNonce.selector);
-            jobRegistry.useUnorderedNonce(address(this), second);
+            jobRegistry.useUnorderedNonce(address(this), second, true);
         } else {
-            jobRegistry.useUnorderedNonce(address(this), second);
+            jobRegistry.useUnorderedNonce(address(this), second, true);
         }
     }
 

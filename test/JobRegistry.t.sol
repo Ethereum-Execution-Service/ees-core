@@ -85,6 +85,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -106,6 +109,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -130,6 +136,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: deadline,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             maxExecutions: 0,
@@ -155,6 +164,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -180,6 +192,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             maxExecutions: 0,
@@ -201,6 +216,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -222,6 +240,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -248,6 +269,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -264,7 +288,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(from);
         jobRegistry.deleteJob(index);
-        (address owner,,,,,,,,,,) = jobRegistry.jobs(index);
+        (address owner,,,,,,,,,,,,) = jobRegistry.jobs(index);
         assertEq(owner, address(0));
     }
 
@@ -274,6 +298,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -300,6 +327,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -323,10 +353,13 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         jobRegistry.deleteJob(index);
     }
 
-    function test_RevokeSponsorshipSponsor() public {
+    function test_RevokeSponsorshipSponsorNoFallbackToOwner() public {
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -347,7 +380,39 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(sponsor);
         jobRegistry.revokeSponsorship(index);
-        (,,,, address sponsorSet,,,,,,) = jobRegistry.jobs(index);
+        (,,,,,, address sponsorSet,,,,,,) = jobRegistry.jobs(index);
+
+        assertEq(sponsorSet, address(0));
+    }
+
+    function test_RevokeSponsorshipSponsorWithFallbackToOwner() public {
+        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            nonce: 0,
+            deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: true,
+            sponsorCanUpdateFeeModule: false,
+            application: dummyApplication,
+            executionWindow: defaultExecutionWindow,
+            inactiveGracePeriod: 0,
+            ignoreAppRevert: false,
+            maxExecutions: 0,
+            executionModule: 0x00,
+            feeModule: 0x00,
+            executionModuleInput: "",
+            feeModuleInput: "",
+            applicationInput: ""
+        });
+
+        bytes memory sponsorSig =
+            getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+
+        vm.prank(from);
+        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
+
+        vm.prank(sponsor);
+        jobRegistry.revokeSponsorship(index);
+        (,,,,,, address sponsorSet,,,,,,) = jobRegistry.jobs(index);
 
         assertEq(sponsorSet, from);
     }
@@ -356,6 +421,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -376,7 +444,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(from);
         jobRegistry.revokeSponsorship(index);
-        (,,,, address sponsorSet,,,,,,) = jobRegistry.jobs(index);
+        (,,,,,, address sponsorSet,,,,,,) = jobRegistry.jobs(index);
 
         assertEq(sponsorSet, from);
     }
@@ -387,6 +455,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -414,6 +485,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -441,6 +515,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -465,6 +542,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -482,7 +562,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(executorContract);
         jobRegistry.execute(index, from);
 
-        (, bool active,,,, uint48 executionCounter,,,,,) = jobRegistry.jobs(index);
+        (, bool active,,,,,, uint48 executionCounter,,,,,) = jobRegistry.jobs(index);
         assertEq(active, false, "active mismatch");
         assertEq(executionCounter, 1, "execution counter mismatch");
     }
@@ -492,6 +572,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 1,
@@ -511,7 +594,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(executorContract);
         jobRegistry.execute(index, from);
 
-        (, bool active,,,, uint48 executionCounter,,,,,) = jobRegistry.jobs(index);
+        (, bool active,,,,,, uint48 executionCounter,,,,,) = jobRegistry.jobs(index);
         uint256 gracePriodEnds = jobRegistry.inactiveGracePeriodEnds(index);
         assertEq(active, false, "active mismatch");
         assertEq(executionCounter, 0, "execution counter mismatch");
@@ -523,6 +606,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -542,7 +628,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(executorContract);
         jobRegistry.execute(index, from);
 
-        (, bool active,,,, uint48 executionCounter,,,,,) = jobRegistry.jobs(index);
+        (, bool active,,,,,, uint48 executionCounter,,,,,) = jobRegistry.jobs(index);
         assertEq(active, true, "active mismatch");
         assertEq(executionCounter, 0, "execution counter mismatch");
     }
@@ -554,6 +640,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -586,6 +675,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -617,6 +709,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -638,6 +733,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification2 = IJobRegistry.JobSpecification({
             nonce: 1,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -653,7 +751,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(address2);
         uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", index);
 
-        (address owner,,,,,,,,,,) = jobRegistry.jobs(index);
+        (address owner,,,,,,,,,,,,) = jobRegistry.jobs(index);
 
         assertEq(index, index2, "index mismatch");
         assertEq(owner, address2, "owner mismatch");
@@ -664,6 +762,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -682,6 +783,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification2 = IJobRegistry.JobSpecification({
             nonce: 1,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -703,6 +807,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -721,6 +828,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification2 = IJobRegistry.JobSpecification({
             nonce: 1,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -736,8 +846,8 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(address2);
         uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", UINT256_MAX);
 
-        (address owner,,,,,,,,,,) = jobRegistry.jobs(index);
-        (address owner2,,,,,,,,,,) = jobRegistry.jobs(index2);
+        (address owner,,,,,,,,,,,,) = jobRegistry.jobs(index);
+        (address owner2,,,,,,,,,,,,) = jobRegistry.jobs(index2);
 
         assertEq(index, 0);
         assertEq(index2, 1);
@@ -751,6 +861,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: inactiveGracePeriod,
@@ -772,6 +885,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 1,
@@ -796,6 +912,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -814,6 +933,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         jobRegistry.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
+            reusableNonce: false,
             deadline: UINT256_MAX,
             index: index,
             feeModule: 0x00,
@@ -822,8 +942,8 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         bytes memory sponsorSig =
             getFeeModuleInputSignature(feeModuleInput, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
-        jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig, true);
-        (,,,, address sponsorSet,,,,, bytes1 feeModuleSet,) = jobRegistry.jobs(index);
+        jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig);
+        (,,,,,, address sponsorSet,,,,, bytes1 feeModuleSet,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, sponsor, "sponsor mismatch");
         assertEq(uint8(feeModuleSet), uint8(0x00), "fee module mismatch");
     }
@@ -835,6 +955,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -853,6 +976,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         jobRegistry.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
+            reusableNonce: false,
             deadline: deadline,
             index: index,
             feeModule: 0x00,
@@ -863,7 +987,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         vm.warp(createTime);
         vm.expectRevert(abi.encodeWithSelector(SignatureExpired.selector, deadline));
-        jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig, true);
+        jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig);
     }
 
     function test_UpdateFeeModuleDataNoSponsor() public {
@@ -871,6 +995,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: true,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -892,6 +1019,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
+            reusableNonce: false,
             deadline: UINT256_MAX,
             index: index,
             feeModule: 0x00,
@@ -899,8 +1027,8 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        jobRegistry.updateFeeModule(feeModuleInput, sponsor, "", false);
-        (,,,, address sponsorSet,,,,, bytes1 feeModuleSet,) = jobRegistry.jobs(index);
+        jobRegistry.updateFeeModule(feeModuleInput, address(0), "");
+        (,,,,,, address sponsorSet,,,,, bytes1 feeModuleSet,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, from, "sponsor mismatch");
         assertEq(uint8(feeModuleSet), uint8(0x00), "fee module mismatch");
     }
@@ -910,6 +1038,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -928,6 +1059,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         jobRegistry.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
+            reusableNonce: false,
             deadline: UINT256_MAX,
             index: index,
             feeModule: 0x00,
@@ -936,7 +1068,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         dummyExecutionModule.setIsInExecutionMode(true);
         vm.prank(from);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.JobInExecutionMode.selector));
-        jobRegistry.updateFeeModule(feeModuleInput, sponsor, "", false);
+        jobRegistry.updateFeeModule(feeModuleInput, address(0), "");
     }
 
     function test_UpdateFeeModuleNotOwner(address caller) public {
@@ -945,6 +1077,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -963,6 +1098,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         jobRegistry.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
+            reusableNonce: false,
             deadline: UINT256_MAX,
             index: index,
             feeModule: 0x00,
@@ -970,7 +1106,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.Unauthorized.selector));
-        jobRegistry.updateFeeModule(feeModuleInput, sponsor, "", false);
+        jobRegistry.updateFeeModule(feeModuleInput, address(0), "");
     }
 
     function test_MigrateFeeModuleWithSponsor() public {
@@ -978,6 +1114,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -996,6 +1135,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         jobRegistry.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
+            reusableNonce: false,
             deadline: UINT256_MAX,
             index: index,
             feeModule: 0x01,
@@ -1004,8 +1144,8 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         bytes memory sponsorSig =
             getFeeModuleInputSignature(feeModuleInput, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
-        jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig, true);
-        (,,,, address sponsorSet,,,,, bytes1 feeModuleSet,) = jobRegistry.jobs(index);
+        jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig);
+        (,,,,,, address sponsorSet,,,,, bytes1 feeModuleSet,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, sponsor, "sponsor mismatch");
         assertEq(uint8(feeModuleSet), uint8(0x01), "fee module mismatch");
     }
@@ -1015,6 +1155,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -1029,7 +1172,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
         jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
-        (,,,,, uint48 executionCounter,,,,,) = jobRegistry.jobs(0);
+        (,,,,,,, uint48 executionCounter,,,,,) = jobRegistry.jobs(0);
         assertEq(executionCounter, 1, "execution counter mismatch");
     }
 
@@ -1038,6 +1181,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -1061,6 +1207,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -1085,6 +1234,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 0,
@@ -1102,7 +1254,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         jobRegistry.deactivateJob(0);
         uint256 gracePeriodEnds = jobRegistry.inactiveGracePeriodEnds(0);
-        (, bool active,,,,,,,,,) = jobRegistry.jobs(0);
+        (, bool active,,,,,,,,,,,) = jobRegistry.jobs(0);
         assertEq(active, false, "active mismatch");
         assertEq(gracePeriodEnds, 0, "grace period ends mismatch");
     }
@@ -1112,6 +1264,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 1,
@@ -1129,7 +1284,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         jobRegistry.deactivateJob(0);
         uint256 gracePeriodEnds = jobRegistry.inactiveGracePeriodEnds(0);
-        (, bool active,,,,,,,,,) = jobRegistry.jobs(0);
+        (, bool active,,,,,,,,,,,) = jobRegistry.jobs(0);
         assertEq(active, false, "active mismatch");
         assertEq(gracePeriodEnds, block.timestamp + 1, "grace period ends mismatch");
     }
@@ -1139,6 +1294,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
             inactiveGracePeriod: 1,

@@ -36,8 +36,7 @@ contract DummyJobRegistry is IJobRegistry {
     function updateFeeModule(
         FeeModuleInput calldata _feeModuleInput,
         address _sponsor,
-        bytes calldata _sponsorSignature,
-        bool _hasSponsorship
+        bytes calldata _sponsorSignature
     ) external {}
 
     function getJobsArrayLength() external view returns (uint256) {

@@ -8,7 +8,7 @@ contract FeeModuleInputSignature {
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     bytes32 public constant _FEE_MODULE_INPUT_TYPEHASH = keccak256(
-        "FeeModuleInput(uint256 nonce,uint256 deadline,uint256 index,bytes1 feeModule,bytes32 feeModuleInputHash)"
+        "FeeModuleInput(uint256 nonce,uint256 deadline,bool reusableNonce,uint256 index,bytes1 feeModule,bytes32 feeModuleInputHash)"
     );
 
     function getFeeModuleInputSignature(
@@ -25,6 +25,7 @@ contract FeeModuleInputSignature {
                         _FEE_MODULE_INPUT_TYPEHASH,
                         feeModuleInput.nonce,
                         feeModuleInput.deadline,
+                        feeModuleInput.reusableNonce,
                         feeModuleInput.index,
                         feeModuleInput.feeModule,
                         feeModuleInput.feeModuleInput,

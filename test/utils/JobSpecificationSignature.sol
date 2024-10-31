@@ -8,7 +8,7 @@ contract JobSpecificationSignature {
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     bytes32 public constant _JOB_SPECIFICATION_TYPEHASH = keccak256(
-        "JobSpecification(uint256 nonce,uint256 deadline,address application,uint32 executionWindow,uint48 maxExecutions,uint40 inactiveGracePeriod,bool ignoreAppRevert,bytes1 executionModule,bytes1 feeModule,bytes32 executionModuleInputHash,bytes32 feeModuleInputHash,bytes32 applicationInputHash)"
+        "JobSpecification(uint256 nonce,uint256 deadline,bool reusableNonce,bool sponsorFallbackToOwner,bool sponsorCanUpdateFeeModule,address application,uint32 executionWindow,uint48 maxExecutions,uint40 inactiveGracePeriod,bool ignoreAppRevert,bytes1 executionModule,bytes1 feeModule,bytes32 executionModuleInputHash,bytes32 feeModuleInputHash,bytes32 applicationInputHash)"
     );
 
     function getJobSpecificationSignature(
@@ -25,6 +25,9 @@ contract JobSpecificationSignature {
                         _JOB_SPECIFICATION_TYPEHASH,
                         jobSpecification.nonce,
                         jobSpecification.deadline,
+                        jobSpecification.reusableNonce,
+                        jobSpecification.sponsorFallbackToOwner,
+                        jobSpecification.sponsorCanUpdateFeeModule,
                         jobSpecification.application,
                         jobSpecification.executionWindow,
                         jobSpecification.maxExecutions,

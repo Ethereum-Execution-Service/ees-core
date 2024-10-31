@@ -31,6 +31,7 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
 
     uint256 private constant _EXECUTION_GAS_OVERHEAD = 200000;
 
+    // for single use nonces
     mapping(address => mapping(uint256 => uint256)) public nonceBitmap;
 
     mapping(uint256 => uint256) public inactiveGracePeriodEnds;
@@ -56,7 +57,8 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
         bool _hasSponsorship = _sponsor != address(0);
         if (_hasSponsorship) {
             if (block.timestamp > _specification.deadline) revert SignatureExpired(_specification.deadline);
-            _useUnorderedNonce(_sponsor, _specification.nonce);
+            // do not consume nonce if it is reusable, but still check if it is used
+            _useUnorderedNonce(_sponsor, _specification.nonce, !_specification.reusableNonce);
             _sponsorSignature.verify(_hashTypedData(_specification.hash()), _sponsor);
         }
 
@@ -95,6 +97,8 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
             executionCounter: initialExecution ? 1 : 0,
             maxExecutions: _specification.maxExecutions,
             active: active,
+            sponsorFallbackToOwner: _specification.sponsorFallbackToOwner,
+            sponsorCanUpdateFeeModule: _specification.sponsorCanUpdateFeeModule,
             inactiveGracePeriod: _specification.inactiveGracePeriod,
             ignoreAppRevert: _specification.ignoreAppRevert,
             executionModule: _specification.executionModule,
@@ -239,8 +243,18 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
      */
     function revokeSponsorship(uint256 _index) public override {
         Job storage job = jobs[_index];
-        if (msg.sender != job.sponsor && msg.sender != job.owner) revert Unauthorized();
-        job.sponsor = job.owner;
+
+        if(msg.sender == job.sponsor) {
+            if(job.sponsorFallbackToOwner) {
+                job.sponsor = job.owner;
+            } else {
+                job.sponsor = address(0);
+            }
+        } else if (msg.sender == job.owner) {
+            job.sponsor = job.owner;
+        } else {
+            revert Unauthorized();
+        }
     }
 
     /**
@@ -264,27 +278,35 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
     /**
      * @notice Updates data in a fee module or migrates to other fee module.
      * @notice Removes current sponsorship from the job.
+     * @notice If _sponsor is zero address, it will be set to job.owner.
+     * @notice If job.sponsorCanUpdateFeeModule is true, both sponsor and owner can update fee module. The sponsor can even update the sponsor with a new signature.
+     * @notice If job.sponsorCanUpdateFeeModule is false, only owner can update fee module.
      * @param _feeModuleInput Signable struct containing the index of the job and the data to be updated.
      * @param _sponsor The address paying execution fees related to the job.
      * @param _sponsorSignature EIP-712 signature of _feeModuleInput signed by _sponsor.
-     * @param _hasSponsorship Flag which is true if the change is sponsored.
      */
     function updateFeeModule(
         FeeModuleInput calldata _feeModuleInput,
         address _sponsor,
-        bytes calldata _sponsorSignature,
-        bool _hasSponsorship
+        bytes calldata _sponsorSignature
     ) public override {
         Job storage job = jobs[_feeModuleInput.index];
-        if (job.owner != msg.sender) revert Unauthorized();
+        // if job.sponsorCanUpdateFeeModule both sponsor and owner can update fee module
+        // if !job.sponsorCanUpdateFeeModule only owner can update fee module
+        if (msg.sender != job.owner && !(job.sponsorCanUpdateFeeModule && msg.sender == job.sponsor)) {
+            revert Unauthorized();
+        }
+
         // Check that job is not in execution mode
         IExecutionModule executionModule = executionModules[uint8(job.executionModule)];
         if (executionModule.jobIsInExecutionMode(_feeModuleInput.index, job.executionWindow)) {
             revert JobInExecutionMode();
         }
+
+        bool _hasSponsorship = _sponsor != address(0);
         if (_hasSponsorship) {
             if (block.timestamp > _feeModuleInput.deadline) revert SignatureExpired(_feeModuleInput.deadline);
-            _useUnorderedNonce(_sponsor, _feeModuleInput.nonce);
+            _useUnorderedNonce(_sponsor, _feeModuleInput.nonce, !_feeModuleInput.reusableNonce);
             _sponsorSignature.verify(_hashTypedData(_feeModuleInput.hash()), _sponsor);
             job.sponsor = _sponsor;
         } else {
@@ -319,40 +341,47 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
      * @dev Allows the caller to batch invalidate nonces using a bitmask.
      *      This can be useful in scenarios where multiple nonces need to be invalidated at once,
      *      such as when several nonces are compromised or outdated.
-     * @param wordPos The position in the nonce bitmap (index of the word) where the nonces should be invalidated.
-     * @param mask A bitmask where each bit set to 1 invalidates the corresponding nonce in the bitmap.
+     * @param _wordPos The position in the nonce bitmap (index of the word) where the nonces should be invalidated.
+     * @param _mask A bitmask where each bit set to 1 invalidates the corresponding nonce in the bitmap.
      */
-    function invalidateUnorderedNonces(uint256 wordPos, uint256 mask) external {
-        nonceBitmap[msg.sender][wordPos] |= mask;
-        emit UnorderedNonceInvalidation(msg.sender, wordPos, mask);
+    function invalidateUnorderedNonces(uint256 _wordPos, uint256 _mask) external {
+        nonceBitmap[msg.sender][_wordPos] |= _mask;
+        emit UnorderedNonceInvalidation(msg.sender, _wordPos, _mask);
     }
 
     /**
      * @notice Returns the index of the bitmap and the bit position within the bitmap. Used for unordered nonces
      * @notice Taken from the PERMIT-2's SignatureTransfer contract https://github.com/Uniswap/permit2/blob/main/src/SignatureTransfer.sol
-     * @param nonce The nonce to get the associated word and bit positions
+     * @param _nonce The nonce to get the associated word and bit positions
      * @return wordPos The word position or index into the nonceBitmap
      * @return bitPos The bit position
      * @dev The first 248 bits of the nonce value is the index of the desired bitmap
      * @dev The last 8 bits of the nonce value is the position of the bit in the bitmap
      */
-    function bitmapPositions(uint256 nonce) private pure returns (uint256 wordPos, uint256 bitPos) {
-        wordPos = uint248(nonce >> 8);
-        bitPos = uint8(nonce);
+    function bitmapPositions(uint256 _nonce) private pure returns (uint256 wordPos, uint256 bitPos) {
+        wordPos = uint248(_nonce >> 8);
+        bitPos = uint8(_nonce);
     }
 
     /**
      * @notice Checks whether a nonce is taken and sets the bit at the bit position in the bitmap at the word position
-     * @notice Taken from the PERMIT-2's SignatureTransfer contract https://github.com/Uniswap/permit2/blob/main/src/SignatureTransfer.sol
-     * @param from The address to use the nonce at
-     * @param nonce The nonce to spend
+     * @notice Taken and modified from the PERMIT-2's SignatureTransfer contract https://github.com/Uniswap/permit2/blob/main/src/SignatureTransfer.sol
+     * @param _from The address to use the nonce at.
+     * @param _nonce The nonce to spend.
+     * @param _consume Flag which is true if the nonce should be consumed.
      */
-    function _useUnorderedNonce(address from, uint256 nonce) internal {
-        (uint256 wordPos, uint256 bitPos) = bitmapPositions(nonce);
+    function _useUnorderedNonce(address _from, uint256 _nonce, bool _consume) internal {
+        (uint256 wordPos, uint256 bitPos) = bitmapPositions(_nonce);
         uint256 bit = 1 << bitPos;
-        uint256 flipped = nonceBitmap[from][wordPos] ^= bit;
-
-        if (flipped & bit == 0) revert InvalidNonce();
+        
+        if (_consume) {
+            // check and update map
+            uint256 flipped = nonceBitmap[_from][wordPos] ^= bit;
+            if (flipped & bit == 0) revert InvalidNonce();
+        } else {
+            // dont update map, just check if nonce is used
+            if (nonceBitmap[_from][wordPos] & bit != 0) revert InvalidNonce();
+        }
     }
 
     /**

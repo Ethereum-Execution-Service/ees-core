@@ -41,20 +41,19 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
 
     /**
      * @notice Creates a job with given specification and stores it in the jobs array. It calls the callback funcitons onCreateJob on both the execution module and the application.
-     * @notice The nonce and deadline fieds inside _specification are only considered if _hasSponsorship is true.
+     * @notice The nonce and deadline fieds inside _specification are only considered if _sponsor is not zero address.
      * @param _specification Struct containing specifications of the job.
-     * @param _sponsor The address paying execution fees related to the job.
+     * @param _sponsor The address paying execution fees related to the job. If zero address, msg.sender is set to sponsor and _sponsorSignature is not verified.
      * @param _sponsorSignature EIP-712 signature of _specification signed by _sponsor.
-     * @param _hasSponsorship Flag which is true if the job is created with a sponsor. If false, msg.sender is set to sponsor and _sponsorSignature is not verified.
      * @param _index The index in the jobs array which the job should be created at. If this is greater than or equal to jobs.length then the array will be extended, otherwise it will reuse an index.
      */
     function createJob(
         JobSpecification calldata _specification,
         address _sponsor,
         bytes calldata _sponsorSignature,
-        bool _hasSponsorship,
         uint256 _index
     ) public override returns (uint256 index) {
+        bool _hasSponsorship = _sponsor != address(0);
         if (_hasSponsorship) {
             if (block.timestamp > _specification.deadline) revert SignatureExpired(_specification.deadline);
             _useUnorderedNonce(_sponsor, _specification.nonce);

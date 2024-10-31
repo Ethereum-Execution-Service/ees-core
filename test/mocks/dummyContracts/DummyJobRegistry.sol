@@ -16,7 +16,6 @@ contract DummyJobRegistry is IJobRegistry {
         JobSpecification calldata _specification,
         address _sponsor,
         bytes calldata _sponsorSignature,
-        bool _hasSponsorship,
         uint256 _index
     ) external returns (uint256 index) {
         return 0;

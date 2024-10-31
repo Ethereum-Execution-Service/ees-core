@@ -98,7 +98,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
         assertEq(jobRegistry.getJobsArrayLength(), 1, "jobs array length mismatch");
     }
 
@@ -120,7 +120,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         bytes memory sponsorSig =
             getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, true, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
     }
 
     function test_CreateJobWithSponsorExpiredSignature(uint256 createTime, uint256 deadline) public {
@@ -147,7 +147,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         vm.warp(createTime);
         vm.expectRevert(abi.encodeWithSelector(SignatureExpired.selector, deadline));
-        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, true, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
     }
 
     function test_CreateJobWithSponsorReusingNonce() public {
@@ -169,10 +169,10 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         bytes memory sponsorSig =
             getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, true, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
         vm.prank(from);
         vm.expectRevert(abi.encodeWithSelector(InvalidNonce.selector));
-        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, true, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
     }
 
     function testFail_CreationWithUnsupportedExecutionModule(bytes1 module) public {
@@ -193,7 +193,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
     }
 
     function testFail_CreationWithUnsupportedFeeModule(bytes1 module) public {
@@ -214,7 +214,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
     }
 
     function test_DeleteExpiredJob(address caller) public {
@@ -234,7 +234,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         dummyExecutionModule.expireJob();
         dummyApplication.setRevertOnDelete(true);
@@ -260,7 +260,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         vm.prank(from);
         jobRegistry.deleteJob(index);
@@ -286,7 +286,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.JobNotExpiredOrActive.selector));
@@ -313,7 +313,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         jobRegistry.setInactiveGracePeriodEnds(index, graceEndTime);
 
@@ -343,7 +343,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, true, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
 
         vm.prank(sponsor);
         jobRegistry.revokeSponsorship(index);
@@ -372,7 +372,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, true, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
 
         vm.prank(from);
         jobRegistry.revokeSponsorship(index);
@@ -403,7 +403,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, true, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
 
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.Unauthorized.selector));
@@ -426,7 +426,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         vm.prank(from);
         jobRegistry.deleteJob(index);
@@ -453,7 +453,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.Unauthorized.selector));
@@ -477,7 +477,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         vm.prank(executorContract);
         jobRegistry.execute(index, from);
@@ -504,7 +504,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         dummyApplication.setRevertOnExecute(true);
 
@@ -535,7 +535,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         dummyApplication.setRevertOnExecute(true);
 
@@ -567,7 +567,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         dummyFeeModule.setExecutionFee(_executionFee);
         vm.prank(executorContract);
@@ -602,7 +602,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, true, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
 
         dummyFeeModule.setExecutionFee(_executionFee);
         vm.prank(executorContract);
@@ -630,7 +630,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         vm.prank(from);
         jobRegistry.deleteJob(index);
@@ -651,7 +651,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(address2);
-        uint256 index2 = jobRegistry.createJob(jobSpecification2, sponsor, "", false, index);
+        uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", index);
 
         (address owner,,,,,,,,,,) = jobRegistry.jobs(index);
 
@@ -677,7 +677,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         IJobRegistry.JobSpecification memory jobSpecification2 = IJobRegistry.JobSpecification({
             nonce: 1,
@@ -696,7 +696,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(address2);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.JobAlreadyExistsAtIndex.selector));
-        jobRegistry.createJob(jobSpecification2, sponsor, "", false, index);
+        jobRegistry.createJob(jobSpecification2, address(0), "", index);
     }
 
     function test_CreateJobEndOfArray() public {
@@ -716,7 +716,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         IJobRegistry.JobSpecification memory jobSpecification2 = IJobRegistry.JobSpecification({
             nonce: 1,
@@ -734,7 +734,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(address2);
-        uint256 index2 = jobRegistry.createJob(jobSpecification2, sponsor, "", false, UINT256_MAX);
+        uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", UINT256_MAX);
 
         (address owner,,,,,,,,,,) = jobRegistry.jobs(index);
         (address owner2,,,,,,,,,,) = jobRegistry.jobs(index2);
@@ -764,7 +764,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
         vm.prank(from);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.InvalidInactiveGracePeriod.selector));
-        jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
     }
 
     function test_CreateJobInitialExecutionGrace() public {
@@ -785,7 +785,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         uint256 gracePeriodEnd = jobRegistry.inactiveGracePeriodEnds(0);
         assertEq(gracePeriodEnd, block.timestamp + 1, "grace period end mismatch");
@@ -808,7 +808,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
         vm.prank(treasury);
         jobRegistry.addFeeModule(dummyFeeModule2);
@@ -847,7 +847,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
         vm.prank(treasury);
         jobRegistry.addFeeModule(dummyFeeModule2);
@@ -884,7 +884,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
         vm.prank(treasury);
@@ -922,7 +922,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
         vm.prank(treasury);
         jobRegistry.addFeeModule(dummyFeeModule2);
@@ -957,7 +957,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
         vm.prank(treasury);
         jobRegistry.addFeeModule(dummyFeeModule2);
@@ -990,7 +990,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
         vm.prank(treasury);
         jobRegistry.addFeeModule(dummyFeeModule2);
@@ -1028,7 +1028,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
         (,,,,, uint48 executionCounter,,,,,) = jobRegistry.jobs(0);
         assertEq(executionCounter, 1, "execution counter mismatch");
     }
@@ -1051,7 +1051,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
         vm.prank(executorContract);
         jobRegistry.execute(0, from);
     }
@@ -1074,7 +1074,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
         vm.prank(executorContract);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.JobNotActive.selector));
         jobRegistry.execute(0, from);
@@ -1098,7 +1098,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
         vm.prank(from);
         jobRegistry.deactivateJob(0);
         uint256 gracePeriodEnds = jobRegistry.inactiveGracePeriodEnds(0);
@@ -1125,7 +1125,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
         vm.prank(from);
         jobRegistry.deactivateJob(0);
         uint256 gracePeriodEnds = jobRegistry.inactiveGracePeriodEnds(0);
@@ -1152,7 +1152,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, "", false, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.Unauthorized.selector));
         jobRegistry.deactivateJob(0);

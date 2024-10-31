@@ -47,7 +47,6 @@ interface IJobRegistry {
         JobSpecification calldata _specification,
         address _sponsor,
         bytes calldata _sponsorSignature,
-        bool _hasSponsorship,
         uint256 _index
     ) external returns (uint256 index);
     function execute(uint256 _index, address _feeRecipient) external returns (uint256, address);

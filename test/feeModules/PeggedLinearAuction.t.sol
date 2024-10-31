@@ -8,8 +8,11 @@ import {MockPeggedLinearAuction} from "../mocks/MockPeggedLinearAuction.sol";
 import {IPeggedLinearAuction} from "../../src/interfaces/feeModules/IPeggedLinearAuction.sol";
 import {DummyPriceOracle} from "../mocks/dummyContracts/DummyPriceOracle.sol";
 import {IPriceOracle} from "../../src/interfaces/IPriceOracle.sol";
+import {Coordinator} from "../../src/Coordinator.sol";
+import {ICoordinator} from "../../src/interfaces/ICoordinator.sol";
+import {TokenProvider} from "../utils/TokenProvider.sol";
 
-contract PeggedLinearAuctionTest is Test, GasSnapshot {
+contract PeggedLinearAuctionTest is Test, GasSnapshot, TokenProvider {
     MockPeggedLinearAuction feeModule;
     DummyPriceOracle dummyPriceOracle;
 
@@ -25,17 +28,37 @@ contract PeggedLinearAuctionTest is Test, GasSnapshot {
     address address0 = address(0x0);
     address address2 = address(0x2);
     JobRegistry jobRegistry;
-
+    Coordinator coordinator;
     event ExecutionFee(uint256 executionFee, address executionFeeToken);
 
     function setUp() public {
+        initializeERC20Tokens();
         defaultMaxBps = 20000;
         defaultMinBps = 15000;
         defaultExecutionWindow = 1800;
         defaultStartTime = 1641070800;
 
+
+        ICoordinator.InitSpec memory spec = ICoordinator.InitSpec({
+            stakingToken: address(token0),
+            stakingAmount: 1000,
+            minimumStakingPeriod: 2,
+            stakingBalanceThreshold: 300,
+            inactiveSlashingAmount: 200,
+            commitSlashingAmount: 50,
+            roundDuration: 15,
+            roundsPerEpoch: 5,
+            roundBuffer: 15,
+            commitPhaseDuration: 15,
+            revealPhaseDuration: 15,
+            slashingDuration: 30,
+            executorTax: 2,
+            protocolTax: 2
+        });
+
         jobRegistry = new JobRegistry(address2, address(0x5));
-        feeModule = new MockPeggedLinearAuction(jobRegistry);
+        coordinator = new Coordinator(spec, address2);
+        feeModule = new MockPeggedLinearAuction(jobRegistry, coordinator);
 
         dummyPriceOracle = new DummyPriceOracle(100);
 

@@ -77,7 +77,7 @@ contract DeployAll is Script {
         linearAuction = new LinearAuction(jobRegistry);
         console2.log("LinearAuction Deployed:", address(linearAuction));
 
-        peggedLinearAuction = new PeggedLinearAuction(jobRegistry);
+        peggedLinearAuction = new PeggedLinearAuction(jobRegistry, coordinator);
         console2.log("PeggedLinearAuction Deployed:", address(peggedLinearAuction));
 
         jobRegistry.addExecutionModule(regularTimeInterval);

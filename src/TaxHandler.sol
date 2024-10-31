@@ -8,12 +8,12 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 contract TaxHandler is Owned {
     uint256 internal lastProtocolTaxUpdate;
     uint256 internal lastExecutorTaxUpdate;
-    uint256 internal constant protocolTaxUpdateCooldown = 7 days;
-    uint256 internal constant executorTaxUpdateCooldown = 7 days;
+    uint24 internal constant protocolTaxUpdateCooldown = 7 days;
+    uint24 internal constant executorTaxUpdateCooldown = 7 days;
 
     // 10%
-    uint256 internal constant protocolTaxUpdateBps = 1_000;
-    uint256 internal constant executorTaxUpdateBps = 1_000;
+    uint16 internal constant protocolTaxUpdateBps = 1_000;
+    uint16 internal constant executorTaxUpdateBps = 1_000;
 
     uint256 internal protocolTax;
     uint256 internal executorTax;
@@ -52,4 +52,5 @@ contract TaxHandler is Owned {
         lastExecutorTaxUpdate = block.timestamp;
         executorTax = _executorTax;
     }
+
 }

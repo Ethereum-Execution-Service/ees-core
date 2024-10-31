@@ -610,4 +610,14 @@ contract Coordinator is ICoordinator, TaxHandler {
             revealPhaseDuration
         );
     }
+
+    /**
+     * @notice Exports the tax configuration of the Coordinator contract
+     * @return stakingToken The address of the staking token
+     * @return protocolTax The protocol tax
+     * @return executorTax The executor tax
+     */
+    function getTaxConfig() public view returns (address, uint256, uint256) {
+        return (stakingToken, protocolTax, executorTax);
+    }
 }

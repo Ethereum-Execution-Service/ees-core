@@ -6,21 +6,21 @@ import {IPeggedLinearAuction} from "../interfaces/feeModules/IPeggedLinearAuctio
 import {JobRegistry} from "../JobRegistry.sol";
 import {IJobRegistry} from "../interfaces/IJobRegistry.sol";
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
+import {Coordinator} from "../Coordinator.sol";
+import {ERC20} from "solmate/src/tokens/ERC20.sol";
 
 /// @author Victor Brevig
 contract PeggedLinearAuction is IPeggedLinearAuction {
     JobRegistry public immutable jobRegistry;
+    Coordinator public immutable coordinator;
     mapping(uint256 => Params) public params;
 
     uint256 private constant _GAS_OVERHEAD = 100_000;
-
-    // 0.1 USDC
-    uint256 private constant _EXECUTOR_TAX = 100_000;
-    address private constant _EXECUTOR_TAX_TOKEN = 0x7139F4601480d20d43Fa77780B67D295805aD31a;
     uint256 private constant _BASE_BPS = 10_000;
 
-    constructor(JobRegistry _jobRegistry) {
+    constructor(JobRegistry _jobRegistry, Coordinator _coordinator) {
         jobRegistry = _jobRegistry;
+        coordinator = _coordinator;
     }
 
     modifier onlyJobRegistry() {
@@ -45,34 +45,41 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
     ) external override onlyJobRegistry returns (uint256 executionFee, address executionFeeToken) {
         Params memory job = params[_index];
 
-        // need to also get executor tax in the staking token
-        // need to know how many tokens of job.executionFeeToken it requires for _EXECUTOR_TAX of _EXECUTOR_TAX_TOKEN
+        (address taxToken, uint256 protocolTax, uint256 executorTax) = coordinator.getTaxConfig();
+        
+        // get tak token decimals
+        uint8 taxTokenDecimals = ERC20(taxToken).decimals();
 
-        // tokens / wei
-        (uint256 priceETH, uint256 priceUSD) = job.priceOracle.getPrice(job.executionFeeToken, job.oracleData);
+        // tokens per 1 eth in tokenDecimals and tokens per 1 USD in tokenDecimals
+        (uint256 priceInETH, uint256 priceInUSD) = job.priceOracle.getPrice(job.executionFeeToken, job.oracleData);
 
-        // executor tax
-        uint256 executorTax = priceUSD * _EXECUTOR_TAX;
+        // we have to scale executorTax and protocolTax to feeTokenDecimals
+        // should we just do this in the oracle? Since this is the only place we use priceInUSD
+
+        // total tax in fee tokens and fee token decimals
+        uint256 totalTax = (priceInUSD * (executorTax + protocolTax)) / taxTokenDecimals;
 
         // wei / gas
         uint256 baseFee = block.basefee;
         // gas
         uint256 totalGasConsumption = _variableGasConsumption + _GAS_OVERHEAD;
-        // tokens
-        uint256 totalFeeBase = priceETH * baseFee * totalGasConsumption;
+
+        // we have to scale price from per ETH to per wei basis, so div by 10**18
+        // number of tokens to pay for base fee in fee token decimals
+        uint256 totalFeeBase = (priceInETH * baseFee * totalGasConsumption) / 10**18;
 
         uint256 feeDiff;
         unchecked {
             feeDiff = job.maxOverheadBps - job.minOverheadBps;
         }
 
-        uint256 secondsInAuctionPeriod = block.timestamp - _executionTime;
-        uint256 feeOverheadBps = ((feeDiff * secondsInAuctionPeriod) / (_executionWindow - 1)) + job.minOverheadBps;
+        uint256 secondsInExecutionWindow = block.timestamp - _executionTime;
+        // calculate fee overhead as linear function between min and max over execution window
+        uint256 feeOverheadBps = ((feeDiff * secondsInExecutionWindow) / (_executionWindow - 1)) + job.minOverheadBps;
 
-        executionFee = executorTax + ((totalFeeBase * feeOverheadBps) / _BASE_BPS);
+        // return execution fee in fee tokens and fee token address
+        executionFee = totalTax + ((totalFeeBase * feeOverheadBps) / _BASE_BPS);
         executionFeeToken = job.executionFeeToken;
-
-        return (executionFee, executionFeeToken);
     }
 
     /**

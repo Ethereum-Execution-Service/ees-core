@@ -2,7 +2,6 @@
 pragma solidity 0.8.27;
 
 import {Test} from "forge-std/src/Test.sol";
-import {SafeERC20, IERC20, IERC20Permit} from "@openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
 import {TokenProvider} from "./utils/TokenProvider.sol";
 import {GasSnapshot} from "forge-gas-snapshot/src/GasSnapshot.sol";
 import {SignatureExpired, InvalidNonce} from "../src/PermitErrors.sol";

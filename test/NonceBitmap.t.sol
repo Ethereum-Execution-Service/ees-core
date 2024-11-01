@@ -108,4 +108,27 @@ contract NonceBitmapTest is Test {
         jobRegistry.invalidateUnorderedNonces(wordPos, mask);
         assertEq(savedBitmap, jobRegistry.nonceBitmap(address(this), wordPos));
     }
+
+    function test_ReuseNonce(uint256 nonce) public {
+        jobRegistry.useUnorderedNonce(address(this), nonce, false);
+        jobRegistry.useUnorderedNonce(address(this), nonce, false);
+        jobRegistry.useUnorderedNonce(address(this), nonce, true);
+    }
+
+    function test_ConsumeReusableNonce(uint256 nonce) public {
+        jobRegistry.useUnorderedNonce(address(this), nonce, false);
+        jobRegistry.useUnorderedNonce(address(this), nonce, true);
+        vm.expectRevert(InvalidNonce.selector);
+        jobRegistry.useUnorderedNonce(address(this), nonce, true);
+    }
+    
+    function test_InvalidateReusableNonce(uint256 nonce) public {
+        jobRegistry.useUnorderedNonce(address(this), nonce, false);
+        uint256 wordPos = nonce / 256;
+        uint256 mask = 1 << (nonce % 256);
+        jobRegistry.invalidateUnorderedNonces(wordPos, mask);
+        vm.expectRevert(InvalidNonce.selector);
+        jobRegistry.useUnorderedNonce(address(this), nonce, true);
+    }
+    
 }

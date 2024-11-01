@@ -2,8 +2,8 @@
 pragma solidity 0.8.27;
 
 import {Coordinator} from "../../src/Coordinator.sol";
-/// @author Victor Brevig
 
+/// @author Victor Brevig
 contract MockCoordinator is Coordinator {
     constructor(InitSpec memory _spec, address _treasury) Coordinator(_spec, _treasury) {}
 
@@ -17,6 +17,10 @@ contract MockCoordinator is Coordinator {
 
     function setStakingTimestamp(uint256 _stakingTimestamp, address _executor) public {
         executorInfo[_executor].stakingTimestamp = _stakingTimestamp;
+    }
+
+    function getStakingAmount() public view returns (uint256) {
+        return stakingAmount;
     }
 
     function setEpochEndTime(uint256 _epochEndTime) public {
@@ -73,5 +77,13 @@ contract MockCoordinator is Coordinator {
 
     function getNumberOfActiveExecutors() public view returns (uint40) {
         return numberOfActiveExecutors;
+    }
+
+    function getMinimumStakingPeriod() public view returns (uint256) {
+        return minimumStakingPeriod;
+    }
+
+    function getCommitPhaseDuration() public view returns (uint256) {
+        return commitPhaseDuration;
     }
 }

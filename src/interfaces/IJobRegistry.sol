@@ -13,7 +13,6 @@ interface IJobRegistry {
         // having both sponsorFallbackToOwner and sponsorCanUpdateFeeModule is dangerous as sponsor can update fee module and revoke immediately
         bool sponsorFallbackToOwner;
         bool sponsorCanUpdateFeeModule;
-        uint40 inactiveGracePeriod;
         address sponsor;
         uint48 executionCounter;
         uint48 maxExecutions;
@@ -32,7 +31,6 @@ interface IJobRegistry {
         IApplication application;
         uint32 executionWindow;
         uint48 maxExecutions;
-        uint40 inactiveGracePeriod;
         bool ignoreAppRevert;
         bytes1 executionModule;
         bytes1 feeModule;
@@ -112,14 +110,9 @@ interface IJobRegistry {
     /// @notice Thrown when maximum number of executions is exceeded.
     error MaxExecutionsExceeded();
 
-    /// @notice Thrown when the job is created with invalid inactive grace period
-    error InvalidInactiveGracePeriod();
-
     /// @notice Thrown when the job is not active
     error JobNotActive();
 
-    /// @notice Thrown when the job is in grace period
-    error JobInGracePeriod();
 
     /// @notice Thrown when the job is not expired or is active
     error JobNotExpiredOrActive();

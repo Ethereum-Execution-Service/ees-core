@@ -17,8 +17,4 @@ contract MockJobRegistry is JobRegistry {
         _useUnorderedNonce(from, nonce, reusableNonce);
     }
 
-    function setInactiveGracePeriodEnds(uint256 _index, uint256 _graceEndTime) public {
-        inactiveGracePeriodEnds[_index] = _graceEndTime;
-    }
-
 }

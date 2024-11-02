@@ -34,8 +34,6 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
     // for single use nonces
     mapping(address => mapping(uint256 => uint256)) public nonceBitmap;
 
-    mapping(uint256 => uint256) public inactiveGracePeriodEnds;
-
     constructor(address _treasury, address _executionContract) Owned(_treasury) {
         executionContract = _executionContract;
     }
@@ -46,7 +44,7 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
      * @param _specification Struct containing specifications of the job.
      * @param _sponsor The address paying execution fees related to the job. If zero address, msg.sender is set to sponsor and _sponsorSignature is not verified.
      * @param _sponsorSignature EIP-712 signature of _specification signed by _sponsor.
-     * @param _index The index in the jobs array which the job should be created at. If this is greater than or equal to jobs.length then the array will be extended, otherwise it will reuse an index.
+     * @param _index The index in the jobs array which the job should be created at. If this is greater than or equal to jobs.length then the array will be extended, otherwise it will try to reuse an index of an existing expired job.
      */
     function createJob(
         JobSpecification calldata _specification,
@@ -62,9 +60,18 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
             _sponsorSignature.verify(_hashTypedData(_specification.hash()), _sponsor);
         }
 
-        if (_specification.inactiveGracePeriod > 400 days) revert InvalidInactiveGracePeriod();
-
-        bool reuseIndex = _index < jobs.length;
+        // attempts to reuse index of existing expired job if _index is existing. Otherwise creates new job at jobs.length.
+        bool reuseIndex = false;
+        if(_index < jobs.length) {
+            if(jobs[_index].owner == address(0)) {
+                // existingjob is already deleted, we can reuse it
+                reuseIndex = true;
+            } else if(executionModules[uint8(jobs[_index].executionModule)].jobIsExpired(_index, jobs[_index].executionWindow)) {
+                // existing job is expired, we can reuse it but have to delete existing job first
+                _deleteJob(_index);
+                reuseIndex = true;
+            }
+        }
         index = reuseIndex ? _index : jobs.length;
 
         IExecutionModule executionModule = executionModules[uint8(_specification.executionModule)];
@@ -81,13 +88,8 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
         if (initialExecution) {
             _specification.application.onExecuteJob(index, msg.sender, 0);
             emit JobExecuted(index, msg.sender, address(_specification.application), true, 0, 0, address(0));
-            // can have initial execution and maxExecution = 1. However would be useless if theres no grace period as it can be deleted immediately after
-            if (_specification.maxExecutions == 1) {
-                active = false;
-                if (_specification.inactiveGracePeriod > 0) {
-                    inactiveGracePeriodEnds[index] = block.timestamp + _specification.inactiveGracePeriod;
-                }
-            }
+            // can have initial execution and maxExecution = 1, then we just deactivate immediately
+            if (_specification.maxExecutions == 1) active = false;
         }
 
         Job memory newJob = Job({
@@ -99,15 +101,14 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
             active: active,
             sponsorFallbackToOwner: _specification.sponsorFallbackToOwner,
             sponsorCanUpdateFeeModule: _specification.sponsorCanUpdateFeeModule,
-            inactiveGracePeriod: _specification.inactiveGracePeriod,
             ignoreAppRevert: _specification.ignoreAppRevert,
             executionModule: _specification.executionModule,
             feeModule: _specification.feeModule,
             executionWindow: _specification.executionWindow
         });
 
+        // fix index here!
         if (reuseIndex) {
-            if (jobs[_index].owner != address(0)) revert JobAlreadyExistsAtIndex();
             jobs[index] = newJob;
         } else {
             jobs.push(newJob);
@@ -151,10 +152,6 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
         if ((!success && !job.ignoreAppRevert) || maxExecutionsReached) {
             // inactivate job
             jobs[_index].active = false;
-            // we dont delete the job here because we want more predictable gas consumption
-            if (job.inactiveGracePeriod > 0) {
-                inactiveGracePeriodEnds[_index] = block.timestamp + job.inactiveGracePeriod;
-            }
         }
 
         uint256 totalGas;
@@ -183,46 +180,38 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
     }
 
     /**
-     * @notice Deactivates a job. If the job has an inactiveGracePeriod, it can be deleted by anyone only after the grace period ends.
-     * @notice Deactivated jobs cannot be executed.
+     * @notice Deactivates a job preventing it from being executed.
      * @param _index Index of the job in the jobs array.
      */
     function deactivateJob(uint256 _index) public override {
         Job storage job = jobs[_index];
         if (msg.sender != job.owner) revert Unauthorized();
         job.active = false;
-
-        if (job.inactiveGracePeriod == 0) {
-            deleteJob(_index);
-        } else {
-            inactiveGracePeriodEnds[_index] = block.timestamp + job.inactiveGracePeriod;
-        }
-
         emit JobDeactivated(_index, job.owner, address(job.application));
     }
+
 
     /**
      * @notice Deletes the job from the jobs array and calls onDeleteJob on execution module and application.
      * @param _index The index of the job in the jobs array.
      */
     function deleteJob(uint256 _index) public override {
+        if (msg.sender != jobs[_index].owner) revert Unauthorized();
+        _deleteJob(_index);
+    }
+
+
+    /**
+     * @notice Deletes the job from the jobs array and calls onDeleteJob on execution module and application.
+     * @param _index The index of the job in the jobs array.
+     */
+    function _deleteJob(uint256 _index) private {
         Job memory job = jobs[_index];
 
         IExecutionModule executionModule = executionModules[uint8(job.executionModule)];
         IFeeModule feeModule = feeModules[uint8(job.feeModule)];
 
-        // job can always be deleted by owner
-        // it can be deleted by anyone only if the job is (expired or inactive) and not in grace period
-        if (!(msg.sender == job.owner)) {
-            if (inactiveGracePeriodEnds[_index] > block.timestamp) {
-                revert JobInGracePeriod();
-            }
-            if (!executionModule.jobIsExpired(_index, job.executionWindow) && job.active) {
-                revert JobNotExpiredOrActive();
-            }
-        }
         delete jobs[_index];
-        delete inactiveGracePeriodEnds[_index];
 
         // these should never revert, the owner should always be able to delete a job
         executionModule.onDeleteJob(_index);

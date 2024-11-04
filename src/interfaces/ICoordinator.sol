@@ -62,6 +62,7 @@ interface ICoordinator {
     event ExecutorActivated(address indexed executor);
 
     error NotActiveExecutor();
+    error NotInitializedExecutor();
     error AlreadyStaked();
     error RoundExecuted();
     error WrongNumberOfRandomWords();

@@ -15,6 +15,11 @@ contract MockCoordinator is Coordinator {
         executorInfo[_executor] = _executorInfo;
     }
 
+    function setLastCheckin(uint8 _lastCheckinRound, uint192 _lastCheckinEpoch, address _executor) public {
+        executorInfo[_executor].lastCheckinRound = _lastCheckinRound;
+        executorInfo[_executor].lastCheckinEpoch = _lastCheckinEpoch;
+    }
+
     function setStakingTimestamp(uint256 _stakingTimestamp, address _executor) public {
         executorInfo[_executor].stakingTimestamp = _stakingTimestamp;
     }
@@ -85,5 +90,17 @@ contract MockCoordinator is Coordinator {
 
     function getCommitPhaseDuration() public view returns (uint256) {
         return commitPhaseDuration;
+    }
+
+    function getProtocolBalance() public view returns (uint256) {
+        return protocolBalance;
+    }
+
+    function getRoundDuration() public view returns (uint256) {
+        return roundDuration;
+    }
+
+    function getRoundsPerEpoch() public view returns (uint8) {
+        return roundsPerEpoch;
     }
 }

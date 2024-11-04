@@ -553,7 +553,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
     function test_TopupNotAnExecutor() public {
         // should revert if not a executor
         vm.prank(executor);
-        vm.expectRevert(ICoordinator.NotActiveExecutor.selector);
+        vm.expectRevert(ICoordinator.NotInitializedExecutor.selector);
         coordinator.topup(stakingAmount);
     }
 

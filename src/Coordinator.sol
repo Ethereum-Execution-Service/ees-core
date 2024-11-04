@@ -35,6 +35,8 @@ contract Coordinator is ICoordinator, TaxHandler {
     uint256 internal epochPoolBalance;
     uint256 internal nextEpochPoolBalance;
 
+    uint256 internal protocolBalance;
+
     // all in seconds
     uint8 internal immutable roundDuration;
     uint8 internal immutable roundBuffer;
@@ -100,7 +102,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         Executor memory executor = executorInfo[msg.sender];
         if (!executor.active) revert NotActiveExecutor();
 
-        bool inRound = false;
+        bool inRound;
         uint8 round;
         if (block.timestamp < epochEndTime - slashingDuration && block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration)
         {
@@ -120,7 +122,6 @@ contract Coordinator is ICoordinator, TaxHandler {
                     // guarantee on no uint8 overflow?
                     round = uint8(timeIntoRounds / totalRoundDuration);
                 }
-
                 uint256 executorIndex = uint256(keccak256(abi.encodePacked(seed, round))) % numberOfActiveExecutors;
                 if (activeExecutors[executorIndex] != msg.sender) revert ExecutorNotSelectedForRound();
             }
@@ -253,6 +254,11 @@ contract Coordinator is ICoordinator, TaxHandler {
             emit ExecutorDeactivated(deactivatedExecutor);
         }
 
+        unchecked {
+            // protocolBalance will never exceed uint256 max value
+            protocolBalance += totalProtocolTax;
+        }
+
         emit BatchExecution(failedIndices, totalProtocolTax, totalExecutorTax, poolReward);
     }
 
@@ -332,7 +338,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         }
 
         Executor storage executor = executorInfo[msg.sender];
-        if (!executor.initialized) revert NotActiveExecutor();
+        if (!executor.initialized) revert NotInitializedExecutor();
         if (executor.balance + _amount < stakingAmount) revert TopupBelowMinimum();
 
         ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), _amount);
@@ -547,10 +553,20 @@ contract Coordinator is ICoordinator, TaxHandler {
             _executor.active = false;
             emit ExecutorDeactivated(deactivatedExecutor);
         }
+        
         unchecked {
             // no division by zero. Total token balances will not exceed uint256 max value
-            executorInfo[_recipient].balance += _amount / 2;
+            uint256 rewardAmount = _amount / 2;
+            executorInfo[_recipient].balance += rewardAmount;
+            protocolBalance += _amount - rewardAmount;
         }
+    }
+
+    function withdrawProtocolBalance() public onlyOwner returns (uint256) {
+        uint256 amount = protocolBalance;
+        protocolBalance = 0;
+        ERC20(stakingToken).safeTransfer(owner, amount);
+        return amount;
     }
 
     /**

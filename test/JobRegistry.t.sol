@@ -272,7 +272,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(address2);
         uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", index);
 
-        (address owner,,,,,,,,,,,) = jobRegistry.jobs(index);
+        (address owner,,,,,,,,,,,,) = jobRegistry.jobs(index);
 
         assertEq(index, index2, "index mismatch");
         assertEq(owner, address2, "owner mismatch");
@@ -302,7 +302,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(from);
         jobRegistry.deleteJob(index);
-        (address owner,,,,,,,,,,,) = jobRegistry.jobs(index);
+        (address owner,,,,,,,,,,,,) = jobRegistry.jobs(index);
         assertEq(owner, address(0));
     }
 
@@ -359,7 +359,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(sponsor);
         jobRegistry.revokeSponsorship(index);
-        (,,,,, address sponsorSet,,,,,,) = jobRegistry.jobs(index);
+        (,,,,,,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
 
         assertEq(sponsorSet, address(0));
     }
@@ -390,7 +390,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(sponsor);
         jobRegistry.revokeSponsorship(index);
-        (,,,,, address sponsorSet,,,,,,) = jobRegistry.jobs(index);
+        (,,,,,,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
 
         assertEq(sponsorSet, from);
     }
@@ -421,7 +421,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(from);
         jobRegistry.revokeSponsorship(index);
-        (,,,,, address sponsorSet,,,,,,) = jobRegistry.jobs(index);
+        (,,,,,,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
 
         assertEq(sponsorSet, from);
     }
@@ -535,7 +535,8 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(executorContract);
         jobRegistry.execute(index, from);
 
-        (, bool active,,,,, uint48 executionCounter,,,,,) = jobRegistry.jobs(index);
+        (, bool active,,,,,,,,uint48 executionCounter,,,) = jobRegistry.jobs(index);
+
         assertEq(active, false, "active mismatch");
         assertEq(executionCounter, 1, "execution counter mismatch");
     }
@@ -566,7 +567,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(executorContract);
         jobRegistry.execute(index, from);
 
-        (, bool active,,,,, uint48 executionCounter,,,,,) = jobRegistry.jobs(index);
+        (, bool active,,,,,,,,uint48 executionCounter,,,) = jobRegistry.jobs(index);
         assertEq(active, true, "active mismatch");
         assertEq(executionCounter, 0, "execution counter mismatch");
     }
@@ -685,7 +686,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(address2);
         uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", index);
 
-        (address owner,,,,,,,,,,,) = jobRegistry.jobs(index);
+        (address owner,,,,,,,,,,,,) = jobRegistry.jobs(index);
 
         assertEq(index, index2, "index mismatch");
         assertEq(owner, address2, "owner mismatch");
@@ -776,8 +777,8 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(address2);
         uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", UINT256_MAX);
 
-        (address owner,,,,,,,,,,,) = jobRegistry.jobs(index);
-        (address owner2,,,,,,,,,,,) = jobRegistry.jobs(index2);
+        (address owner,,,,,,,,,,,,) = jobRegistry.jobs(index);
+        (address owner2,,,,,,,,,,,,) = jobRegistry.jobs(index2);
 
         assertEq(index, 0);
         assertEq(index2, 1);
@@ -820,7 +821,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             getFeeModuleInputSignature(feeModuleInput, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
         jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig);
-        (,,,,, address sponsorSet,,,,, bytes1 feeModuleSet,) = jobRegistry.jobs(index);
+        (,,,,,, bytes1 feeModuleSet,,address sponsorSet,,,,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, sponsor, "sponsor mismatch");
         assertEq(uint8(feeModuleSet), uint8(0x00), "fee module mismatch");
     }
@@ -903,7 +904,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(from);
         jobRegistry.updateFeeModule(feeModuleInput, address(0), "");
-        (,,,,, address sponsorSet,,,,, bytes1 feeModuleSet,) = jobRegistry.jobs(index);
+        (,,,,,, bytes1 feeModuleSet,, address sponsorSet,,,,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, from, "sponsor mismatch");
         assertEq(uint8(feeModuleSet), uint8(0x00), "fee module mismatch");
     }
@@ -1017,7 +1018,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             getFeeModuleInputSignature(feeModuleInput, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
         jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig);
-        (,,,,, address sponsorSet,,,,, bytes1 feeModuleSet,) = jobRegistry.jobs(index);
+        (,,,,,, bytes1 feeModuleSet,, address sponsorSet,,,,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, sponsor, "sponsor mismatch");
         assertEq(uint8(feeModuleSet), uint8(0x01), "fee module mismatch");
     }
@@ -1043,7 +1044,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
         jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
-        (,,,,,, uint48 executionCounter,,,,,) = jobRegistry.jobs(0);
+        (,,,,,,,,, uint48 executionCounter,,,) = jobRegistry.jobs(0);
         assertEq(executionCounter, 1, "execution counter mismatch");
     }
 

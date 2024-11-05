@@ -94,17 +94,18 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
 
         Job memory newJob = Job({
             owner: msg.sender,
-            sponsor: _hasSponsorship ? _sponsor : msg.sender,
-            application: _specification.application,
-            executionCounter: initialExecution ? 1 : 0,
-            maxExecutions: _specification.maxExecutions,
             active: active,
+            ignoreAppRevert: _specification.ignoreAppRevert,
             sponsorFallbackToOwner: _specification.sponsorFallbackToOwner,
             sponsorCanUpdateFeeModule: _specification.sponsorCanUpdateFeeModule,
-            ignoreAppRevert: _specification.ignoreAppRevert,
             executionModule: _specification.executionModule,
             feeModule: _specification.feeModule,
-            executionWindow: _specification.executionWindow
+            executionWindow: _specification.executionWindow,
+            sponsor: _hasSponsorship ? _sponsor : msg.sender,
+            executionCounter: initialExecution ? 1 : 0,
+            maxExecutions: _specification.maxExecutions,
+            application: _specification.application,
+            creationTime: uint96(block.timestamp)
         });
 
         // fix index here!
@@ -124,7 +125,7 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
      * @param _index Index of the job in the jobs array.
      * @param _feeRecipient Address who receives execution fee tokens.
      */
-    function execute(uint256 _index, address _feeRecipient) external override returns (uint256, address) {
+    function execute(uint256 _index, address _feeRecipient) external override returns (uint96, uint256, address) {
         if (msg.sender != executionContract) revert Unauthorized();
         Job memory job = jobs[_index];
 
@@ -176,7 +177,7 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
             executionFeeToken
         );
 
-        return (executionFee, executionFeeToken);
+        return (job.creationTime, executionFee, executionFeeToken);
     }
 
     /**

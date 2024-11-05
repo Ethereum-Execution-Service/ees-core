@@ -8,7 +8,8 @@ interface ICoordinator {
         bool initialized;
         uint40 arrayIndex;
         uint8 lastCheckinRound;
-        uint192 lastCheckinEpoch;
+        uint96 lastCheckinEpoch;
+        uint96 executionsInEpochCreatedBeforeEpoch;
         uint256 stakingTimestamp;
     }
 
@@ -49,8 +50,8 @@ interface ICoordinator {
     function commit(bytes32 _commitment) external;
     function reveal(bytes calldata _signature) external;
 
-    event BatchExecution(uint256[] failedIndices, uint256 totalProtocolTax, uint256 totalExecutorTax, uint256 taxPoolReward);
-    event EpochInitiated(uint192 epoch);
+    event BatchExecution(uint256[] failedIndices, uint256 totalProtocolTax, uint256 totalExecutorTax);
+    event EpochInitiated(uint192 epoch, uint256 previousEpochPoolDistributed);
     event SlashInactiveExecutor(
         address indexed executor, address indexed slasher, uint192 indexed epoch, uint8 round, uint256 amount
     );

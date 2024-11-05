@@ -15,7 +15,7 @@ contract MockCoordinator is Coordinator {
         executorInfo[_executor] = _executorInfo;
     }
 
-    function setLastCheckin(uint8 _lastCheckinRound, uint192 _lastCheckinEpoch, address _executor) public {
+    function setLastCheckin(uint8 _lastCheckinRound, uint96 _lastCheckinEpoch, address _executor) public {
         executorInfo[_executor].lastCheckinRound = _lastCheckinRound;
         executorInfo[_executor].lastCheckinEpoch = _lastCheckinEpoch;
     }
@@ -102,5 +102,13 @@ contract MockCoordinator is Coordinator {
 
     function getRoundsPerEpoch() public view returns (uint8) {
         return roundsPerEpoch;
+    }
+
+    function getPoolCutReceiversLength() public view returns (uint256) {
+        return poolCutReceivers.length;
+    }
+
+    function getTotalNumberOfExecutedJobsCreatedBeforeEpoch() public view returns (uint256) {
+        return totalNumberOfExecutedJobsCreatedBeforeEpoch;
     }
 }

@@ -56,5 +56,18 @@ contract CoordinatorInvariant is Test {
     (uint256 initializedExecutors, uint256 activeExecutors) = coordinatorWrapper.getNumberOfInitializedAndActiveExecutors();
     assertGe(initializedExecutors, activeExecutors);
   }
+
+  function invariant_poolCutReceiversArray() public view {
+    if(coordinatorWrapper.getTotalNumberOfExecutedJobsCreatedBeforeEpoch() > 0) {
+      assertGt(coordinatorWrapper.getPoolCutReceiversLength(), 0);
+    } else {
+      assertEq(coordinatorWrapper.getPoolCutReceiversLength(), 0);
+    }
+    if(coordinatorWrapper.getTotalNumberOfExecutedJobsCreatedBeforeEpoch() > 0) {
+      assertGt(coordinatorWrapper.getPoolCutReceiversLength(), 0);
+    } else {
+      assertEq(coordinatorWrapper.getPoolCutReceiversLength(), 0);
+    }
+  }
   
 }

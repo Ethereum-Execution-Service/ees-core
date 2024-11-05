@@ -13,13 +13,15 @@ interface IJobRegistry {
         // having both sponsorFallbackToOwner and sponsorCanUpdateFeeModule is dangerous as sponsor can update fee module and revoke immediately
         bool sponsorFallbackToOwner;
         bool sponsorCanUpdateFeeModule;
+        bytes1 executionModule;
+        bytes1 feeModule;
+        uint32 executionWindow;
         address sponsor;
         uint48 executionCounter;
         uint48 maxExecutions;
         IApplication application;
-        bytes1 executionModule;
-        bytes1 feeModule;
-        uint32 executionWindow;
+        // uint96 is sufficient to hold UNIX block.timestamp for practical future
+        uint96 creationTime;
     }
 
     struct JobSpecification {
@@ -54,7 +56,7 @@ interface IJobRegistry {
         bytes calldata _sponsorSignature,
         uint256 _index
     ) external returns (uint256 index);
-    function execute(uint256 _index, address _feeRecipient) external returns (uint256, address);
+    function execute(uint256 _index, address _feeRecipient) external returns (uint96, uint256, address);
     function deleteJob(uint256 _index) external;
     function deactivateJob(uint256 _index) external;
     function revokeSponsorship(uint256 _index) external;

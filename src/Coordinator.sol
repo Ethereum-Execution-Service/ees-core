@@ -48,8 +48,15 @@ contract Coordinator is ICoordinator, TaxHandler {
     // slashing phase
     uint8 internal immutable slashingDuration;
 
+    // addresses of all active executors
     address[] public activeExecutors;
+    // executor info
     mapping(address => Executor) public executorInfo;
+
+    // total number of executed jobs during rounds in this epoch that were created before the epoch started
+    uint256 public totalNumberOfExecutedJobsCreatedBeforeEpoch;
+    // addresses to receive pool cut. These are designated executors who executed at least one job during a round in an epoch. This will reset every epoch.
+    address[] public poolCutReceivers;
 
     mapping(address => CommitData) public commitmentMap;
 
@@ -129,6 +136,8 @@ contract Coordinator is ICoordinator, TaxHandler {
         // could put these in assembly in memory, but be careful not to override anything
         address jobRegistryCache = jobRegistry;
         uint256 indicesLength = _indices.length;
+        uint96 numberOfExecutedJobsCreatedBeforeEpoch;
+        uint8 epochDurationCache = epochDuration;
         assembly {
             // Get the current free memory pointer
             let inputPtr := mload(0x40)
@@ -144,6 +153,12 @@ contract Coordinator is ICoordinator, TaxHandler {
             let writePtr := add(failedIndices, 0x20)
             let failedCount := 0
             let i := 0
+
+            // Allocate memory for return data (96 + 256 + 160 bits = 512 bits = 64 bytes)
+            let returnDataPtr := add(writePtr, mul(indicesLength, 0x20))
+            
+            let epochStartTime := sub(sload(epochEndTime.slot), epochDurationCache)
+
             for {} lt(i, indicesLength) {} {
                 let index := calldataload(add(_indices.offset, mul(i, 0x20)))
                 let gasLimit := calldataload(add(_gasLimits.offset, mul(i, 0x20)))
@@ -151,8 +166,23 @@ contract Coordinator is ICoordinator, TaxHandler {
                 mstore(add(inputPtr, 0x04), index)
                 mstore(add(inputPtr, 0x24), _feeRecipient)
 
-                let success := call(gasLimit, jobRegistryCache, 0, inputPtr, 0x44, 0, 0)
-
+                let success := call(
+                    gasLimit,        // gas
+                    jobRegistryCache,// address
+                    0,              // value
+                    inputPtr,       // input memory
+                    0x44,           // input size
+                    returnDataPtr,  // output memory
+                    0x60            // output size (3 * 32 bytes)
+                )
+                if success {
+                    // Load first return value (uint96) and check if it's > 0
+                    let jobCreationTime := mload(returnDataPtr)
+                    if lt(jobCreationTime, epochStartTime) {
+                        // job was created before this epoch started
+                        numberOfExecutedJobsCreatedBeforeEpoch := add(numberOfExecutedJobsCreatedBeforeEpoch, 1)
+                    }
+                }
                 if iszero(success) {
                     mstore(writePtr, index)
                     writePtr := add(writePtr, 32)
@@ -170,25 +200,47 @@ contract Coordinator is ICoordinator, TaxHandler {
             numberOfExecutedJobs = indicesLength - failedIndices.length;
         }
 
+        // TAXING AND POOL BALANCES UPDATE
         uint256 totalProtocolTax;
         uint256 totalExecutorTax;
-        uint256 poolReward;
         uint256 newBalance = executor.balance;
-        if (inRound) {
-            // check that this is first time in this epoch and round that caller is checking in
-            if (executor.lastCheckinEpoch == epoch && executor.lastCheckinRound == round) {
-                // not checking in, only pay protocol tax
-                if (numberOfExecutedJobs > 0) {
-                    unchecked {
-                        // totalProtocolTax will never exceed uint256 max value
-                        totalProtocolTax = protocolTax * numberOfExecutedJobs;
-                    }
-                    newBalance = (executorInfo[msg.sender].balance -= totalProtocolTax);
-                }
+        if (numberOfExecutedJobs > 0) {
+            // executor pays protocol and executor tax
+            uint256 totalTax;
+            // UPDATE EXECUTOR BALANCE AND COMPUTE TAXES
+            unchecked {
+                // totalProtocolTax and totalExecutorTax or sum of those will never exceed uint256 max value    
+                totalProtocolTax = protocolTax * numberOfExecutedJobs;
+                totalExecutorTax = executorTax * numberOfExecutedJobs;
+                totalTax = totalProtocolTax + totalExecutorTax;
             }
-            else {
-                // we check in for this epoch and round
-                // set lastCheckinEpoch to epoch and lastCheckinRound to round in one storage write (they reside in same slot)
+            newBalance = (executorInfo[msg.sender].balance -= totalTax);
+
+            // UPDATE POOL AND PROTOCOL BALANCES
+            unchecked {
+                // next epoch pool balance or protocol balance will never exceed uint256 max value since there are not enough tokens in existence
+                // always add to next epoch pool balance
+                nextEpochPoolBalance += totalExecutorTax;
+                protocolBalance += totalProtocolTax;
+            }
+        }
+
+        if (inRound) {
+
+            // update total number of executed jobs created before epoch. This we only update if were in round
+            totalNumberOfExecutedJobsCreatedBeforeEpoch += numberOfExecutedJobsCreatedBeforeEpoch;
+
+            bool checkInEpoch = executor.lastCheckinEpoch != epoch;
+            bool checkInRound = executor.lastCheckinRound != round;
+
+            // add to poolCutReceivers if this is first time executor checks in this epoch and numberOfExecutedJobsCreatedBeforeEpoch > 0
+            if (checkInEpoch && numberOfExecutedJobsCreatedBeforeEpoch > 0) {
+                poolCutReceivers.push(msg.sender);
+            }
+
+            // check that this is first time in this epoch and round that caller is checking in
+            if (checkInEpoch || checkInRound) {
+                // set lastCheckinEpoch to epoch and lastCheckinRound to round and increase executionsInEpochCreatedBeforeEpoch by numberOfExecutedJobsCreatedBeforeEpoch in one storage write (they reside in same slot)
                 assembly {
                     let epochValue := sload(epoch.slot)
                     let slot := executorInfo.slot
@@ -196,53 +248,36 @@ contract Coordinator is ICoordinator, TaxHandler {
                     mstore(0x20, slot)
                     let executorSlot := keccak256(0x00, 0x40)
                     let currentValue := sload(add(executorSlot, 1))
-                    // make 25 bytes of checking round and epoch
-                    let checkinVals := shl(0, round)
-                    checkinVals := or(checkinVals, shl(8, epochValue))
-                    // and(currentValue, 0xFFFFFFFFFFFFFF) keeps the first 7 bytes
-                    let finalVal := or(and(currentValue, 0xFFFFFFFFFFFFFF), shl(56, checkinVals))
+                    
+                    // Preserve first 7 bytes (active, initialized, arrayIndex)
+                    let preservedBits := and(currentValue, 0xFFFFFFFFFFFFFF)
+                    
+                    // Get current executionsInEpochCreatedBeforeEpoch value
+                    let currentExecutions := shr(160, currentValue)
+                    // Add new executions to it
+                    let newExecutions := add(currentExecutions, numberOfExecutedJobsCreatedBeforeEpoch)
+                    
+                    // Pack values:
+                    // [56-63]: lastCheckinRound (8 bits)
+                    // [64-159]: lastCheckinEpoch (96 bits)
+                    // [160-255]: executionsInEpochCreatedBeforeEpoch (96 bits)
+                    let packedValue := or(
+                        shl(56, round),
+                        or(
+                            shl(64, epochValue),
+                            shl(160, newExecutions)
+                        )
+                    )
+                    
+                    // Combine with preserved bits
+                    let finalVal := or(preservedBits, packedValue)
+                    
                     sstore(add(executorSlot, 1), finalVal)
                 }
-
-                // calculates fraction of *current* epochPoolBalance.
-                uint8 roundDiff;
-                unchecked {
-                    // round should never be more that roundsPerEpoch
-                    roundDiff = roundsPerEpoch - round;
-                }
-                poolReward = epochPoolBalance / roundDiff;
-                totalProtocolTax = protocolTax * numberOfExecutedJobs;
-
-                if (poolReward >= totalProtocolTax) {
-                    unchecked {
-                        // balance will not exceed uint256 max value
-                        newBalance = (executorInfo[msg.sender].balance += poolReward - totalProtocolTax);
-                    }
-                } else {
-                    newBalance = (executorInfo[msg.sender].balance -= totalProtocolTax - poolReward);
-                }
-                unchecked {
-                    // should never underflow as epochPoolBalance / roundsPerEpoch <= epochPoolBalance
-                    epochPoolBalance -= poolReward;
-                }
                 emit CheckIn(msg.sender, epoch, round);
-            }
-        } else {
-            if (numberOfExecutedJobs > 0) {
-                // executor pays protocol and executor tax
-                uint256 totalTax;
-                unchecked {
-                    // totalProtocolTax and totalExecutorTax or sum of those will never exceed uint256 max value    
-                    totalProtocolTax = protocolTax * numberOfExecutedJobs;
-                    totalExecutorTax = executorTax * numberOfExecutedJobs;
-                    totalTax = totalProtocolTax + totalExecutorTax;
-                }
-                newBalance = (executorInfo[msg.sender].balance -= totalTax);
-                // update pool balance for next epoch
-                unchecked {
-                    // nextEpochPoolBalance will never exceed uint256 max value since there are not enough tokens in existence
-                    nextEpochPoolBalance += totalExecutorTax;
-                }
+            } else if (numberOfExecutedJobsCreatedBeforeEpoch > 0) {
+                // increment executions of jobs created before epoch. We dont update check in data
+                executorInfo[msg.sender].executionsInEpochCreatedBeforeEpoch += numberOfExecutedJobsCreatedBeforeEpoch;
             }
         }
 
@@ -253,13 +288,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             executorInfo[msg.sender].active = false;
             emit ExecutorDeactivated(deactivatedExecutor);
         }
-
-        unchecked {
-            // protocolBalance will never exceed uint256 max value
-            protocolBalance += totalProtocolTax;
-        }
-
-        emit BatchExecution(failedIndices, totalProtocolTax, totalExecutorTax, poolReward);
+        emit BatchExecution(failedIndices, totalProtocolTax, totalExecutorTax);
     }
 
     /**
@@ -286,6 +315,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             arrayIndex: numberOfActiveExecutors,
             lastCheckinRound: 0,
             lastCheckinEpoch: 0,
+            executionsInEpochCreatedBeforeEpoch: 0,
             stakingTimestamp: block.timestamp
         });
         _activateExecutor(msg.sender);
@@ -313,6 +343,7 @@ contract Coordinator is ICoordinator, TaxHandler {
                 revert MinimumStakingPeriodNotOver();
             }
         }
+
         delete executorInfo[msg.sender];
         delete commitmentMap[msg.sender];
 
@@ -428,25 +459,51 @@ contract Coordinator is ICoordinator, TaxHandler {
      */
     function initiateEpoch() public {
         if (block.timestamp < epochEndTime) revert InvalidBlockTime();
+
+        uint256 totalDistributed;
+        // distribute pool balance to designated excutors of epoch who executed jobs which were created before epoch started
+        if(totalNumberOfExecutedJobsCreatedBeforeEpoch > 0) {
+            uint256 numberOfReceivers = poolCutReceivers.length;
+            for (uint256 i; i < numberOfReceivers; ++i) {
+                unchecked {
+                    // Safe because:
+                    // 1. epochPoolBalance * executionsInEpochCreatedBeforeEpoch cannot overflow (not enough tokens exist)
+                    // 2. Division by totalNumberOfExecutedJobsCreatedBeforeEpoch is safe (we checked > 0)
+                    // 3. executor.balance += executorShare cannot overflow (not enough tokens exist)
+
+                    // if executor has unstaked in the mean time, executor.executionsInEpochCreatedBeforeEpoch and the cut amount will be 0
+                    Executor storage executor = executorInfo[poolCutReceivers[i]];
+                    // Calculate executor's share of the epoch pool based on their proportion of executed jobs
+                    uint256 executorShare = (epochPoolBalance * executor.executionsInEpochCreatedBeforeEpoch) / 
+                            totalNumberOfExecutedJobsCreatedBeforeEpoch;
+                    executor.balance += executorShare;
+                    totalDistributed += executorShare;
+                    executor.executionsInEpochCreatedBeforeEpoch = 0;
+                }
+            }
+            delete poolCutReceivers;
+            totalNumberOfExecutedJobsCreatedBeforeEpoch = 0;
+        }
+
         unchecked {
-            // block.timestamp + uint8 will not reach uint256
+            // pool balances will never overflow uint256 in practise (not enough tokens in existence)
+            epochPoolBalance += nextEpochPoolBalance;
+        }
+        nextEpochPoolBalance = 0;
+        
+
+        unchecked {
+            // block.timestamp + uint8 will not reach uint256 in practise
             epochEndTime = block.timestamp + epochDuration;
         }
 
         uint192 newEpoch;
-
         unchecked {
             // number of epochs should not exceed uint192
             newEpoch = ++epoch;
         }
-        
         seed = keccak256(abi.encodePacked(newEpoch));
-        unchecked {
-            // balances will never overflow uint256
-            epochPoolBalance += nextEpochPoolBalance;
-        }
-        nextEpochPoolBalance = 0;
-        emit EpochInitiated(newEpoch);
+        emit EpochInitiated(newEpoch, totalDistributed);
     }
 
     /**

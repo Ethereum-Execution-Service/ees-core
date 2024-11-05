@@ -33,7 +33,8 @@ contract Executor is Test {
         // have to warp such that we are after the minimum staking period and not in reveal phase, execution rounds and slashing duration.
         uint256 epochEndTime = coordinator.epochEndTime();
         uint256 minimumStakingPeriod = coordinator.getMinimumStakingPeriod();
-        (,,,,,, uint256 stakingTimestamp) = coordinator.executorInfo(address(this));
+        (,,,,,,, uint256 stakingTimestamp) = coordinator.executorInfo(address(this));
+
         uint256 minimumUnstakeTime = stakingTimestamp + minimumStakingPeriod;
         if (
             (block.timestamp >= epochEndTime - coordinator.getEpochDuration() + coordinator.getCommitPhaseDuration()
@@ -42,7 +43,7 @@ contract Executor is Test {
             vm.warp(epochEndTime > minimumUnstakeTime ? epochEndTime : minimumUnstakeTime);
         }
 
-        (uint256 balance,,,,,,) = coordinator.executorInfo(address(this));
+        (uint256 balance,,,,,,,) = coordinator.executorInfo(address(this));
         amountUnstaked += balance;
         coordinator.unstake();
     }

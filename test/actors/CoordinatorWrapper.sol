@@ -59,7 +59,7 @@ contract CoordinatorWrapper is Test, TokenProvider {
     index = bound(index, 0, executors.length - 1);
 
     // if executor is not initialized, stake. This is to avoid further useless tests for this executor.
-    (,,bool initialized,,,,) = coordinator.executorInfo(address(executors[index]));
+    (,,bool initialized,,,,,) = coordinator.executorInfo(address(executors[index]));
     if (!initialized) {
       executors[index].stake();
     }
@@ -72,7 +72,7 @@ contract CoordinatorWrapper is Test, TokenProvider {
     index = bound(index, 0, executors.length - 1);
     
     // if executor is not initialized, stake. This is to avoid further useless tests for this executor.
-    (uint256 stakingBalance,,bool initialized,,,,) = coordinator.executorInfo(address(executors[index]));
+    (uint256 stakingBalance,,bool initialized,,,,,) = coordinator.executorInfo(address(executors[index]));
     if (!initialized) {
       executors[index].stake();
     }
@@ -93,7 +93,7 @@ contract CoordinatorWrapper is Test, TokenProvider {
     index = bound(index, 0, executors.length - 1);
     
     // if executor is not initialized, stake. If not active, topup.
-    (uint256 stakingBalance,bool active,bool initialized,,,,) = coordinator.executorInfo(address(executors[index]));
+    (uint256 stakingBalance,bool active,bool initialized,,,,,) = coordinator.executorInfo(address(executors[index]));
     if (!initialized) {
       executors[index].stake();
     }
@@ -119,7 +119,7 @@ contract CoordinatorWrapper is Test, TokenProvider {
     slashIndex = bound(slashIndex, 0, executors.length - 1);
 
     // if executor is not initialized, stake. If not active, topup.
-    (uint256 stakingBalance,bool active,bool initialized,,,,) = coordinator.executorInfo(address(executors[index]));
+    (uint256 stakingBalance,bool active,bool initialized,,,,,) = coordinator.executorInfo(address(executors[index]));
     if (!initialized) {
       executors[index].stake();
     }
@@ -131,7 +131,7 @@ contract CoordinatorWrapper is Test, TokenProvider {
     }
 
     // executor to slash should also be active and initialized
-    (uint256 stakingBalanceSlash,bool activeSlash,bool initializedSlash,,,,) = coordinator.executorInfo(address(executors[slashIndex]));
+    (uint256 stakingBalanceSlash,bool activeSlash,bool initializedSlash,,,,,) = coordinator.executorInfo(address(executors[slashIndex]));
     if (!initializedSlash) {
       executors[slashIndex].stake();
     }
@@ -151,7 +151,7 @@ contract CoordinatorWrapper is Test, TokenProvider {
     round = uint8(bound(round, 0, coordinator.getRoundsPerEpoch() - 1));
 
     // if executor is not initialized, stake. If not active, topup.
-    (uint256 stakingBalance,bool active,bool initialized,,,,) = coordinator.executorInfo(address(executors[index]));
+    (uint256 stakingBalance,bool active,bool initialized,,,,,) = coordinator.executorInfo(address(executors[index]));
     if (!initialized) {
       executors[index].stake();
     }
@@ -163,7 +163,7 @@ contract CoordinatorWrapper is Test, TokenProvider {
     }
 
     // executor to slash should also be active and initialized
-    (uint256 stakingBalanceSlash,bool activeSlash,bool initializedSlash,,,,) = coordinator.executorInfo(address(executors[slashIndex]));
+    (uint256 stakingBalanceSlash,bool activeSlash,bool initializedSlash,,,,,) = coordinator.executorInfo(address(executors[slashIndex]));
     if (!initializedSlash) {
       executors[slashIndex].stake();
     }
@@ -180,7 +180,7 @@ contract CoordinatorWrapper is Test, TokenProvider {
   function getTotalExecutorBalances() public view returns (uint256) {
     uint256 totalBalance;
     for (uint256 i = 0; i < executors.length; i++) {
-      (uint256 balance,,,,,,) = coordinator.executorInfo(address(executors[i]));
+      (uint256 balance,,,,,,,) = coordinator.executorInfo(address(executors[i]));
       totalBalance += balance;
     }
     return totalBalance;
@@ -253,10 +253,18 @@ contract CoordinatorWrapper is Test, TokenProvider {
     uint256 initializedExecutors;
     uint256 activeExecutors;
     for (uint256 i = 0; i < executors.length; i++) {
-      (,bool active,bool initialized,,,,) = coordinator.executorInfo(address(executors[i]));
+      (,bool active,bool initialized,,,,,) = coordinator.executorInfo(address(executors[i]));
       if (initialized) initializedExecutors++;
       if (active) activeExecutors++;
     }
     return (initializedExecutors, activeExecutors);
+  }
+
+  function getPoolCutReceiversLength() public view returns (uint256) {
+    return coordinator.getPoolCutReceiversLength();
+  }
+
+  function getTotalNumberOfExecutedJobsCreatedBeforeEpoch() public view returns (uint256) {
+    return coordinator.getTotalNumberOfExecutedJobsCreatedBeforeEpoch();
   }
 }

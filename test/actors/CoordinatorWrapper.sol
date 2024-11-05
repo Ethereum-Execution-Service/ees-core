@@ -248,4 +248,15 @@ contract CoordinatorWrapper is Test, TokenProvider {
   function getNextEpochPoolBalance() public view returns (uint256) {
     return coordinator.getNextEpochPoolBalance();
   }
+
+  function getNumberOfInitializedAndActiveExecutors() public view returns (uint256, uint256) {
+    uint256 initializedExecutors;
+    uint256 activeExecutors;
+    for (uint256 i = 0; i < executors.length; i++) {
+      (,bool active,bool initialized,,,,) = coordinator.executorInfo(address(executors[i]));
+      if (initialized) initializedExecutors++;
+      if (active) activeExecutors++;
+    }
+    return (initializedExecutors, activeExecutors);
+  }
 }

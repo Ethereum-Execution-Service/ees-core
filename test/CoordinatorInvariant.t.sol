@@ -51,5 +51,10 @@ contract CoordinatorInvariant is Test {
   function invariant_noGapsInActiveExecutorsArray() public view {
     assertFalse(coordinatorWrapper.gapsInActiveExecutorsArray());
   }
+
+  function invariant_numberOfInitializedExecutorsGeActive() public view {
+    (uint256 initializedExecutors, uint256 activeExecutors) = coordinatorWrapper.getNumberOfInitializedAndActiveExecutors();
+    assertGe(initializedExecutors, activeExecutors);
+  }
   
 }

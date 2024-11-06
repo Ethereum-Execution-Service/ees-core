@@ -6,10 +6,10 @@ import {MockCoordinator} from "../mocks/MockCoordinator.sol";
 import {TokenProvider} from "../utils/TokenProvider.sol";
 import {ICoordinator} from "../../src/interfaces/ICoordinator.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
-import {Executor} from "./Executor.sol";
+import {Executor} from "../actors/Executor.sol";
 import {DummyJobRegistry} from "../mocks/dummyContracts/DummyJobRegistry.sol";
 
-contract CoordinatorWrapper is Test, TokenProvider {
+contract CoordinatorHandler is Test, TokenProvider {
   MockCoordinator coordinator;
   TokenProvider tokenProvider;
   DummyJobRegistry jobRegistry;

@@ -29,6 +29,7 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
 
     address internal immutable executionContract;
 
+    // covering constant gas usage of execute which is not already measured in the function
     uint256 private constant _EXECUTION_GAS_OVERHEAD = 200000;
 
     // for single use nonces

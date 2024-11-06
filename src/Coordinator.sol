@@ -465,13 +465,14 @@ contract Coordinator is ICoordinator, TaxHandler {
         // distribute pool balance to designated excutors of epoch who executed jobs which were created before epoch started
         if(totalNumberOfExecutedJobsCreatedBeforeEpoch > 0) {
             uint256 numberOfReceivers = poolCutReceivers.length;
-            for (uint256 i; i < numberOfReceivers; ++i) {
+            for (uint256 i; i < numberOfReceivers;) {
                 unchecked {
                     // Safe because:
                     // 1. epochPoolBalance * executionsInEpochCreatedBeforeEpoch cannot overflow (not enough tokens exist)
                     // 2. Division by totalNumberOfExecutedJobsCreatedBeforeEpoch is safe (we checked > 0)
                     // 3. executor.balance += executorShare cannot overflow (not enough tokens exist)
-
+                    // 4. ++i is safe because numberOfReceivers is less than uint256 max value
+                    
                     // if executor has unstaked in the mean time, executor.executionsInEpochCreatedBeforeEpoch and the cut amount will be 0
                     Executor storage executor = executorInfo[poolCutReceivers[i]];
                     // Calculate executor's share of the epoch pool based on their proportion of executed jobs
@@ -480,6 +481,7 @@ contract Coordinator is ICoordinator, TaxHandler {
                     executor.balance += executorShare;
                     totalDistributed += executorShare;
                     executor.executionsInEpochCreatedBeforeEpoch = 0;
+                    ++i;
                 }
             }
             delete poolCutReceivers;

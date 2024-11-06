@@ -13,7 +13,7 @@ import {TaxHandler} from "./TaxHandler.sol";
 contract Coordinator is ICoordinator, TaxHandler {
     using SafeTransferLib for ERC20;
 
-    address internal jobRegistry;
+    address[] public jobRegistries;
     bytes32 public seed;
     uint192 public epoch;
     uint256 public epochEndTime;
@@ -103,7 +103,8 @@ contract Coordinator is ICoordinator, TaxHandler {
     function executeBatch(
         uint256[] calldata _indices,
         uint256[] calldata _gasLimits,
-        address _feeRecipient
+        address _feeRecipient,
+        uint8 _jobRegistryIndex
     ) public returns (uint256[] memory failedIndices) {
         // check that caller is active executor
         Executor memory executor = executorInfo[msg.sender];
@@ -134,7 +135,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             }
         }
         // could put these in assembly in memory, but be careful not to override anything
-        address jobRegistryCache = jobRegistry;
+        address jobRegistryCache = jobRegistries[_jobRegistryIndex];
         uint256 indicesLength = _indices.length;
         uint96 numberOfExecutedJobsCreatedBeforeEpoch;
         uint8 epochDurationCache = epochDuration;
@@ -288,7 +289,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             executorInfo[msg.sender].active = false;
             emit ExecutorDeactivated(deactivatedExecutor);
         }
-        emit BatchExecution(failedIndices, totalProtocolTax, totalExecutorTax);
+        emit BatchExecution(_jobRegistryIndex, failedIndices, totalProtocolTax, totalExecutorTax);
     }
 
     /**
@@ -549,8 +550,13 @@ contract Coordinator is ICoordinator, TaxHandler {
         emit Reveal(msg.sender, epoch, seed);
     }
 
-    function setJobRegistry(address _jobRegistry) public onlyOwner {
-        jobRegistry = _jobRegistry;
+    /**
+     * @notice Adds a job registry to the coordinator.
+     * @notice Can only be called by the owner.
+     * @param _registry The address of the job registry to add.
+     */
+    function addJobRegistry(address _registry) public onlyOwner {
+        jobRegistries.push(_registry);
     }
 
     /**

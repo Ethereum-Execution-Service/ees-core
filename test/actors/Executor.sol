@@ -99,14 +99,14 @@ contract Executor is Test {
           coordinator.setSeed(seed);
 
           // now we can execute
-          coordinator.executeBatch(jobIds, gasLimits, address(this));
+          coordinator.executeBatch(jobIds, gasLimits, address(this), 0);
         } else {
           // we are not in round, just execute
-          coordinator.executeBatch(jobIds, gasLimits, address(this));
+          coordinator.executeBatch(jobIds, gasLimits, address(this), 0);
         }
       } else {
         // we are not in rounds, just execute
-        coordinator.executeBatch(jobIds, gasLimits, address(this));
+        coordinator.executeBatch(jobIds, gasLimits, address(this), 0);
       }
     }
 

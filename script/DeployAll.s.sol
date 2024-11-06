@@ -69,7 +69,7 @@ contract DeployAll is Script {
         jobRegistry = new JobRegistry(treasury, address(coordinator));
         console2.log("JobRegistry Deployed:", address(jobRegistry));
 
-        coordinator.setJobRegistry(address(jobRegistry));
+        coordinator.addJobRegistry(address(jobRegistry));
 
         regularTimeInterval = new RegularTimeInterval(jobRegistry);
         console2.log("RegularTimeInterval Deployed:", address(regularTimeInterval));

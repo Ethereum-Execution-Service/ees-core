@@ -41,7 +41,7 @@ contract CoordinatorHandler is Test, TokenProvider {
     coordinator = new MockCoordinator(spec, address(0x5));
     jobRegistry = new DummyJobRegistry();
     vm.prank(address(0x5));
-    coordinator.setJobRegistry(address(jobRegistry));
+    coordinator.addJobRegistry(address(jobRegistry));
     coordinator.initiateEpoch();
   }
 

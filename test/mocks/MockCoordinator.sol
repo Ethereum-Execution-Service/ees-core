@@ -60,7 +60,7 @@ contract MockCoordinator is Coordinator {
         epoch = _epoch;
     }
 
-    function setNumberOfActiveExecutors(uint40 _numberOfActiveExecutors) public {
+    function setNumberOfActiveExecutors(uint32 _numberOfActiveExecutors) public {
         numberOfActiveExecutors = _numberOfActiveExecutors;
     }
 

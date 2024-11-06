@@ -17,7 +17,7 @@ contract Coordinator is ICoordinator, TaxHandler {
     bytes32 public seed;
     uint192 public epoch;
     uint256 public epochEndTime;
-    uint40 public numberOfActiveExecutors;
+    uint32 public numberOfActiveExecutors;
 
     address internal immutable stakingToken;
     uint256 internal immutable stakingAmount;
@@ -250,30 +250,40 @@ contract Coordinator is ICoordinator, TaxHandler {
                     let executorSlot := keccak256(0x00, 0x40)
                     let currentValue := sload(add(executorSlot, 1))
                     
-                    // Preserve first 7 bytes (active, initialized, arrayIndex)
-                    let preservedBits := and(currentValue, 0xFFFFFFFFFFFFFF)
-                    
+                    // Preserve first 6 bytes (active, initialized, arrayIndex)
+                    let preservedBits := and(currentValue, 0xFFFFFFFFFFFF)
+
+
+                    // Get current roundsCheckedInEpoch (1 byte after first 6 bytes)
+                    let currentRoundsChecked := and(shr(48, currentValue), 0xFF)
+                    // Increment roundsCheckedInEpoch by 1
+                    let newRoundsChecked := add(currentRoundsChecked, 1)
+
                     // Get current executionsInEpochCreatedBeforeEpoch value
                     let currentExecutions := shr(160, currentValue)
                     // Add new executions to it
                     let newExecutions := add(currentExecutions, numberOfExecutedJobsCreatedBeforeEpoch)
                     
                     // Pack values:
-                    // [56-63]: lastCheckinRound (8 bits)
-                    // [64-159]: lastCheckinEpoch (96 bits)
-                    // [160-255]: executionsInEpochCreatedBeforeEpoch (96 bits)
+                    // [0-47]: preserved bits (active, initialized, arrayIndex) (6 bytes)
+                    // [48-55]: roundsCheckedInEpoch (1 byte)
+                    // [56-63]: lastCheckinRound (1 byte)
+                    // [64-159]: lastCheckinEpoch (12 bytes)
+                    // [160-255]: executionsInEpochCreatedBeforeEpoch (12 bytes)
                     let packedValue := or(
-                        shl(56, round),
+                        preservedBits,
                         or(
-                            shl(64, epochValue),
-                            shl(160, newExecutions)
+                            shl(48, newRoundsChecked),
+                            or(
+                                shl(56, round),
+                                or(
+                                    shl(64, epochValue),
+                                    shl(160, newExecutions)
+                                )
+                            )
                         )
                     )
-                    
-                    // Combine with preserved bits
-                    let finalVal := or(preservedBits, packedValue)
-                    
-                    sstore(add(executorSlot, 1), finalVal)
+                    sstore(add(executorSlot, 1), packedValue)
                 }
                 emit CheckIn(msg.sender, epoch, round);
             } else if (numberOfExecutedJobsCreatedBeforeEpoch > 0) {
@@ -314,6 +324,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             active: true,
             initialized: true,
             arrayIndex: numberOfActiveExecutors,
+            roundsCheckedInEpoch: 0,
             lastCheckinRound: 0,
             lastCheckinEpoch: 0,
             executionsInEpochCreatedBeforeEpoch: 0,
@@ -464,6 +475,9 @@ contract Coordinator is ICoordinator, TaxHandler {
         uint256 totalDistributed;
         // distribute pool balance to designated excutors of epoch who executed jobs which were created before epoch started
         if(totalNumberOfExecutedJobsCreatedBeforeEpoch > 0) {
+
+            uint256 maxRewardTokensPerRound = epochPoolBalance / roundsPerEpoch;
+
             uint256 numberOfReceivers = poolCutReceivers.length;
             for (uint256 i; i < numberOfReceivers;) {
                 unchecked {
@@ -472,14 +486,24 @@ contract Coordinator is ICoordinator, TaxHandler {
                     // 2. Division by totalNumberOfExecutedJobsCreatedBeforeEpoch is safe (we checked > 0)
                     // 3. executor.balance += executorShare cannot overflow (not enough tokens exist)
                     // 4. ++i is safe because numberOfReceivers is less than uint256 max value
-                    
+
                     // if executor has unstaked in the mean time, executor.executionsInEpochCreatedBeforeEpoch and the cut amount will be 0
                     Executor storage executor = executorInfo[poolCutReceivers[i]];
-                    // Calculate executor's share of the epoch pool based on their proportion of executed jobs
-                    uint256 executorShare = (epochPoolBalance * executor.executionsInEpochCreatedBeforeEpoch) / 
+                    // max number of tokens that can be rewarded to executor for this epoch, it is scaled by number of checked in rounds
+                    uint256 maxRewardTokens = executor.roundsCheckedInEpoch * maxRewardTokensPerRound;
+
+                    uint256 executionRewards = (epochPoolBalance * executor.executionsInEpochCreatedBeforeEpoch) / 
                             totalNumberOfExecutedJobsCreatedBeforeEpoch;
+
+                    // take min of executionRewards and maxRewardTokens
+                    uint256 executorShare = executionRewards < maxRewardTokens ? 
+                        executionRewards : 
+                        maxRewardTokens;
+
                     executor.balance += executorShare;
                     totalDistributed += executorShare;
+                    // these are in same slot, update via assembly
+                    executor.roundsCheckedInEpoch = 0;
                     executor.executionsInEpochCreatedBeforeEpoch = 0;
                     ++i;
                 }
@@ -575,7 +599,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             activeExecutors.push(_executor);
         }
         unchecked {
-            // number of active executors will never be more than uint40 max value in practise
+            // number of active executors will never be more than uint32 max value in practise
             ++numberOfActiveExecutors;
         }
     }
@@ -588,8 +612,8 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @return executorAtIndex The address of the executor at the given index.
      * @return lastExecutor The address of the last executor in activeExecutors.
      */
-    function _deactivateExecutor(uint40 _index) private returns (address, address) {
-        uint40 newNumberOfActiveExecutors;
+    function _deactivateExecutor(uint32 _index) private returns (address, address) {
+        uint32 newNumberOfActiveExecutors;
         unchecked {
             // here the executor is active, so numberOfActiveExecutors should be greater than 0
             newNumberOfActiveExecutors = --numberOfActiveExecutors;

@@ -6,7 +6,8 @@ interface ICoordinator {
         uint256 balance;
         bool active;
         bool initialized;
-        uint40 arrayIndex;
+        uint32 arrayIndex;
+        uint8 roundsCheckedInEpoch;
         uint8 lastCheckinRound;
         uint96 lastCheckinEpoch;
         uint96 executionsInEpochCreatedBeforeEpoch;

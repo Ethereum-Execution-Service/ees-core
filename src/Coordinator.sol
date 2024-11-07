@@ -32,10 +32,10 @@ contract Coordinator is ICoordinator, TaxHandler {
 
     uint8 internal immutable roundsPerEpoch;
 
-    uint256 internal epochPoolBalance;
-    uint256 internal nextEpochPoolBalance;
+    uint256 public epochPoolBalance;
+    uint256 public nextEpochPoolBalance;
 
-    uint256 internal protocolBalance;
+    uint256 public protocolBalance;
 
     // all in seconds
     uint8 internal immutable roundDuration;

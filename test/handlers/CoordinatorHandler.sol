@@ -267,4 +267,56 @@ contract CoordinatorHandler is Test, TokenProvider {
   function getTotalNumberOfExecutedJobsCreatedBeforeEpoch() public view returns (uint256) {
     return coordinator.getTotalNumberOfExecutedJobsCreatedBeforeEpoch();
   }
+
+  function getExecutorsWithRoundInfo() private view returns (address[] memory) {
+    // First, count how many executors meet our criteria
+    uint256 count = 0;
+    for (uint256 i = 0; i < coordinator.getNumberOfActiveExecutors(); i++) {
+        (,,,, uint8 roundsCheckedInEpoch,,, uint96 executionsInEpochCreatedBeforeEpoch,) = coordinator.executorInfo(coordinator.activeExecutors(i));
+        if(roundsCheckedInEpoch != 0 || executionsInEpochCreatedBeforeEpoch != 0) {
+            count++;
+        }
+    }
+
+    // Create array with exact size needed
+    address[] memory executorsWithInfo = new address[](count);
+    
+    // Fill the array
+    uint256 currentIndex = 0;
+    for (uint256 i = 0; i < coordinator.getNumberOfActiveExecutors(); i++) {
+        (,,,, uint8 roundsCheckedInEpoch,,, uint96 executionsInEpochCreatedBeforeEpoch,) = coordinator.executorInfo(coordinator.activeExecutors(i));
+        if(roundsCheckedInEpoch != 0 || executionsInEpochCreatedBeforeEpoch != 0) {
+            executorsWithInfo[currentIndex] = coordinator.activeExecutors(i);
+            currentIndex++;
+        }
+    }
+    
+    return executorsWithInfo;
+  }
+
+  function getExecutorsWithRoundInfoInPoolCutReceivers() public view returns (bool) {
+
+    // returns true iff getExecutorsWithRoundInfo() and poolCutReceivers contain the same addresses
+    address[] memory executorsWithInfo = getExecutorsWithRoundInfo();
+    uint256 poolCutReceiversLength = coordinator.getPoolCutReceiversLength();
+
+    if (executorsWithInfo.length != poolCutReceiversLength) {
+        return false;
+    }
+    // Check each executor with info is in poolCutReceivers
+    for (uint256 i = 0; i < executorsWithInfo.length; i++) {
+        bool found = false;
+        for (uint256 j = 0; j < poolCutReceiversLength; j++) {
+            if (executorsWithInfo[i] == coordinator.poolCutReceivers(j)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+
+    return true;
+  }
 }

@@ -69,5 +69,8 @@ contract CoordinatorInvariant is Test {
       assertEq(coordinatorHandler.getPoolCutReceiversLength(), 0);
     }
   }
-  
+
+  function invariant_executorsWithRoundInfoInPoolCutReceivers() public view {
+    assertTrue(coordinatorHandler.getExecutorsWithRoundInfoInPoolCutReceivers());
+  }
 }

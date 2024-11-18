@@ -53,14 +53,14 @@ contract Coordinator is ICoordinator, TaxHandler {
     // executor info
     mapping(address => Executor) public executorInfo;
 
-    // total number of executed jobs during rounds in this epoch that were created before the epoch started
-    uint256 public totalNumberOfExecutedJobsCreatedBeforeEpoch;
+    // total number of executed jobs during rounds in this epoch
+    uint96 public executedJobsInRoundsOfEpoch;
     // addresses to receive pool cut. These are designated executors who executed at least one job during a round in an epoch. This will reset every epoch.
     address[] public poolCutReceivers;
 
     mapping(address => CommitData) public commitmentMap;
 
-    constructor(InitSpec memory _spec, address _treasury) TaxHandler(_treasury, _spec.protocolTax, _spec.executorTax) {
+    constructor(InitSpec memory _spec, address _treasury) TaxHandler(_treasury, _spec.executionTax, _spec.protocolPoolCutBps) {
         require(
             _spec.stakingBalanceThreshold <= _spec.stakingAmount,
             "Staking: threshold must be less than or equal to staking amount"
@@ -137,8 +137,8 @@ contract Coordinator is ICoordinator, TaxHandler {
         // could put these in assembly in memory, but be careful not to override anything
         address jobRegistryCache = jobRegistries[_jobRegistryIndex];
         uint256 indicesLength = _indices.length;
-        uint96 numberOfExecutedJobsCreatedBeforeEpoch;
         uint8 epochDurationCache = epochDuration;
+        uint96 numberOfExecutedJobs;
         assembly {
             // Get the current free memory pointer
             let inputPtr := mload(0x40)
@@ -176,14 +176,6 @@ contract Coordinator is ICoordinator, TaxHandler {
                     returnDataPtr,  // output memory
                     0x60            // output size (3 * 32 bytes)
                 )
-                if success {
-                    // Load first return value (uint96) and check if it's > 0
-                    let jobCreationTime := mload(returnDataPtr)
-                    if lt(jobCreationTime, epochStartTime) {
-                        // job was created before this epoch started
-                        numberOfExecutedJobsCreatedBeforeEpoch := add(numberOfExecutedJobsCreatedBeforeEpoch, 1)
-                    }
-                }
                 if iszero(success) {
                     mstore(writePtr, index)
                     writePtr := add(writePtr, 32)
@@ -195,53 +187,53 @@ contract Coordinator is ICoordinator, TaxHandler {
             mstore(0x40, writePtr)
         }
 
-        uint256 numberOfExecutedJobs;
         unchecked {
-            // cannot underflow as failedIndices.length <= indicesLength
-            numberOfExecutedJobs = indicesLength - failedIndices.length;
+            // numberOfExecutedJobs cannot underflow as failedIndices.length <= indicesLength. Can safely cast since the difference is less than uint96 max value realistically.
+            // executedJobsInRoundsOfEpoch cannot realistically overflow uint96
+            numberOfExecutedJobs = uint96(indicesLength - failedIndices.length);
+            if(inRound) {
+                executedJobsInRoundsOfEpoch += numberOfExecutedJobs;
+            }
         }
 
         // TAXING AND POOL BALANCES UPDATE
-        uint256 totalProtocolTax;
-        uint256 totalExecutorTax;
+        uint256 totalTax;
         uint256 newBalance = executor.balance;
         if (numberOfExecutedJobs > 0) {
-            // executor pays protocol and executor tax
-            uint256 totalTax;
-            // UPDATE EXECUTOR BALANCE AND COMPUTE TAXES
+            // UPDATE EXECUTOR BALANCE AND COMPUTE TAX
             unchecked {
-                // totalProtocolTax and totalExecutorTax or sum of those will never exceed uint256 max value    
-                totalProtocolTax = protocolTax * numberOfExecutedJobs;
-                totalExecutorTax = executorTax * numberOfExecutedJobs;
-                totalTax = totalProtocolTax + totalExecutorTax;
+                // totalTax is never greater than uint256 max value realistically
+                totalTax = executionTax * numberOfExecutedJobs;
             }
             newBalance = (executorInfo[msg.sender].balance -= totalTax);
 
             // UPDATE POOL AND PROTOCOL BALANCES
             unchecked {
                 // next epoch pool balance or protocol balance will never exceed uint256 max value since there are not enough tokens in existence
-                // always add to next epoch pool balance
-                nextEpochPoolBalance += totalExecutorTax;
-                protocolBalance += totalProtocolTax;
+                // during designated rounds, tax goes to protocol balance.
+                // otherwise, tax goes to next epoch pool balance.
+                if(inRound) {
+                    protocolBalance += totalTax;
+                }
+                else {
+                    nextEpochPoolBalance += totalTax;
+                }
             }
         }
 
         if (inRound) {
 
-            // update total number of executed jobs created before epoch. This we only update if were in round
-            totalNumberOfExecutedJobsCreatedBeforeEpoch += numberOfExecutedJobsCreatedBeforeEpoch;
-
             bool checkInEpoch = executor.lastCheckinEpoch != epoch;
             bool checkInRound = executor.lastCheckinRound != round;
 
-            // add to poolCutReceivers if this is first time executor checks in this epoch and numberOfExecutedJobsCreatedBeforeEpoch > 0
-            if (checkInEpoch && numberOfExecutedJobsCreatedBeforeEpoch > 0) {
+            // add to poolCutReceivers if this is first time executor checks in this epoch and numberOfExecutedJobs > 0
+            if (checkInEpoch && numberOfExecutedJobs > 0) {
                 poolCutReceivers.push(msg.sender);
             }
 
             // check that this is first time in this epoch and round that caller is checking in
             if (checkInEpoch || checkInRound) {
-                // set lastCheckinEpoch to epoch and lastCheckinRound to round and increase executionsInEpochCreatedBeforeEpoch by numberOfExecutedJobsCreatedBeforeEpoch in one storage write (they reside in same slot)
+                // set lastCheckinEpoch to epoch and lastCheckinRound to round and increase executionsInRoundsInEpoch by numberOfExecutedJobs in one storage write (they reside in same slot)
                 assembly {
                     let epochValue := sload(epoch.slot)
                     let slot := executorInfo.slot
@@ -262,7 +254,7 @@ contract Coordinator is ICoordinator, TaxHandler {
                     // Get current executionsInEpochCreatedBeforeEpoch value
                     let currentExecutions := shr(160, currentValue)
                     // Add new executions to it
-                    let newExecutions := add(currentExecutions, numberOfExecutedJobsCreatedBeforeEpoch)
+                    let newExecutions := add(currentExecutions, numberOfExecutedJobs)
                     
                     // Pack values:
                     // [0-47]: preserved bits (active, initialized, arrayIndex) (6 bytes)
@@ -286,9 +278,9 @@ contract Coordinator is ICoordinator, TaxHandler {
                     sstore(add(executorSlot, 1), packedValue)
                 }
                 emit CheckIn(msg.sender, epoch, round);
-            } else if (numberOfExecutedJobsCreatedBeforeEpoch > 0) {
+            } else if (numberOfExecutedJobs > 0) {
                 // increment executions of jobs created before epoch. We dont update check in data
-                executorInfo[msg.sender].executionsInEpochCreatedBeforeEpoch += numberOfExecutedJobsCreatedBeforeEpoch;
+                executorInfo[msg.sender].executionsInRoundsInEpoch += numberOfExecutedJobs;
             }
         }
 
@@ -299,7 +291,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             executorInfo[msg.sender].active = false;
             emit ExecutorDeactivated(deactivatedExecutor);
         }
-        emit BatchExecution(_jobRegistryIndex, failedIndices, totalProtocolTax, totalExecutorTax);
+        emit BatchExecution(_jobRegistryIndex, failedIndices, totalTax);
     }
 
     /**
@@ -327,7 +319,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             roundsCheckedInEpoch: 0,
             lastCheckinRound: 0,
             lastCheckinEpoch: 0,
-            executionsInEpochCreatedBeforeEpoch: 0,
+            executionsInRoundsInEpoch: 0,
             stakingTimestamp: block.timestamp
         });
         _activateExecutor(msg.sender);
@@ -472,9 +464,14 @@ contract Coordinator is ICoordinator, TaxHandler {
     function initiateEpoch() public {
         if (block.timestamp < epochEndTime) revert InvalidBlockTime();
 
+        // TAKE POOL CUT
+        uint256 protocolCut = (epochPoolBalance * protocolPoolCutBps) / BPS_DENOMINATOR;
+        protocolBalance += protocolCut;
+        epochPoolBalance -= protocolCut;
+
         uint256 totalDistributed;
         // distribute pool balance to designated excutors of epoch who executed jobs which were created before epoch started
-        if(totalNumberOfExecutedJobsCreatedBeforeEpoch > 0) {
+        if(executedJobsInRoundsOfEpoch > 0) {
 
             uint256 maxRewardTokensPerRound = epochPoolBalance / roundsPerEpoch;
 
@@ -492,8 +489,7 @@ contract Coordinator is ICoordinator, TaxHandler {
                     // max number of tokens that can be rewarded to executor for this epoch, it is scaled by number of checked in rounds
                     uint256 maxRewardTokens = executor.roundsCheckedInEpoch * maxRewardTokensPerRound;
 
-                    uint256 executionRewards = (epochPoolBalance * executor.executionsInEpochCreatedBeforeEpoch) / 
-                            totalNumberOfExecutedJobsCreatedBeforeEpoch;
+                    uint256 executionRewards = maxRewardPerExecution * executor.executionsInRoundsInEpoch;
 
                     // take min of executionRewards and maxRewardTokens
                     uint256 executorShare = executionRewards < maxRewardTokens ? 
@@ -504,12 +500,12 @@ contract Coordinator is ICoordinator, TaxHandler {
                     totalDistributed += executorShare;
                     // these are in same slot, update via assembly
                     executor.roundsCheckedInEpoch = 0;
-                    executor.executionsInEpochCreatedBeforeEpoch = 0;
+                    executor.executionsInRoundsInEpoch = 0;
                     ++i;
                 }
             }
             delete poolCutReceivers;
-            totalNumberOfExecutedJobsCreatedBeforeEpoch = 0;
+            executedJobsInRoundsOfEpoch = 0;
         }
 
         unchecked {
@@ -530,7 +526,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             newEpoch = ++epoch;
         }
         seed = keccak256(abi.encodePacked(newEpoch));
-        emit EpochInitiated(newEpoch, totalDistributed);
+        emit EpochInitiated(newEpoch, totalDistributed, protocolCut);
     }
 
     /**
@@ -706,8 +702,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             inactiveSlashingAmount,
             commitSlashingAmount,
             roundsPerEpoch,
-            executorTax,
-            protocolTax,
+            executionTax,
             roundDuration,
             roundBuffer,
             slashingDuration,
@@ -719,10 +714,10 @@ contract Coordinator is ICoordinator, TaxHandler {
     /**
      * @notice Exports the tax configuration of the Coordinator contract
      * @return stakingToken The address of the staking token
-     * @return protocolTax The protocol tax
-     * @return executorTax The executor tax
+     * @return executionTax The execution tax
+     * @return protocolPoolCutBps The protocol pool cut in basis points
      */
     function getTaxConfig() public view returns (address, uint256, uint256) {
-        return (stakingToken, protocolTax, executorTax);
+        return (stakingToken, executionTax, protocolPoolCutBps);
     }
 }

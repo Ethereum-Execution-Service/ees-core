@@ -52,8 +52,8 @@ contract PeggedLinearAuctionTest is Test, GasSnapshot, TokenProvider {
             commitPhaseDuration: 15,
             revealPhaseDuration: 15,
             slashingDuration: 30,
-            executorTax: 2,
-            protocolTax: 2
+            executionTax: 4,
+            protocolPoolCutBps: 1000
         });
 
         jobRegistry = new JobRegistry(address2, address(0x5));

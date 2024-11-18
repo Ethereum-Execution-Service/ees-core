@@ -6,51 +6,72 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 /// @author Victor Brevig
 /// @notice TaxHandler is responsible for handling tax updates for EES.
 contract TaxHandler is Owned {
-    uint256 internal lastProtocolTaxUpdate;
-    uint256 internal lastExecutorTaxUpdate;
-    uint24 internal constant protocolTaxUpdateCooldown = 7 days;
-    uint24 internal constant executorTaxUpdateCooldown = 7 days;
-
+    uint256 internal lastExecutionTaxUpdate;
+    uint256 internal lastProtocolPoolCutUpdate;
+    uint24 internal constant executionTaxUpdateCooldown = 7 days;
+    uint24 internal constant protocolPoolCutUpdateCooldown = 7 days;
     // 10%
-    uint16 internal constant protocolTaxUpdateBps = 1_000;
-    uint16 internal constant executorTaxUpdateBps = 1_000;
+    uint16 internal constant executionTaxUpdateBps = 1_000;
+    // 10%
+    uint16 internal constant protocolPoolCutUpdateBps = 1_000;
 
-    uint256 internal protocolTax;
-    uint256 internal executorTax;
+    uint256 internal executionTax; // in units of tax token
+    uint256 internal protocolPoolCutBps; // in basis points (e.g. 1000 = 10%)
+    uint256 internal constant BPS_DENOMINATOR = 10000; // 100% in basis points
+
+    // maximum reward per execution in tax token. Should be updated when executionTax or protocolPoolCutBps are updated
+    uint256 internal maxRewardPerExecution;
+
+
 
     error TaxUpdateTooLarge();
     error UpdateOnCooldown();
 
-    constructor(address _owner, uint256 _protocolTax, uint256 _executorTax) Owned(_owner) {
-        lastProtocolTaxUpdate = block.timestamp;
-        lastExecutorTaxUpdate = block.timestamp;
-        protocolTax = _protocolTax;
-        executorTax = _executorTax;
+    constructor(address _owner, uint256 _executionTax, uint256 _protocolPoolCutBps) Owned(_owner) {
+        require(_protocolPoolCutBps < BPS_DENOMINATOR, "TaxHandler: protocol pool cut bps must be less than 100%");
+        lastExecutionTaxUpdate = block.timestamp;
+        executionTax = _executionTax;
+        lastProtocolPoolCutUpdate = block.timestamp;
+        protocolPoolCutBps = _protocolPoolCutBps;
+        maxRewardPerExecution = (executionTax * protocolPoolCutBps) / BPS_DENOMINATOR;
     }
 
-    function updateProtocolTax(uint256 _protocolTax) public onlyOwner {
+    /**
+     * @notice Update the execution tax.
+     * @notice Also updates maxRewardPerExecution accordingly.
+     * @dev Can update executionTax at most executionTaxUpdateBps basis points every executionTaxUpdateCooldown seconds. 
+     * @param _executionTax The new execution tax.
+     */
+    function updateExecutionTax(uint256 _executionTax) public onlyOwner {
         // can change value at most X percent every Y time
-        if (block.timestamp < lastProtocolTaxUpdate + protocolTaxUpdateCooldown) revert UpdateOnCooldown();
+        if (block.timestamp < lastExecutionTaxUpdate + executionTaxUpdateCooldown) revert UpdateOnCooldown();
 
-        uint256 diff = _protocolTax > protocolTax ? _protocolTax - protocolTax : protocolTax - _protocolTax;
-
-        uint256 maxDiff = protocolTax * protocolTaxUpdateBps / 10_000;
+        uint256 diff = _executionTax > executionTax ? _executionTax - executionTax : executionTax - _executionTax;
+        uint256 maxDiff = executionTax * executionTaxUpdateBps / 10_000;
         if (diff > maxDiff) revert TaxUpdateTooLarge();
 
-        lastProtocolTaxUpdate = block.timestamp;
-        protocolTax = _protocolTax;
+        lastExecutionTaxUpdate = block.timestamp;
+        executionTax = _executionTax;
+        maxRewardPerExecution = (executionTax * protocolPoolCutBps) / BPS_DENOMINATOR;
     }
 
-    function updateExecutorTax(uint256 _executorTax) public onlyOwner {
+    /**
+     * @notice Update the protocol pool cut bps.
+     * @notice Also updates maxRewardPerExecution accordingly.
+     * @dev Can update protocolPoolCutBps at most protocolPoolCutUpdateBps basis points every protocolPoolCutUpdateCooldown seconds. 
+     * @param _protocolPoolCutBps The new protocol pool cut bps.
+     */
+    function updateProtocolPoolCutBps(uint256 _protocolPoolCutBps) public onlyOwner {
         // can change value at most X percent every Y time
-        if (block.timestamp < lastExecutorTaxUpdate + executorTaxUpdateCooldown) revert UpdateOnCooldown();
+        if (block.timestamp < lastProtocolPoolCutUpdate + protocolPoolCutUpdateCooldown) revert UpdateOnCooldown();
 
-        uint256 diff = _executorTax > executorTax ? _executorTax - executorTax : executorTax - _executorTax;
-        uint256 maxDiff = executorTax * executorTaxUpdateBps / 10_000;
+        uint256 diff = _protocolPoolCutBps > protocolPoolCutBps ? _protocolPoolCutBps - protocolPoolCutBps : protocolPoolCutBps - _protocolPoolCutBps;
+        uint256 maxDiff = protocolPoolCutBps * protocolPoolCutUpdateBps / 10_000;
         if (diff > maxDiff) revert TaxUpdateTooLarge();
 
-        lastExecutorTaxUpdate = block.timestamp;
-        executorTax = _executorTax;
+        lastProtocolPoolCutUpdate = block.timestamp;
+        protocolPoolCutBps = _protocolPoolCutBps;
+        maxRewardPerExecution = (executionTax * protocolPoolCutBps) / BPS_DENOMINATOR;
     }
 
 }

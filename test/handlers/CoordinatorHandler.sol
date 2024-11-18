@@ -35,8 +35,8 @@ contract CoordinatorHandler is Test, TokenProvider {
       commitPhaseDuration: 15,
       revealPhaseDuration: 15,
       slashingDuration: 30,
-      executorTax: 2,
-      protocolTax: 2
+      executionTax: 4,
+      protocolPoolCutBps: 1000
     });
     coordinator = new MockCoordinator(spec, address(0x5));
     jobRegistry = new DummyJobRegistry();
@@ -264,8 +264,8 @@ contract CoordinatorHandler is Test, TokenProvider {
     return coordinator.getPoolCutReceiversLength();
   }
 
-  function getTotalNumberOfExecutedJobsCreatedBeforeEpoch() public view returns (uint256) {
-    return coordinator.getTotalNumberOfExecutedJobsCreatedBeforeEpoch();
+  function getExecutedJobsInRoundsOfEpoch() public view returns (uint256) {
+    return coordinator.getExecutedJobsInRoundsOfEpoch();
   }
 
   function getExecutorsWithRoundInfo() private view returns (address[] memory) {

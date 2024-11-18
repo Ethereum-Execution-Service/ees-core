@@ -36,8 +36,8 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
     uint8 commitPhaseDuration = 15;
     uint8 revealPhaseDuration = 15;
     uint8 slashingDuration = 30;
-    uint256 executorTax = 2;
-    uint256 protocolTax = 2;
+    uint256 executionTax = 4;
+    uint256 protocolPoolCutBps = 1000;
 
     uint256 defaultEpochEndTime = 1000;
 
@@ -60,8 +60,8 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
             commitPhaseDuration: commitPhaseDuration,
             revealPhaseDuration: revealPhaseDuration,
             slashingDuration: slashingDuration,
-            executorTax: executorTax,
-            protocolTax: protocolTax
+            executionTax: executionTax,
+            protocolPoolCutBps: protocolPoolCutBps
         });
         coordinator = new MockCoordinator(spec, treasury);
         jobRegistry = new DummyJobRegistry();
@@ -110,8 +110,8 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, 0);
         (uint256 balance,,,,,,,,) = coordinator.executorInfo(executor);
         assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
-        assertEq(balance, stakingAmount - (executorTax + protocolTax), "executor balance mismatch");
-        assertEq(coordinator.getNextEpochPoolBalance(), executorTax, "next epoch pool balance mismatch");
+        assertEq(balance, stakingAmount - executionTax, "executor balance mismatch");
+        assertEq(coordinator.getNextEpochPoolBalance(), executionTax, "next epoch pool balance mismatch");
     }
 
     function test_ExecuteBatchNotSelectedExecutor(bytes32 seed) public {
@@ -156,10 +156,10 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         assertEq(newPoolBalance, prevPoolBalance, "pool balance mismatch");
 
         assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
-        assertEq(balance, stakingAmount - protocolTax - executorTax, "executor balance mismatch");
+        assertEq(balance, stakingAmount - executionTax, "executor balance mismatch");
         assertEq(lastCheckinEpoch, 10, "latest executed epoch mismatch");
         assertEq(lastCheckinRound, 0, "latest executed round mismatch");
-        assertEq(coordinator.getNextEpochPoolBalance(), executorTax, "next epoch pool balance mismatch");
+        assertEq(coordinator.getNextEpochPoolBalance(), 0, "next epoch pool balance mismatch");
     }
 
     function test_ExecuteBatchAlreadyCheckedIn(uint256 time) public {
@@ -182,7 +182,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
                 roundsCheckedInEpoch: 0,
                 lastCheckinEpoch: 10,
                 lastCheckinRound: 0,
-                executionsInEpochCreatedBeforeEpoch: 0,
+                executionsInRoundsInEpoch: 0,
                 stakingTimestamp: block.timestamp
             }),
             executor
@@ -216,8 +216,8 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         (uint256 balance,,,,,,,,) = coordinator.executorInfo(executor);
 
         assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
-        assertEq(balance, stakingAmount - protocolTax - executorTax, "executor balance mismatch");
-        assertEq(coordinator.getNextEpochPoolBalance(), executorTax, "next epoch pool balance mismatch");
+        assertEq(balance, stakingAmount - executionTax, "executor balance mismatch");
+        assertEq(coordinator.getNextEpochPoolBalance(), 0, "next epoch pool balance mismatch");
     }
 
     function test_ExecuteBatchExecutionReverts() public {
@@ -258,8 +258,8 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         (uint256 balance,,,,,,,,) = coordinator.executorInfo(executor);
 
         assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
-        assertEq(balance, stakingAmount - (executorTax + protocolTax), "executor balance mismatch");
-        assertEq(coordinator.getNextEpochPoolBalance(), executorTax, "next epoch pool balance mismatch");
+        assertEq(balance, stakingAmount - executionTax, "executor balance mismatch");
+        assertEq(coordinator.getNextEpochPoolBalance(), executionTax, "next epoch pool balance mismatch");
     }
 
     function test_ExecuteBatchAfterRounds(uint256 time) public {
@@ -277,8 +277,8 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         (uint256 balance,,,,,,,,) = coordinator.executorInfo(executor);
 
         assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
-        assertEq(balance, stakingAmount - (executorTax + protocolTax), "executor balance mismatch");
-        assertEq(coordinator.getNextEpochPoolBalance(), executorTax, "next epoch pool balance mismatch");
+        assertEq(balance, stakingAmount - executionTax, "executor balance mismatch");
+        assertEq(coordinator.getNextEpochPoolBalance(), executionTax, "next epoch pool balance mismatch");
     }
 
     function test_ExecuteBatchNotActiveExecutor() public {
@@ -465,7 +465,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
                 roundsCheckedInEpoch: 0,
                 lastCheckinEpoch: 0,
                 lastCheckinRound: 0,
-                executionsInEpochCreatedBeforeEpoch: 0,
+                executionsInRoundsInEpoch: 0,
                 stakingTimestamp: 0
             }),
             executor
@@ -521,7 +521,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
                 roundsCheckedInEpoch: 0,
                 lastCheckinEpoch: 0,
                 lastCheckinRound: 0,
-                executionsInEpochCreatedBeforeEpoch: 0,
+                executionsInRoundsInEpoch: 0,
                 stakingTimestamp: 0
             }),
             executor
@@ -555,7 +555,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
                 roundsCheckedInEpoch: 0,
                 lastCheckinEpoch: 0,
                 lastCheckinRound: 0,
-                executionsInEpochCreatedBeforeEpoch: 0,
+                executionsInRoundsInEpoch: 0,
                 stakingTimestamp: 0
             }),
             executor
@@ -646,7 +646,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
                 roundsCheckedInEpoch: 0,
                 lastCheckinEpoch: epoch,
                 lastCheckinRound: 0,
-                executionsInEpochCreatedBeforeEpoch: 0,
+                executionsInRoundsInEpoch: 0,
                 stakingTimestamp: 0
             }),
             executor
@@ -683,7 +683,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
                 roundsCheckedInEpoch: 0,
                 lastCheckinEpoch: 0,
                 lastCheckinRound: 0,
-                executionsInEpochCreatedBeforeEpoch: 0,
+                executionsInRoundsInEpoch: 0,
                 stakingTimestamp: 0
             }),
             executor

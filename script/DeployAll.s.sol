@@ -40,13 +40,13 @@ contract DeployAll is Script {
             roundDuration: 20,
             roundsPerEpoch: 5,
             roundBuffer: 15,
-            commitPhaseDuration: 20,
-            revealPhaseDuration: 20,
+            commitPhaseDuration: 15,
+            revealPhaseDuration: 15,
             slashingDuration: 15,
-            // 0.05 USDC - 50000
-            executorTax: 50000,
-            // 0.05 USDC - 50000
-            protocolTax: 50000
+            // 0.06 USDC - 60000
+            executionTax: 60000,
+            // 10% in basis points
+            protocolPoolCutBps: 1000
         });
     }
 

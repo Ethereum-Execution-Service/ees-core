@@ -58,12 +58,7 @@ contract CoordinatorInvariant is Test {
   }
 
   function invariant_poolCutReceiversArray() public view {
-    if(coordinatorHandler.getTotalNumberOfExecutedJobsCreatedBeforeEpoch() > 0) {
-      assertGt(coordinatorHandler.getPoolCutReceiversLength(), 0);
-    } else {
-      assertEq(coordinatorHandler.getPoolCutReceiversLength(), 0);
-    }
-    if(coordinatorHandler.getTotalNumberOfExecutedJobsCreatedBeforeEpoch() > 0) {
+    if(coordinatorHandler.getExecutedJobsInRoundsOfEpoch() > 0) {
       assertGt(coordinatorHandler.getPoolCutReceiversLength(), 0);
     } else {
       assertEq(coordinatorHandler.getPoolCutReceiversLength(), 0);

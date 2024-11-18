@@ -108,7 +108,7 @@ contract MockCoordinator is Coordinator {
         return poolCutReceivers.length;
     }
 
-    function getTotalNumberOfExecutedJobsCreatedBeforeEpoch() public view returns (uint256) {
-        return totalNumberOfExecutedJobsCreatedBeforeEpoch;
+    function getExecutedJobsInRoundsOfEpoch() public view returns (uint256) {
+        return executedJobsInRoundsOfEpoch;
     }
 }

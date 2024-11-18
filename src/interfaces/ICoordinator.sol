@@ -10,7 +10,7 @@ interface ICoordinator {
         uint8 roundsCheckedInEpoch;
         uint8 lastCheckinRound;
         uint96 lastCheckinEpoch;
-        uint96 executionsInEpochCreatedBeforeEpoch;
+        uint96 executionsInRoundsInEpoch;
         uint256 stakingTimestamp;
     }
 
@@ -33,8 +33,8 @@ interface ICoordinator {
         uint8 commitPhaseDuration;
         uint8 revealPhaseDuration;
         uint8 slashingDuration;
-        uint256 executorTax;
-        uint256 protocolTax;
+        uint256 executionTax;
+        uint256 protocolPoolCutBps;
     }
 
     function executeBatch(
@@ -52,8 +52,8 @@ interface ICoordinator {
     function commit(bytes32 _commitment) external;
     function reveal(bytes calldata _signature) external;
 
-    event BatchExecution(uint8 jobRegistryIndex, uint256[] failedIndices, uint256 totalProtocolTax, uint256 totalExecutorTax);
-    event EpochInitiated(uint192 epoch, uint256 previousEpochPoolDistributed);
+    event BatchExecution(uint8 jobRegistryIndex, uint256[] failedIndices, uint256 totalTax);
+    event EpochInitiated(uint192 epoch, uint256 previousEpochPoolDistributed, uint256 protocolCut);
     event SlashInactiveExecutor(
         address indexed executor, address indexed slasher, uint192 indexed epoch, uint8 round, uint256 amount
     );

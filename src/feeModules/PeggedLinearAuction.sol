@@ -45,7 +45,7 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
     ) external override onlyJobRegistry returns (uint256 executionFee, address executionFeeToken) {
         Params memory job = params[_index];
 
-        (address taxToken, uint256 protocolTax, uint256 executorTax) = coordinator.getTaxConfig();
+        (address taxToken, uint256 executionTax, uint256 protocolPoolCutBps) = coordinator.getTaxConfig();
         
         // get tak token decimals
         uint8 taxTokenDecimals = ERC20(taxToken).decimals();
@@ -57,7 +57,7 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
         // should we just do this in the oracle? Since this is the only place we use priceInUSD
 
         // total tax in fee tokens and fee token decimals
-        uint256 totalTax = (priceInUSD * (executorTax + protocolTax)) / taxTokenDecimals;
+        uint256 totalTax = (priceInUSD * executionTax) / taxTokenDecimals;
 
         // wei / gas
         uint256 baseFee = block.basefee;

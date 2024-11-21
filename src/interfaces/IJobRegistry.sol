@@ -119,4 +119,7 @@ interface IJobRegistry {
 
     /// @notice Thrown when at least one module is not valid
     error InvalidModule();
+
+    /// @notice Thrown when the transfer of execution fee fails
+    error TransferFailed();
 }

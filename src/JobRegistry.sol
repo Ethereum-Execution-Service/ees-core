@@ -14,11 +14,13 @@ import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {Coordinator} from "./Coordinator.sol";
+import {SafeTransferFromNoRevert} from "./libraries/SafeTransferFromNoRevert.sol";
 
 /// @author Victor Brevig
 /// @notice JobRegistry keeps track of all jobs in the EES. It is through this contract jobs are created, managed and deleted.
 contract JobRegistry is IJobRegistry, EIP712 {
     using SafeTransferLib for ERC20;
+    using SafeTransferFromNoRevert for ERC20;
     using SignatureVerification for bytes;
     using JobSpecificationHash for JobSpecification;
     using FeeModuleInputHash for FeeModuleInput;
@@ -173,7 +175,15 @@ contract JobRegistry is IJobRegistry, EIP712 {
             feeModule.onExecuteJob(_index, job.executionWindow, executionTime, totalGas);
 
         // transfer fee to fee recipient
-        ERC20(executionFeeToken).safeTransferFrom(job.sponsor, _feeRecipient, executionFee);
+        // we try to transfer from sponsor first, if that fails and sponsorFallbackToOwner is true, we transfer from owner and set sponsor to owner
+        if(!ERC20(executionFeeToken).safeTransferFromNoRevert(job.sponsor, _feeRecipient, executionFee)) {
+            if(job.sponsorFallbackToOwner) {
+                ERC20(executionFeeToken).safeTransferFrom(job.owner, _feeRecipient, executionFee);
+                job.sponsor = job.owner;
+            } else {
+                revert TransferFailed();
+            }
+        }
 
         emit JobExecuted(
             _index,

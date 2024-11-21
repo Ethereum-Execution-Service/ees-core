@@ -788,8 +788,6 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @param _recipient The address to reward half of the slashed amount to. Must be an active executor.
      */
     function _slash(uint256 _amount, Executor storage _executor, address _recipient) private {
-        if (!executorInfo[_recipient].active) revert NotActiveExecutor();
-
         if ((_executor.balance -= _amount) < stakingBalanceThresholdPerModule * _countModules(_executor.registeredModules)) {
             // index in activeStakers array
             (address deactivatedExecutor,address lastExecutor) = _deactivateExecutor(_executor.arrayIndex);
@@ -801,9 +799,14 @@ contract Coordinator is ICoordinator, TaxHandler {
         unchecked {
             // no division by zero. Total token balances will not exceed uint256 max value
             uint256 rewardAmount = _amount / 2;
-            executorInfo[_recipient].balance += rewardAmount;
+            if(executorInfo[_recipient].initialized) {
+                executorInfo[_recipient].balance += rewardAmount;
+            } else {
+                // if recipient is not an initialized executor, do normal ERC20 transfer
+                ERC20(stakingToken).safeTransfer(msg.sender, rewardAmount);
+            }
             protocolBalance += _amount - rewardAmount;
-        }
+        } 
     }
 
     /**

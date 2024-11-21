@@ -24,14 +24,14 @@ contract Coordinator is ICoordinator, TaxHandler {
 
     address internal immutable stakingToken;
     uint256 internal immutable stakingAmountPerModule;
-    uint256 internal immutable minimumStakingPeriod;
+    uint256 internal immutable minimumRegistrationPeriod;
     // minimum amount of staking balance required to be eligible to execute
-    uint256 internal immutable stakingBalanceThreshold;
+    uint256 internal immutable stakingBalanceThresholdPerModule;
     // amount to slash from the executor upon inactivity.
-    uint256 internal immutable inactiveSlashingAmount;
+    uint256 internal immutable inactiveSlashingAmountPerModule;
 
     // amount to slash for committing without revealing
-    uint256 internal immutable commitSlashingAmount;
+    uint256 internal immutable commitSlashingAmountPerModule;
 
     uint8 internal immutable roundsPerEpoch;
 
@@ -65,7 +65,7 @@ contract Coordinator is ICoordinator, TaxHandler {
 
     constructor(InitSpec memory _spec, address _treasury) TaxHandler(_treasury, _spec.executionTax, _spec.protocolPoolCutBps) {
         require(
-            _spec.stakingBalanceThreshold <= _spec.stakingAmountPerModule,
+            _spec.stakingBalanceThresholdPerModule <= _spec.stakingAmountPerModule,
             "Staking: threshold must be less than or equal to staking amount"
         );
         totalRoundDuration = _spec.roundDuration + _spec.roundBuffer;
@@ -73,12 +73,12 @@ contract Coordinator is ICoordinator, TaxHandler {
 
         stakingToken = _spec.stakingToken;
         stakingAmountPerModule = _spec.stakingAmountPerModule;
-        minimumStakingPeriod = _spec.minimumStakingPeriod;
-        stakingBalanceThreshold = _spec.stakingBalanceThreshold;
-        inactiveSlashingAmount = _spec.inactiveSlashingAmount;
-        commitSlashingAmount = _spec.commitSlashingAmount;
+        minimumRegistrationPeriod = _spec.minimumRegistrationPeriod;
+        stakingBalanceThresholdPerModule = _spec.stakingBalanceThresholdPerModule;
+        inactiveSlashingAmountPerModule = _spec.inactiveSlashingAmountPerModule;
+        commitSlashingAmountPerModule = _spec.commitSlashingAmountPerModule;
         require(
-            inactiveSlashingAmount + commitSlashingAmount <= stakingBalanceThreshold,
+            inactiveSlashingAmountPerModule + commitSlashingAmountPerModule <= stakingBalanceThresholdPerModule,
             "Staking: invalid slashing amounts"
         );
         require(_spec.roundsPerEpoch > 0, "Staking: rounds per epoch must be greater than 0");
@@ -331,7 +331,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         }
 
         // check if executor balance is below threshold and deactivate if true
-        if(executor.active && newBalance < stakingBalanceThreshold) {
+        if(executor.active && newBalance < stakingBalanceThresholdPerModule * _countModules(executor.registeredModules)) {
             (address deactivatedExecutor, address lastExecutor) = _deactivateExecutor(executor.arrayIndex);
             executorInfo[lastExecutor].arrayIndex = executor.arrayIndex;
             executorInfo[msg.sender].active = false;
@@ -374,7 +374,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             lastCheckinRound: 0,
             lastCheckinEpoch: 0,
             executionsInRoundsInEpoch: 0,
-            stakingTimestamp: block.timestamp,
+            lastRegistrationTimestamp: block.timestamp,
             registeredModules: _modulesBitset
         });
         _activateExecutor(msg.sender);
@@ -397,9 +397,9 @@ contract Coordinator is ICoordinator, TaxHandler {
         Executor memory executor = executorInfo[msg.sender];
         if (!executor.initialized) revert NotActiveExecutor();
         unchecked {
-            // should never overflow uint256 in practise, stakingTimestamp can only be set to block.timestamp
-            if (block.timestamp < executor.stakingTimestamp + minimumStakingPeriod) {
-                revert MinimumStakingPeriodNotOver();
+            // should never overflow uint256 in practise, lastRegistrationTimestamp can only be set to block.timestamp
+            if (block.timestamp < executor.lastRegistrationTimestamp + minimumRegistrationPeriod) {
+                revert MinimumRegistrationPeriodNotOver();
             }
         }
 
@@ -446,7 +446,7 @@ contract Coordinator is ICoordinator, TaxHandler {
     }
 
     /**
-     * @notice Slashes the executor for not executing in the given round with inactiveSlashingAmount.
+     * @notice Slashes the executor for not executing in the given round with inactiveSlashingAmountPerModule times the number of registered modules.
      * @notice If executor's balance goes below threshold, executor is deactivated.
      * @notice Cannot only be called during slashing window.
      * @param _executor The address of the executor to be slashed.
@@ -483,14 +483,14 @@ contract Coordinator is ICoordinator, TaxHandler {
             sstore(add(executorSlot, 1), finalVal)
         }
 
-        uint256 slashAmount = inactiveSlashingAmount;
+        uint256 slashAmount = inactiveSlashingAmountPerModule * _countModules(executor.registeredModules);
         _slash(slashAmount, executor, _recipient);
 
         emit SlashInactiveExecutor(_executor, _recipient, currentEpoch, _round, slashAmount);
     }
 
     /**
-     * @notice Slashes the executor for committing without revealing with commitSlashingAmount.
+     * @notice Slashes the executor for committing without revealing with commitSlashingAmountPerModule times the number of registered modules.
      * @notice If executor's balance goes below threshold, executor is deactivated.
      * @notice Cannot only be called during slashing window.
      * @param _executor The address of the executor to be slashed.
@@ -505,9 +505,9 @@ contract Coordinator is ICoordinator, TaxHandler {
         if (commitData.epoch != currentEpoch) revert OldEpoch();
         if (commitData.revealed) revert CommitmentRevealed();
 
-        uint256 slashAmount = commitSlashingAmount;
         // slash the committer
         Executor storage executor = executorInfo[_executor];
+        uint256 slashAmount = commitSlashingAmountPerModule * _countModules(executor.registeredModules);
         _slash(slashAmount, executor, _recipient);
         commitData.revealed = true;
 
@@ -658,6 +658,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         if (numberOfModules > 0) {
             ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), numberOfModules * stakingAmountPerModule);
         }
+        executor.lastRegistrationTimestamp = block.timestamp;
 
         _registerModule(executor, validModules);
         
@@ -789,7 +790,7 @@ contract Coordinator is ICoordinator, TaxHandler {
     function _slash(uint256 _amount, Executor storage _executor, address _recipient) private {
         if (!executorInfo[_recipient].active) revert NotActiveExecutor();
 
-        if ((_executor.balance -= _amount) < stakingBalanceThreshold) {
+        if ((_executor.balance -= _amount) < stakingBalanceThresholdPerModule * _countModules(_executor.registeredModules)) {
             // index in activeStakers array
             (address deactivatedExecutor,address lastExecutor) = _deactivateExecutor(_executor.arrayIndex);
             executorInfo[lastExecutor].arrayIndex = _executor.arrayIndex;
@@ -848,10 +849,10 @@ contract Coordinator is ICoordinator, TaxHandler {
         return abi.encode(
             stakingToken,
             stakingAmountPerModule,
-            minimumStakingPeriod,
-            stakingBalanceThreshold,
-            inactiveSlashingAmount,
-            commitSlashingAmount,
+            minimumRegistrationPeriod,
+            stakingBalanceThresholdPerModule,
+            inactiveSlashingAmountPerModule,
+            commitSlashingAmountPerModule,
             roundsPerEpoch,
             executionTax,
             roundDuration,

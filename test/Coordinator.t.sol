@@ -30,10 +30,10 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
     uint256 thirdExecutorPrivateKey;
 
     uint256 stakingAmountPerModule = 500;
-    uint256 stakingBalanceThreshold = 300;
-    uint256 minimumStakingPeriod = 2;
-    uint256 inactiveSlashingAmount = 200;
-    uint256 commitSlashingAmount = 50;
+    uint256 stakingBalanceThresholdPerModule = 150;
+    uint256 minimumRegistrationPeriod = 2;
+    uint256 inactiveSlashingAmountPerModule = 100;
+    uint256 commitSlashingAmountPerModule = 25;
     uint8 roundDuration = 15;
     uint8 roundsPerEpoch = 5;
     uint8 roundBuffer = 15;
@@ -56,10 +56,10 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         ICoordinator.InitSpec memory spec = ICoordinator.InitSpec({
             stakingToken: defaultStakingToken,
             stakingAmountPerModule: stakingAmountPerModule,
-            minimumStakingPeriod: minimumStakingPeriod,
-            stakingBalanceThreshold: stakingBalanceThreshold,
-            inactiveSlashingAmount: inactiveSlashingAmount,
-            commitSlashingAmount: commitSlashingAmount,
+            minimumRegistrationPeriod: minimumRegistrationPeriod,
+            stakingBalanceThresholdPerModule: stakingBalanceThresholdPerModule,
+            inactiveSlashingAmountPerModule: inactiveSlashingAmountPerModule,
+            commitSlashingAmountPerModule: commitSlashingAmountPerModule,
             roundDuration: roundDuration,
             roundsPerEpoch: roundsPerEpoch,
             roundBuffer: roundBuffer,
@@ -195,7 +195,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
                 lastCheckinEpoch: 10,
                 lastCheckinRound: 0,
                 executionsInRoundsInEpoch: 0,
-                stakingTimestamp: block.timestamp,
+                lastRegistrationTimestamp: block.timestamp,
                 registeredModules: modulesToRegister
             }),
             executor
@@ -317,7 +317,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
             uint8 lastCheckinRound,
             uint96 lastCheckinEpoch,
             uint96 executionsInEpochCreatedBeforeEpoch,
-            uint256 stakingTimestamp,
+            uint256 lastRegistrationTimestamp,
             uint256 registeredModules
         ) = coordinator.executorInfo(executor);
         assertTrue(active, "not active");
@@ -330,7 +330,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         assertEq(lastCheckinEpoch, 0, "latest executed epoch mismatch");
         assertEq(lastCheckinRound, 0, "latest executed round mismatch");
         assertEq(coordinator.getNumberOfActiveExecutors(), 1, "number of active executors mismatch");
-        assertEq(stakingTimestamp, time, "staking timestamp mismatch");
+        assertEq(lastRegistrationTimestamp, time, "registration timestamp mismatch");
         assertEq(executionsInEpochCreatedBeforeEpoch, 0, "executions in epoch mismatch");
         assertEq(roundsCheckedInEpoch, 0, "rounds checked in epoch mismatch");
         assertEq(registeredModules, modulesToRegister, "registered modules mismatch");
@@ -393,7 +393,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
     }
 
     function test_UnstakeActiveExecutor(uint192 time) public {
-        vm.assume(time > minimumStakingPeriod);
+        vm.assume(time > minimumRegistrationPeriod);
         vm.assume(
             time < defaultEpochEndTime - coordinator.getEpochDuration() + commitPhaseDuration
                 || time >= defaultEpochEndTime + coordinator.getSlashingDuration()
@@ -403,7 +403,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         vm.prank(executor);
         coordinator.stake(modulesToRegister);
 
-        coordinator.setStakingTimestamp(time - minimumStakingPeriod, executor);
+        coordinator.setLastRegistrationTimestamp(time - minimumRegistrationPeriod, executor);
 
         vm.warp(time);
         vm.prank(executor);
@@ -420,7 +420,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
             uint8 lastCheckinRound,
             uint96 lastCheckinEpoch,
             uint96 executionsInEpochCreatedBeforeEpoch,
-            uint256 stakingTimestamp,
+            uint256 lastRegistrationTimestamp,
             uint256 registeredModules
         ) = coordinator.executorInfo(executor);
         assertFalse(active, "active");
@@ -433,13 +433,13 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         assertEq(lastCheckinEpoch, 0, "latest executed epoch mismatch");
         assertEq(lastCheckinRound, 0, "latest executed round mismatch");
         assertEq(coordinator.getNumberOfActiveExecutors(), 0, "number of active executors mismatch");
-        assertEq(stakingTimestamp, 0, "staking timestamp mismatch");
+        assertEq(lastRegistrationTimestamp, 0, "registration timestamp mismatch");
         assertEq(executionsInEpochCreatedBeforeEpoch, 0, "executions in epoch mismatch");
         assertEq(roundsCheckedInEpoch, 0, "rounds checked in epoch mismatch");
         assertEq(registeredModules, 0, "registered modules mismatch");
     }
 
-    function test_UnstakeBeforeMinimumStakingPeriod(uint192 time) public {
+    function test_UnstakeBeforeMinimumRegistrationPeriod(uint192 time) public {
         vm.assume(time > 1);
         vm.assume(
             time < defaultEpochEndTime - coordinator.getEpochDuration() + commitPhaseDuration
@@ -452,7 +452,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(time);
         vm.prank(executor);
-        vm.expectRevert(ICoordinator.MinimumStakingPeriodNotOver.selector);
+        vm.expectRevert(ICoordinator.MinimumRegistrationPeriodNotOver.selector);
         coordinator.unstake();
     }
 
@@ -473,7 +473,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
                 lastCheckinEpoch: 0,
                 lastCheckinRound: 0,
                 executionsInRoundsInEpoch: 0,
-                stakingTimestamp: 0,
+                lastRegistrationTimestamp: 0,
                 registeredModules: modulesToRegister
             }),
             executor
@@ -518,7 +518,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
             time < defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration()
                 || time >= defaultEpochEndTime + coordinator.getSlashingDuration()
         );
-        startingBalance = bound(startingBalance, 0, stakingBalanceThreshold - 1);
+        startingBalance = bound(startingBalance, 0, stakingBalanceThresholdPerModule * 2 - 1);
         topUpAmount = bound(topUpAmount, stakingAmountPerModule * 2 - startingBalance, token0.balanceOf(executor));
         coordinator.setExecutorInfo(
             ICoordinator.Executor({
@@ -530,7 +530,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
                 lastCheckinEpoch: 0,
                 lastCheckinRound: 0,
                 executionsInRoundsInEpoch: 0,
-                stakingTimestamp: 0,
+                lastRegistrationTimestamp: 0,
                 registeredModules: modulesToRegister
             }),
             executor
@@ -553,7 +553,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
     function test_TopupToBelowThreshold(uint256 topUpAmount, uint256 startingBalance) public {
         // should not activate executor when balance after topup is below coordinator amount
-        startingBalance = bound(startingBalance, 0, stakingBalanceThreshold - 1);
+        startingBalance = bound(startingBalance, 0, stakingBalanceThresholdPerModule * 2 - 1);
         topUpAmount = bound(topUpAmount, 0, stakingAmountPerModule * 2 - startingBalance - 1);
         coordinator.setExecutorInfo(
             ICoordinator.Executor({
@@ -565,7 +565,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
                 lastCheckinEpoch: 0,
                 lastCheckinRound: 0,
                 executionsInRoundsInEpoch: 0,
-                stakingTimestamp: 0,
+                lastRegistrationTimestamp: 0,
                 registeredModules: modulesToRegister
             }),
             executor
@@ -624,9 +624,9 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         coordinator.slashInactiveExecutor(executor, 0, slasher);
         (uint256 endBalanceSlasher,,,,,,,,,) = coordinator.executorInfo(slasher);
         (uint256 balance, bool active, bool initialized, uint32 arrayIndex,,,,,,) = coordinator.executorInfo(executor);
-        assertEq(balance, stakingAmountPerModule * 2 - inactiveSlashingAmount, "balance mismatch");
+        assertEq(balance, stakingAmountPerModule * 2 - inactiveSlashingAmountPerModule * 2, "balance mismatch");
         assertTrue(active, "not active");
-        assertEq(endBalanceSlasher, startBalanceSlasher + inactiveSlashingAmount / 2, "slasher balance mismatch");
+        assertEq(endBalanceSlasher, startBalanceSlasher + (inactiveSlashingAmountPerModule * 2) / 2, "slasher balance mismatch");
     }
 
     function test_SlashingRoundExecuted(address slasher, uint40 epoch, bytes32 seed) public {
@@ -649,7 +649,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         coordinator.setEpoch(epoch);
         coordinator.setExecutorInfo(
             ICoordinator.Executor({
-                balance: stakingBalanceThreshold + 1,
+                balance: stakingBalanceThresholdPerModule * 2 + 1,
                 active: true,
                 initialized: true,
                 arrayIndex: 0,
@@ -657,7 +657,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
                 lastCheckinEpoch: epoch,
                 lastCheckinRound: 0,
                 executionsInRoundsInEpoch: 0,
-                stakingTimestamp: 0,
+                lastRegistrationTimestamp: 0,
                 registeredModules: modulesToRegister
             }),
             executor
@@ -687,7 +687,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         coordinator.setEpoch(1);
         coordinator.setExecutorInfo(
             ICoordinator.Executor({
-                balance: stakingBalanceThreshold + 1,
+                balance: stakingBalanceThresholdPerModule * 2 + 1,
                 active: true,
                 initialized: true,
                 arrayIndex: 0,
@@ -695,7 +695,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
                 lastCheckinEpoch: 0,
                 lastCheckinRound: 0,
                 executionsInRoundsInEpoch: 0,
-                stakingTimestamp: 0,
+                lastRegistrationTimestamp: 0,
                 registeredModules: modulesToRegister
             }),
             executor
@@ -706,9 +706,9 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
         coordinator.slashInactiveExecutor(executor, 0, slasher);
         (uint256 endBalanceSlasher,,,,,,,,,) = coordinator.executorInfo(slasher);
         (uint256 balance, bool active, bool initialized, uint32 arrayIndex,,,,,,) = coordinator.executorInfo(executor);
-        assertEq(balance, stakingBalanceThreshold + 1 - inactiveSlashingAmount, "balance mismatch");
+        assertEq(balance, stakingBalanceThresholdPerModule * 2 + 1 - inactiveSlashingAmountPerModule * 2, "balance mismatch");
         assertFalse(active, "active");
-        assertEq(endBalanceSlasher, startBalanceSlasher + inactiveSlashingAmount / 2, "slasher balance mismatch");
+        assertEq(endBalanceSlasher, startBalanceSlasher + (inactiveSlashingAmountPerModule * 2) / 2, "slasher balance mismatch");
         assertEq(coordinator.getNumberOfActiveExecutors(), 1, "number of active executors mismatch");
     }
 
@@ -1068,10 +1068,10 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         (,, bool revealed) = coordinator.commitmentMap(executor);
         (uint256 balance, bool active,,,,,,,,) = coordinator.executorInfo(executor);
-        assertEq(balance, stakingAmountPerModule * 2 - commitSlashingAmount, "balance mismatch");
+        assertEq(balance, stakingAmountPerModule * 2 - commitSlashingAmountPerModule * 2, "balance mismatch");
         assertTrue(active, "not active");
         assertTrue(revealed, "not revealed");
-        assertEq(endBalanceSlasher, startBalanceSlasher + commitSlashingAmount / 2, "slasher balance mismatch");
+        assertEq(endBalanceSlasher, startBalanceSlasher + (commitSlashingAmountPerModule * 2) / 2, "slasher balance mismatch");
     }
 
     function test_SlashCommitterBeforeTime(uint256 time) public {

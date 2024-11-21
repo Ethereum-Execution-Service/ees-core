@@ -14,7 +14,7 @@ interface ICoordinator {
         uint96 lastCheckinEpoch;
         uint96 executionsInRoundsInEpoch;
         // slot 2
-        uint256 stakingTimestamp;
+        uint256 lastRegistrationTimestamp;
         // slot 3
         uint256 registeredModules;
     }
@@ -28,10 +28,10 @@ interface ICoordinator {
     struct InitSpec {
         address stakingToken;
         uint256 stakingAmountPerModule;
-        uint256 minimumStakingPeriod;
-        uint256 stakingBalanceThreshold;
-        uint256 inactiveSlashingAmount;
-        uint256 commitSlashingAmount;
+        uint256 minimumRegistrationPeriod;
+        uint256 stakingBalanceThresholdPerModule;
+        uint256 inactiveSlashingAmountPerModule;
+        uint256 commitSlashingAmountPerModule;
         uint8 roundDuration;
         uint8 roundsPerEpoch;
         uint8 roundBuffer;
@@ -86,7 +86,7 @@ interface ICoordinator {
     error RoundExceedingTotal();
     error AlreadyCheckedIn();
     error CheckInOutsideRound();
-    error MinimumStakingPeriodNotOver();
+    error MinimumRegistrationPeriodNotOver();
     error FinalBalanceBelowMinimum();
     error ExecutorNotRegisteredForModules();
     error JobRegistryNotSet();

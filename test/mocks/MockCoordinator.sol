@@ -20,8 +20,8 @@ contract MockCoordinator is Coordinator {
         executorInfo[_executor].lastCheckinEpoch = _lastCheckinEpoch;
     }
 
-    function setStakingTimestamp(uint256 _stakingTimestamp, address _executor) public {
-        executorInfo[_executor].stakingTimestamp = _stakingTimestamp;
+    function setLastRegistrationTimestamp(uint256 _lastRegistrationTimestamp, address _executor) public {
+        executorInfo[_executor].lastRegistrationTimestamp = _lastRegistrationTimestamp;
     }
 
     function getStakingAmountPerModule() public view returns (uint256) {
@@ -84,8 +84,8 @@ contract MockCoordinator is Coordinator {
         return numberOfActiveExecutors;
     }
 
-    function getMinimumStakingPeriod() public view returns (uint256) {
-        return minimumStakingPeriod;
+    function getMinimumRegistrationPeriod() public view returns (uint256) {
+        return minimumRegistrationPeriod;
     }
 
     function getCommitPhaseDuration() public view returns (uint256) {

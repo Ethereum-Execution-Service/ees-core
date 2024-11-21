@@ -32,10 +32,10 @@ contract Executor is Test {
     function unstake() public {
         // have to warp such that we are after the minimum staking period and not in reveal phase, execution rounds and slashing duration.
         uint256 epochEndTime = coordinator.epochEndTime();
-        uint256 minimumStakingPeriod = coordinator.getMinimumStakingPeriod();
-        (,,,,,,,, uint256 stakingTimestamp,) = coordinator.executorInfo(address(this));
+        uint256 minimumRegistrationPeriod = coordinator.getMinimumRegistrationPeriod();
+        (,,,,,,,, uint256 lastRegistrationTimestamp,) = coordinator.executorInfo(address(this));
 
-        uint256 minimumUnstakeTime = stakingTimestamp + minimumStakingPeriod;
+        uint256 minimumUnstakeTime = lastRegistrationTimestamp + minimumRegistrationPeriod;
         if (
             (block.timestamp >= epochEndTime - coordinator.getEpochDuration() + coordinator.getCommitPhaseDuration()
                 && block.timestamp < epochEndTime) || block.timestamp < minimumUnstakeTime

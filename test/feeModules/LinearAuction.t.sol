@@ -6,9 +6,13 @@ import {GasSnapshot} from "forge-gas-snapshot/src/GasSnapshot.sol";
 import {JobRegistry} from "../../src/JobRegistry.sol";
 import {ILinearAuction} from "../../src/interfaces/feeModules/ILinearAuction.sol";
 import {MockLinearAuction} from "../mocks/MockLinearAuction.sol";
+import {Coordinator} from "../../src/Coordinator.sol";
+import {MockCoordinatorProvider} from "../utils/MockCoordinatorProvider.sol";
+import {MockCoordinator} from "../mocks/MockCoordinator.sol";
 
 contract LinearAuctionTest is Test, GasSnapshot {
     MockLinearAuction feeModule;
+    JobRegistry jobRegistry;
 
     address defaultFeeToken = address(0x3);
     uint256 defaultMinExecutionFee;
@@ -21,7 +25,7 @@ contract LinearAuctionTest is Test, GasSnapshot {
 
     address address0 = address(0x0);
     address address2 = address(0x2);
-    JobRegistry jobRegistry;
+    Coordinator coordinator;
 
     event ExecutionFee(uint256 executionFee);
 
@@ -31,8 +35,13 @@ contract LinearAuctionTest is Test, GasSnapshot {
         defaultExecutionWindow = 1800;
         defaultStartTime = 1641070800;
 
-        jobRegistry = new JobRegistry(address2, address(0x5));
-        feeModule = new MockLinearAuction(jobRegistry);
+        MockCoordinatorProvider coordinatorProvider = new MockCoordinatorProvider(address(0x3));
+        coordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());
+        jobRegistry = new JobRegistry(coordinator);
+        vm.prank(address(0x3));
+        coordinator.addJobRegistry(address(jobRegistry));
+        
+        feeModule = new MockLinearAuction(coordinator);
 
         fromPrivateKey = 0x12341234;
         from = vm.addr(fromPrivateKey);

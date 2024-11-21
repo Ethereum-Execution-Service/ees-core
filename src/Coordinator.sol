@@ -7,6 +7,7 @@ import {ICoordinator} from "./interfaces/ICoordinator.sol";
 import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 import {TaxHandler} from "./TaxHandler.sol";
+import {ModuleRegistry} from "./ModuleRegistry.sol";
 
 /// @author Victor Brevig
 /// @notice Coordinator is responsible for coordination of executors including job execution, staking and slashing.
@@ -14,13 +15,15 @@ contract Coordinator is ICoordinator, TaxHandler {
     using SafeTransferLib for ERC20;
 
     address[] public jobRegistries;
+    mapping(address => bool) public isJobRegistry;
+    
     bytes32 public seed;
     uint192 public epoch;
     uint256 public epochEndTime;
     uint32 public numberOfActiveExecutors;
 
     address internal immutable stakingToken;
-    uint256 internal immutable stakingAmount;
+    uint256 internal immutable stakingAmountPerModule;
     uint256 internal immutable minimumStakingPeriod;
     // minimum amount of staking balance required to be eligible to execute
     uint256 internal immutable stakingBalanceThreshold;
@@ -62,14 +65,14 @@ contract Coordinator is ICoordinator, TaxHandler {
 
     constructor(InitSpec memory _spec, address _treasury) TaxHandler(_treasury, _spec.executionTax, _spec.protocolPoolCutBps) {
         require(
-            _spec.stakingBalanceThreshold <= _spec.stakingAmount,
+            _spec.stakingBalanceThreshold <= _spec.stakingAmountPerModule,
             "Staking: threshold must be less than or equal to staking amount"
         );
         totalRoundDuration = _spec.roundDuration + _spec.roundBuffer;
         require(totalRoundDuration > 0, "Staking: round duration and buffer must be greater than 0");
 
         stakingToken = _spec.stakingToken;
-        stakingAmount = _spec.stakingAmount;
+        stakingAmountPerModule = _spec.stakingAmountPerModule;
         minimumStakingPeriod = _spec.minimumStakingPeriod;
         stakingBalanceThreshold = _spec.stakingBalanceThreshold;
         inactiveSlashingAmount = _spec.inactiveSlashingAmount;
@@ -108,10 +111,11 @@ contract Coordinator is ICoordinator, TaxHandler {
     ) public returns (uint256[] memory failedIndices) {
         // check that caller is active executor
         Executor memory executor = executorInfo[msg.sender];
-        if (!executor.active) revert NotActiveExecutor();
 
         bool inRound;
         uint8 round;
+        uint256 designatedExecutorModules;
+        address designatedExecutor;
         if (block.timestamp < epochEndTime - slashingDuration && block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration)
         {
             // we are in an epoch
@@ -125,13 +129,18 @@ contract Coordinator is ICoordinator, TaxHandler {
             }
 
             if (inRound) {
+                // only active executors can execute in rounds
+                if (!executor.active) revert NotActiveExecutor();
+
                 unchecked {
                     // totalRoundDuration is > 0 because of constructor check on totalRoundDuration
                     // guarantee on no uint8 overflow?
                     round = uint8(timeIntoRounds / totalRoundDuration);
                 }
                 uint256 executorIndex = uint256(keccak256(abi.encodePacked(seed, round))) % numberOfActiveExecutors;
-                if (activeExecutors[executorIndex] != msg.sender) revert ExecutorNotSelectedForRound();
+                designatedExecutor = activeExecutors[executorIndex];
+                designatedExecutorModules = executorInfo[designatedExecutor].registeredModules;
+                if (designatedExecutor == msg.sender && !executor.active) revert NotActiveExecutor();
             }
         }
         // could put these in assembly in memory, but be careful not to override anything
@@ -155,7 +164,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             let failedCount := 0
             let i := 0
 
-            // Allocate memory for return data (96 + 256 + 160 bits = 512 bits = 64 bytes)
+            // Allocate memory for return data (96 + 256 + 160 + 8 + 8 bits = 528 bits = 66 bytes)
             let returnDataPtr := add(writePtr, mul(indicesLength, 0x20))
             
             let epochStartTime := sub(sload(epochEndTime.slot), epochDurationCache)
@@ -174,8 +183,38 @@ contract Coordinator is ICoordinator, TaxHandler {
                     inputPtr,       // input memory
                     0x44,           // input size
                     returnDataPtr,  // output memory
-                    0x60            // output size (3 * 32 bytes)
+                    0xA0            // output size (5 * 32 bytes)
                 )
+                // If call succeeded, verify the executor is registered for both modules
+                let shouldVerifyModules := and(success, inRound)
+                if shouldVerifyModules {
+                    // Load the execution module and fee module from the last two 32-byte words
+                    let executionModuleId := and(mload(add(returnDataPtr, 0x80)), 0xFF)  // 4th word
+                    let feeModuleId := and(mload(add(returnDataPtr, 0xA0)), 0xFF)        // 5th word
+                    
+                    // Check if executor is registered for both modules
+                    let requiredModules := or(shl(1, executionModuleId), shl(1, feeModuleId))
+
+                    switch eq(caller(), designatedExecutor)
+                    case 1 {
+                        // If we ARE the designated executor, we must support BOTH modules
+                        if iszero(eq(and(designatedExecutorModules, requiredModules), requiredModules)) {
+                            // Error selector for ExecutorNotRegisteredForModules()
+                            let free_mem_ptr := mload(0x40)
+                            mstore(free_mem_ptr, 0xff1edc1d00000000000000000000000000000000000000000000000000000000)
+                            revert(free_mem_ptr, 0x04)
+                        }
+                    }
+                    case 0 {
+                        // If we are NOT the designated executor, designated executor must NOT support at least one module
+                        if eq(and(designatedExecutorModules, requiredModules), requiredModules) {
+                            // Error selector for DesignatedExecutorSupportsModules()
+                            let free_mem_ptr := mload(0x40)
+                            mstore(free_mem_ptr, 0x7738dd2200000000000000000000000000000000000000000000000000000000)
+                            revert(free_mem_ptr, 0x04)
+                        }
+                    }
+                }
                 if iszero(success) {
                     mstore(writePtr, index)
                     writePtr := add(writePtr, 32)
@@ -205,8 +244,15 @@ contract Coordinator is ICoordinator, TaxHandler {
                 // totalTax is never greater than uint256 max value realistically
                 totalTax = executionTax * numberOfExecutedJobs;
             }
-            newBalance = (executorInfo[msg.sender].balance -= totalTax);
 
+            if(executor.initialized) {
+                // if executor is initialized, use internal balance
+                newBalance = (executorInfo[msg.sender].balance -= totalTax);
+            }
+            else {
+                ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), totalTax);
+            }
+            
             // UPDATE POOL AND PROTOCOL BALANCES
             unchecked {
                 // next epoch pool balance or protocol balance will never exceed uint256 max value since there are not enough tokens in existence
@@ -285,7 +331,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         }
 
         // check if executor balance is below threshold and deactivate if true
-        if (newBalance < stakingBalanceThreshold) {
+        if(executor.active && newBalance < stakingBalanceThreshold) {
             (address deactivatedExecutor, address lastExecutor) = _deactivateExecutor(executor.arrayIndex);
             executorInfo[lastExecutor].arrayIndex = executor.arrayIndex;
             executorInfo[msg.sender].active = false;
@@ -299,8 +345,9 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @notice Caller must not be an already initialized executor. To increase balance use topup instead.
      * @notice Cannot be called during execution rounds and slashing window.
      * @dev Activates the executor, adding it to executorInfo and increments numberOfActiveExecutors.
+     * @param _modulesBitset The bitset of modules to register for.
      */
-    function stake() public {
+    function stake(uint256 _modulesBitset) public returns (uint256 stakingAmount) {
         if (
             block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
                 && block.timestamp < epochEndTime
@@ -309,6 +356,13 @@ contract Coordinator is ICoordinator, TaxHandler {
         }
         if (executorInfo[msg.sender].initialized) revert AlreadyStaked();
 
+        // MODULE REGISTRATION CHECK
+        // only allow registration for existing modules
+        uint256 numberOfModules = _countModules(_modulesBitset & _getValidModulesMask());
+        if(numberOfModules < 2) revert NumberOfRegisteredModulesBelowMinimum();
+        
+        // STAKING
+        stakingAmount = stakingAmountPerModule * numberOfModules;
         ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), stakingAmount);
 
         executorInfo[msg.sender] = Executor({
@@ -320,7 +374,8 @@ contract Coordinator is ICoordinator, TaxHandler {
             lastCheckinRound: 0,
             lastCheckinEpoch: 0,
             executionsInRoundsInEpoch: 0,
-            stakingTimestamp: block.timestamp
+            stakingTimestamp: block.timestamp,
+            registeredModules: _modulesBitset
         });
         _activateExecutor(msg.sender);
         emit ExecutorActivated(msg.sender);
@@ -374,14 +429,16 @@ contract Coordinator is ICoordinator, TaxHandler {
 
         Executor storage executor = executorInfo[msg.sender];
         if (!executor.initialized) revert NotInitializedExecutor();
-        if (executor.balance + _amount < stakingAmount) revert TopupBelowMinimum();
+
+        uint256 numberOfModules = _countModules(executor.registeredModules);
+        if (executor.balance + _amount < stakingAmountPerModule * numberOfModules) revert FinalBalanceBelowMinimum();
 
         ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), _amount);
         unchecked {
             // sum of all user balances will never exceed uint256 max value
             executor.balance += _amount;
         }
-        if (!executor.active && executor.balance >= stakingAmount) {
+        if (!executor.active && executor.balance >= stakingAmountPerModule * numberOfModules) {
             executor.active = true;
             _activateExecutor(msg.sender);
             emit ExecutorActivated(msg.sender);
@@ -579,6 +636,107 @@ contract Coordinator is ICoordinator, TaxHandler {
      */
     function addJobRegistry(address _registry) public onlyOwner {
         jobRegistries.push(_registry);
+        isJobRegistry[_registry] = true;
+    }
+
+
+    /**
+    * @notice Registers the executor for specific modules
+    * @param _modulesBitset Bitset representing all modules to register for
+    */
+    function registerModules(uint256 _modulesBitset) external {
+        Executor storage executor = executorInfo[msg.sender];
+        if (!executor.initialized) revert NotInitializedExecutor();
+        if (_hasCommonModules(executor.registeredModules, _modulesBitset)) revert SomeModulesAlreadyRegistered();
+
+        // only allow registration for existing modules
+        uint256 validModules = _modulesBitset & _getValidModulesMask();
+        
+        // executor has to stake for each registered module
+        // if the executor balance is already below thereshold, this will not be enough to activate it
+        uint256 numberOfModules = _countModules(validModules);
+        if (numberOfModules > 0) {
+            ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), numberOfModules * stakingAmountPerModule);
+        }
+
+        _registerModule(executor, validModules);
+        
+        emit ModulesRegistered(msg.sender, executor.registeredModules);
+    }
+
+    /**
+    * @notice Deregisters the executor from specific modules
+    * @param _modulesBitset Bitset representing all modules to deregister from
+    */
+    function deregisterModules(uint256 _modulesBitset) external {
+        Executor storage executor = executorInfo[msg.sender];
+        if (!executor.initialized) revert NotInitializedExecutor();
+        
+        _deregisterModule(executor, _modulesBitset);
+
+        if(_countModules(executor.registeredModules) < 2) revert NumberOfRegisteredModulesBelowMinimum();
+        
+        emit ModulesDeregistered(msg.sender, executor.registeredModules);
+    }
+
+    /**
+     * @notice Withdraws the protocol balance to the owner.
+     * @notice Can only be called by the owner.
+     * @return amount The amount of protocol balance withdrawn.
+     */
+    function withdrawProtocolBalance() public onlyOwner returns (uint256) {
+        uint256 amount = protocolBalance;
+        protocolBalance = 0;
+        ERC20(stakingToken).safeTransfer(owner, amount);
+        return amount;
+    }
+
+    /**
+     * @notice Registers the executor for specific modules
+     * @param _modulesBitset Bitset representing all modules to register for
+     */
+    function _registerModule(Executor storage executor, uint256 _modulesBitset) private {
+        executor.registeredModules |= _modulesBitset;
+    }
+
+    /**
+     * @notice Deregisters the executor from specific modules
+     * @param _modulesBitset Bitset representing all modules to deregister from
+     */
+    function _deregisterModule(Executor storage executor, uint256 _modulesBitset) private {
+        executor.registeredModules &= ~_modulesBitset;
+    }
+
+    /**
+    * @notice Counts number of modules registered (number of 1s in bitset)
+    * @param _modulesBitset The bitset to count
+    * @return count The number of modules registered
+    */
+    function _countModules(uint256 _modulesBitset) private pure returns (uint256) {
+        uint256 x = _modulesBitset;
+        x = x - ((x >> 1) & 0x5555555555555555555555555555555555555555555555555555555555555555);
+        x = (x & 0x3333333333333333333333333333333333333333333333333333333333333333) + ((x >> 2) & 0x3333333333333333333333333333333333333333333333333333333333333333);
+        x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f;
+        return (x * 0x0101010101010101010101010101010101010101010101010101010101010101) >> 248;
+    }
+
+    /**
+    * @notice Checks if two module bitsets have any modules in common
+    * @param _modulesA First module bitset
+    * @param _modulesB Second module bitset
+    * @return true if the bitsets share at least one active module
+    */
+    function _hasCommonModules(uint256 _modulesA, uint256 _modulesB) private pure returns (bool) {
+        return (_modulesA & _modulesB) != 0;
+    }
+
+    /**
+     * @notice Creates a mask for valid modules based on currentModuleCount
+     * @return mask The mask with 1s for all valid module positions
+     */
+    function _getValidModulesMask() private view returns (uint256) {
+        // e.g. if currentModuleCount = 4, mask = ...0000000000011111
+        return (1 << modules.length) - 1;
     }
 
     /**
@@ -647,13 +805,6 @@ contract Coordinator is ICoordinator, TaxHandler {
         }
     }
 
-    function withdrawProtocolBalance() public onlyOwner returns (uint256) {
-        uint256 amount = protocolBalance;
-        protocolBalance = 0;
-        ERC20(stakingToken).safeTransfer(owner, amount);
-        return amount;
-    }
-
     /**
      * @notice Verifies the signature of the executor for the given epoch and chainId.
      * @param _epochNum The epoch number to verify the signature for.
@@ -696,7 +847,7 @@ contract Coordinator is ICoordinator, TaxHandler {
     function exportConfig() public view returns (bytes memory) {
         return abi.encode(
             stakingToken,
-            stakingAmount,
+            stakingAmountPerModule,
             minimumStakingPeriod,
             stakingBalanceThreshold,
             inactiveSlashingAmount,
@@ -707,7 +858,8 @@ contract Coordinator is ICoordinator, TaxHandler {
             roundBuffer,
             slashingDuration,
             commitPhaseDuration,
-            revealPhaseDuration
+            revealPhaseDuration,
+            modules.length
         );
     }
 

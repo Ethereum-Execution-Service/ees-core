@@ -13,10 +13,11 @@ import {EIP712} from "./EIP712.sol";
 import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
+import {Coordinator} from "./Coordinator.sol";
 
 /// @author Victor Brevig
 /// @notice JobRegistry keeps track of all jobs in the EES. It is through this contract jobs are created, managed and deleted.
-contract JobRegistry is IJobRegistry, EIP712, Owned {
+contract JobRegistry is IJobRegistry, EIP712 {
     using SafeTransferLib for ERC20;
     using SignatureVerification for bytes;
     using JobSpecificationHash for JobSpecification;
@@ -24,10 +25,7 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
 
     Job[] public jobs;
 
-    IExecutionModule[] public executionModules;
-    IFeeModule[] public feeModules;
-
-    address internal immutable executionContract;
+    Coordinator internal immutable coordinator;
 
     // covering constant gas usage of execute which is not already measured in the function
     uint256 private constant _EXECUTION_GAS_OVERHEAD = 200000;
@@ -35,8 +33,8 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
     // for single use nonces
     mapping(address => mapping(uint256 => uint256)) public nonceBitmap;
 
-    constructor(address _treasury, address _executionContract) Owned(_treasury) {
-        executionContract = _executionContract;
+    constructor(Coordinator _coordinator) {
+        coordinator = _coordinator;
     }
 
     /**
@@ -64,10 +62,11 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
         // attempts to reuse index of existing expired job if _index is existing. Otherwise creates new job at jobs.length.
         bool reuseIndex = false;
         if(_index < jobs.length) {
+            (address executionModuleExistingJob,) = coordinator.modules(uint8(jobs[_index].executionModule));
             if(jobs[_index].owner == address(0)) {
                 // existingjob is already deleted, we can reuse it
                 reuseIndex = true;
-            } else if(executionModules[uint8(jobs[_index].executionModule)].jobIsExpired(_index, jobs[_index].executionWindow)) {
+            } else if(IExecutionModule(executionModuleExistingJob).jobIsExpired(_index, jobs[_index].executionWindow)) {
                 // existing job is expired, we can reuse it but have to delete existing job first
                 _deleteJob(_index);
                 reuseIndex = true;
@@ -75,8 +74,12 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
         }
         index = reuseIndex ? _index : jobs.length;
 
-        IExecutionModule executionModule = executionModules[uint8(_specification.executionModule)];
-        IFeeModule feeModule = feeModules[uint8(_specification.feeModule)];
+        (address executionModuleAddress, bool isExecutionModule) = coordinator.modules(uint8(_specification.executionModule));
+        IExecutionModule executionModule = IExecutionModule(executionModuleAddress);
+        (address feeModuleAddress, bool isNotFeeModule) = coordinator.modules(uint8(_specification.feeModule));
+        IFeeModule feeModule = IFeeModule(feeModuleAddress);
+
+        if(!isExecutionModule || isNotFeeModule) revert InvalidModule();
 
         bool initialExecution =
             executionModule.onCreateJob(index, _specification.executionModuleInput, _specification.executionWindow);
@@ -126,16 +129,20 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
      * @param _index Index of the job in the jobs array.
      * @param _feeRecipient Address who receives execution fee tokens.
      */
-    function execute(uint256 _index, address _feeRecipient) external override returns (uint96, uint256, address) {
-        if (msg.sender != executionContract) revert Unauthorized();
+    function execute(uint256 _index, address _feeRecipient) external override returns (uint96, uint256, address, uint8, uint8) {
+        if (msg.sender != address(coordinator)) revert Unauthorized();
         Job memory job = jobs[_index];
 
         // job.owner can only be 0 if job was deleted
         if (job.owner == address(0)) revert JobIsDeleted();
         if (!job.active) revert JobNotActive();
 
-        IExecutionModule executionModule = executionModules[uint8(job.executionModule)];
-        IFeeModule feeModule = feeModules[uint8(job.feeModule)];
+        // assumes jobs are created with modules that are correctly registered in coordinator
+        (address executionModuleAddress,) = coordinator.modules(uint8(job.executionModule));
+        IExecutionModule executionModule = IExecutionModule(executionModuleAddress);
+        (address feeModuleAddress,) = coordinator.modules(uint8(job.feeModule));
+        IFeeModule feeModule = IFeeModule(feeModuleAddress);
+        
 
         uint256 startVariableGas = gasleft();
         uint256 executionTime = executionModule.onExecuteJob(_index, job.executionWindow);
@@ -178,7 +185,7 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
             executionFeeToken
         );
 
-        return (job.creationTime, executionFee, executionFeeToken);
+        return (job.creationTime, executionFee, executionFeeToken, uint8(job.executionModule), uint8(job.feeModule));
     }
 
     /**
@@ -210,9 +217,12 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
     function _deleteJob(uint256 _index) private {
         Job memory job = jobs[_index];
 
-        IExecutionModule executionModule = executionModules[uint8(job.executionModule)];
-        IFeeModule feeModule = feeModules[uint8(job.feeModule)];
-
+        
+        (address executionModuleAddress,) = coordinator.modules(uint8(job.executionModule));
+        IExecutionModule executionModule = IExecutionModule(executionModuleAddress);
+        (address feeModuleAddress,) = coordinator.modules(uint8(job.feeModule));
+        IFeeModule feeModule = IFeeModule(feeModuleAddress);
+        
         delete jobs[_index];
 
         // these should never revert, the owner should always be able to delete a job
@@ -249,24 +259,6 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
     }
 
     /**
-     * @notice Pushes an execution module to the executionModules array.
-     * @notice Only callable by the owner.
-     * @param _module Execution module to be added.
-     */
-    function addExecutionModule(IExecutionModule _module) public override onlyOwner {
-        executionModules.push(_module);
-    }
-
-    /**
-     * @notice Pushes a fee module to the feeModules array.
-     * @notice Only callable by the owner.
-     * @param _module Fee module to be added.
-     */
-    function addFeeModule(IFeeModule _module) public override onlyOwner {
-        feeModules.push(_module);
-    }
-
-    /**
      * @notice Updates data in a fee module or migrates to other fee module.
      * @notice Removes current sponsorship from the job.
      * @notice If _sponsor is zero address, it will be set to job.owner.
@@ -289,8 +281,8 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
         }
 
         // Check that job is not in execution mode
-        IExecutionModule executionModule = executionModules[uint8(job.executionModule)];
-        if (executionModule.jobIsInExecutionMode(_feeModuleInput.index, job.executionWindow)) {
+        (address executionModuleAddress,) = coordinator.modules(uint8(job.executionModule));
+        if (IExecutionModule(executionModuleAddress).jobIsInExecutionMode(_feeModuleInput.index, job.executionWindow)) {
             revert JobInExecutionMode();
         }
 
@@ -304,14 +296,17 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
             job.sponsor = job.owner;
         }
 
-        IFeeModule currentFeeModule = feeModules[uint8(job.feeModule)];
+        (address currentFeeModuleAddress,) = coordinator.modules(uint8(job.feeModule));
+        IFeeModule currentFeeModule = IFeeModule(currentFeeModuleAddress);
         if (_feeModuleInput.feeModule == job.feeModule) {
             // Update existing fee module with new data
             currentFeeModule.onUpdateData(_feeModuleInput.index, _feeModuleInput.feeModuleInput);
             emit FeeModuleUpdate(_feeModuleInput.index, job.owner, job.sponsor);
         } else {
             // Migrate to new fee module
-            IFeeModule newFeeModule = feeModules[uint8(_feeModuleInput.feeModule)];
+            (address newFeeModuleAddress, bool isNotFeeModule) = coordinator.modules(uint8(_feeModuleInput.feeModule));
+            if(isNotFeeModule) revert InvalidModule();
+            IFeeModule newFeeModule = IFeeModule(newFeeModuleAddress);
             currentFeeModule.onDeleteJob(_feeModuleInput.index);
             newFeeModule.onCreateJob(_feeModuleInput.index, _feeModuleInput.feeModuleInput);
             job.feeModule = _feeModuleInput.feeModule;
@@ -380,10 +375,8 @@ contract JobRegistry is IJobRegistry, EIP712, Owned {
      * @dev This function encodes and returns key configuration parameters of the contract
      * @return config bytes array containing the encoded configuration data:
      *         - _EXECUTION_GAS_OVERHEAD: The constant gas overhead for job execution
-     *         - executionModules.length: The number of execution modules
-     *         - feeModules.length: The number of fee modules
      */
     function exportConfig() public view returns (bytes memory) {
-        return abi.encode(_EXECUTION_GAS_OVERHEAD, executionModules.length, feeModules.length);
+        return abi.encode(_EXECUTION_GAS_OVERHEAD);
     }
 }

@@ -3,28 +3,24 @@ pragma solidity 0.8.27;
 
 import {IExecutionModule} from "../interfaces/IExecutionModule.sol";
 import {IPeggedLinearAuction} from "../interfaces/feeModules/IPeggedLinearAuction.sol";
-import {JobRegistry} from "../JobRegistry.sol";
-import {IJobRegistry} from "../interfaces/IJobRegistry.sol";
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
 import {Coordinator} from "../Coordinator.sol";
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 
 /// @author Victor Brevig
 contract PeggedLinearAuction is IPeggedLinearAuction {
-    JobRegistry public immutable jobRegistry;
     Coordinator public immutable coordinator;
     mapping(uint256 => Params) public params;
 
     uint256 private constant _GAS_OVERHEAD = 100_000;
     uint256 private constant _BASE_BPS = 10_000;
 
-    constructor(JobRegistry _jobRegistry, Coordinator _coordinator) {
-        jobRegistry = _jobRegistry;
+    constructor(Coordinator _coordinator) {
         coordinator = _coordinator;
     }
 
     modifier onlyJobRegistry() {
-        if (msg.sender != address(jobRegistry)) revert NotJobRegistry();
+        if (!coordinator.isJobRegistry(msg.sender)) revert NotJobRegistry();
         _;
     }
 

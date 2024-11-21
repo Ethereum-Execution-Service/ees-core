@@ -2,13 +2,12 @@
 pragma solidity 0.8.27;
 
 import {PeggedLinearAuction} from "../../src/feeModules/PeggedLinearAuction.sol";
-import {JobRegistry} from "../../src/JobRegistry.sol";
 import {IPriceOracle} from "../../src/interfaces/IPriceOracle.sol";
 import {Coordinator} from "../../src/Coordinator.sol";
 
 /// @author Victor Brevig
 contract MockPeggedLinearAuction is PeggedLinearAuction {
-    constructor(JobRegistry _jobRegistry, Coordinator _coordinator) PeggedLinearAuction(_jobRegistry, _coordinator) {}
+    constructor(Coordinator _coordinator) PeggedLinearAuction(_coordinator) {}
 
     // Helper function to set job parameters directly for testing
     function setJobParams(

@@ -14,9 +14,13 @@ import {DummyFeeModule} from "./mocks/dummyContracts/DummyFeeModule.sol";
 import {JobSpecificationSignature} from "./utils/JobSpecificationSignature.sol";
 import {FeeModuleInputSignature} from "./utils/FeeModuleInputSignature.sol";
 import {StdUtils} from "forge-std/src/StdUtils.sol";
+import {MockCoordinator} from "./mocks/MockCoordinator.sol";
+import {ICoordinator} from "../src/interfaces/ICoordinator.sol";
+import {MockCoordinatorProvider} from "./utils/MockCoordinatorProvider.sol";
 
 contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeModuleInputSignature, GasSnapshot {
     MockJobRegistry jobRegistry;
+    MockCoordinator coordinator;
     DummyApplication dummyApplication;
     DummyExecutionModule dummyExecutionModule;
     DummyFeeModule dummyFeeModule;
@@ -42,27 +46,31 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
     address executor = address(0x4);
 
-    address executorContract = address(0x5);
-
     bytes32 DOMAIN_SEPARATOR;
 
     function setUp() public {
         defaultProtocolFeeRatio = 2;
         defaultMaxExecutionFee = 100;
         defaultExecutionWindow = 1800;
-        vm.prank(address0);
-        jobRegistry = new MockJobRegistry(treasury, executorContract);
 
         initializeERC20Tokens();
         defaultFeeToken = address(token0);
 
-        dummyExecutionModule = new DummyExecutionModule(jobRegistry);
-        dummyFeeModule = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
+        MockCoordinatorProvider coordinatorProvider = new MockCoordinatorProvider(treasury);
+        coordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());
 
-        vm.prank(treasury);
-        jobRegistry.addExecutionModule(dummyExecutionModule);
-        vm.prank(treasury);
-        jobRegistry.addFeeModule(dummyFeeModule);
+        // depends on jobRegistry which is not initialized yet
+        dummyExecutionModule = new DummyExecutionModule();
+        dummyFeeModule = new DummyFeeModule(defaultFeeToken, 1_000_000);
+
+        vm.startPrank(treasury);
+        coordinator.addExecutionModule(dummyExecutionModule);
+        coordinator.addFeeModule(dummyFeeModule);
+        vm.stopPrank();
+
+        vm.prank(address0);
+        jobRegistry = new MockJobRegistry(coordinator);
+        
 
         fromPrivateKey = 0x12341234;
         from = vm.addr(fromPrivateKey);
@@ -92,7 +100,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -115,7 +123,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -141,7 +149,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             maxExecutions: 0,
             ignoreAppRevert: false,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -169,7 +177,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -196,7 +204,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             maxExecutions: 0,
             ignoreAppRevert: false,
             executionModule: module,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -206,8 +214,8 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
     }
 
-    function testFail_CreationWithUnsupportedFeeModule(bytes1 module) public {
-        vm.assume(module != 0x00);
+    function testFail_CreationWithUnsupportedModule(bytes1 executionModule, bytes1 feeModule) public {
+        vm.assume(executionModule != 0x00 && executionModule != 0x01 && feeModule != 0x00 && feeModule != 0x01);
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
@@ -218,8 +226,8 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             executionWindow: defaultExecutionWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: module,
+            executionModule: executionModule,
+            feeModule: feeModule,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -242,7 +250,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -263,7 +271,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -292,7 +300,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -320,7 +328,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -345,7 +353,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -376,7 +384,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -407,7 +415,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -440,7 +448,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -469,7 +477,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -480,13 +488,13 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         jobRegistry.deleteJob(index);
 
-        vm.prank(executorContract);
+        vm.prank(address(coordinator));
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.JobIsDeleted.selector));
         jobRegistry.execute(index, from);
     }
 
     function test_ExecuteNotExecutionContract(address caller) public {
-        vm.assume(caller != executorContract);
+        vm.assume(caller != address(coordinator));
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
             nonce: 0,
             deadline: UINT256_MAX,
@@ -498,7 +506,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -524,7 +532,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 1,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -532,7 +540,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
-        vm.prank(executorContract);
+        vm.prank(address(coordinator));
         jobRegistry.execute(index, from);
 
         (, bool active,,,,,,,,uint48 executionCounter,,,) = jobRegistry.jobs(index);
@@ -554,7 +562,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: true,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -564,7 +572,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         dummyApplication.setRevertOnExecute(true);
 
-        vm.prank(executorContract);
+        vm.prank(address(coordinator));
         jobRegistry.execute(index, from);
 
         (, bool active,,,,,,,,uint48 executionCounter,,,) = jobRegistry.jobs(index);
@@ -587,7 +595,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -597,7 +605,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
         dummyFeeModule.setExecutionFee(_executionFee);
-        vm.prank(executorContract);
+        vm.prank(address(coordinator));
         jobRegistry.execute(index, executor);
 
         assertEq(token0.balanceOf(from), startBalanceFrom - _executionFee, "from balance");
@@ -621,7 +629,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -634,7 +642,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
 
         dummyFeeModule.setExecutionFee(_executionFee);
-        vm.prank(executorContract);
+        vm.prank(address(coordinator));
         jobRegistry.execute(index, executor);
 
         assertEq(token0.balanceOf(from), startBalanceFrom, "from balance");
@@ -654,7 +662,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -677,7 +685,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -705,7 +713,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -725,7 +733,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -748,7 +756,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -768,7 +776,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -799,22 +807,22 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
         });
         vm.prank(from);
         uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
-        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
+        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
-        jobRegistry.addFeeModule(dummyFeeModule2);
+        coordinator.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
             reusableNonce: false,
             deadline: UINT256_MAX,
             index: index,
-            feeModule: 0x00,
+            feeModule: 0x01,
             feeModuleInput: ""
         });
         bytes memory sponsorSig =
@@ -823,7 +831,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig);
         (,,,,,, bytes1 feeModuleSet,,address sponsorSet,,,,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, sponsor, "sponsor mismatch");
-        assertEq(uint8(feeModuleSet), uint8(0x00), "fee module mismatch");
+        assertEq(uint8(feeModuleSet), uint8(0x01), "fee module mismatch");
     }
 
     function test_UpdateFeeModuleWithSponsorExpiredSignature(uint256 createTime, uint256 deadline) public {
@@ -841,22 +849,22 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
         });
         vm.prank(from);
         uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
-        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
+        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
-        jobRegistry.addFeeModule(dummyFeeModule2);
+        coordinator.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
             reusableNonce: false,
             deadline: deadline,
             index: index,
-            feeModule: 0x00,
+            feeModule: 0x01,
             feeModuleInput: ""
         });
         bytes memory sponsorSig =
@@ -880,7 +888,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -889,16 +897,16 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
 
-        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
+        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
-        jobRegistry.addFeeModule(dummyFeeModule2);
+        coordinator.addFeeModule(dummyFeeModule2);
 
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
             reusableNonce: false,
             deadline: UINT256_MAX,
             index: index,
-            feeModule: 0x00,
+            feeModule: 0x01,
             feeModuleInput: ""
         });
 
@@ -906,7 +914,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         jobRegistry.updateFeeModule(feeModuleInput, address(0), "");
         (,,,,,, bytes1 feeModuleSet,, address sponsorSet,,,,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, from, "sponsor mismatch");
-        assertEq(uint8(feeModuleSet), uint8(0x00), "fee module mismatch");
+        assertEq(uint8(feeModuleSet), uint8(0x01), "fee module mismatch");
     }
 
     function test_UpdateFeeModuleInExecutionMode() public {
@@ -922,22 +930,22 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
         });
         vm.prank(from);
         uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
-        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
+        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
-        jobRegistry.addFeeModule(dummyFeeModule2);
+        coordinator.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
             reusableNonce: false,
             deadline: UINT256_MAX,
             index: index,
-            feeModule: 0x00,
+            feeModule: 0x01,
             feeModuleInput: ""
         });
         dummyExecutionModule.setIsInExecutionMode(true);
@@ -960,22 +968,22 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
         });
         vm.prank(from);
         uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
-        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
+        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
-        jobRegistry.addFeeModule(dummyFeeModule2);
+        coordinator.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
             reusableNonce: false,
             deadline: UINT256_MAX,
             index: index,
-            feeModule: 0x00,
+            feeModule: 0x01,
             feeModuleInput: ""
         });
         vm.prank(caller);
@@ -996,22 +1004,22 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
         });
         vm.prank(from);
         uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
-        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(jobRegistry, defaultFeeToken, 1_000_000);
+        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
-        jobRegistry.addFeeModule(dummyFeeModule2);
+        coordinator.addFeeModule(dummyFeeModule2);
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
             reusableNonce: false,
             deadline: UINT256_MAX,
             index: index,
-            feeModule: 0x01,
+            feeModule: 0x02,
             feeModuleInput: ""
         });
         bytes memory sponsorSig =
@@ -1020,7 +1028,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig);
         (,,,,,, bytes1 feeModuleSet,, address sponsorSet,,,,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, sponsor, "sponsor mismatch");
-        assertEq(uint8(feeModuleSet), uint8(0x01), "fee module mismatch");
+        assertEq(uint8(feeModuleSet), uint8(0x02), "fee module mismatch");
     }
 
     function test_CreateJobInitialExecution() public {
@@ -1036,7 +1044,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -1061,7 +1069,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -1069,7 +1077,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
         jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
-        vm.prank(executorContract);
+        vm.prank(address(coordinator));
         jobRegistry.execute(0, from);
     }
 
@@ -1086,7 +1094,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 1,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""
@@ -1094,7 +1102,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
         jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
-        vm.prank(executorContract);
+        vm.prank(address(coordinator));
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.JobNotActive.selector));
         jobRegistry.execute(0, from);
     }
@@ -1112,7 +1120,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
-            feeModule: 0x00,
+            feeModule: 0x01,
             executionModuleInput: "",
             feeModuleInput: "",
             applicationInput: ""

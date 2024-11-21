@@ -16,7 +16,7 @@ contract Executor is Test {
         coordinator = _coordinator;
     }
 
-    function stake() public {
+    function stake(uint256 modulesToRegister) public {
         uint256 epochEndTime = coordinator.epochEndTime();
         // if we are in rounds or slashing phase, we warp forward to after
         if (
@@ -25,15 +25,15 @@ contract Executor is Test {
         ) {
             vm.warp(epochEndTime);
         }
-        amountStaked += coordinator.getStakingAmount();
-        coordinator.stake();
+        uint256 stakingAmount = coordinator.stake(modulesToRegister);
+        amountStaked += stakingAmount;
     }
 
     function unstake() public {
         // have to warp such that we are after the minimum staking period and not in reveal phase, execution rounds and slashing duration.
         uint256 epochEndTime = coordinator.epochEndTime();
         uint256 minimumStakingPeriod = coordinator.getMinimumStakingPeriod();
-        (,,,,,,,, uint256 stakingTimestamp) = coordinator.executorInfo(address(this));
+        (,,,,,,,, uint256 stakingTimestamp,) = coordinator.executorInfo(address(this));
 
         uint256 minimumUnstakeTime = stakingTimestamp + minimumStakingPeriod;
         if (
@@ -43,7 +43,7 @@ contract Executor is Test {
             vm.warp(epochEndTime > minimumUnstakeTime ? epochEndTime : minimumUnstakeTime);
         }
 
-        (uint256 balance,,,,,,,,) = coordinator.executorInfo(address(this));
+        (uint256 balance,,,,,,,,,) = coordinator.executorInfo(address(this));
         amountUnstaked += balance;
         coordinator.unstake();
     }

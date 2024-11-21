@@ -3,20 +3,21 @@ pragma solidity 0.8.27;
 
 import {IExecutionModule} from "../interfaces/IExecutionModule.sol";
 import {ILinearAuction} from "../interfaces/feeModules/ILinearAuction.sol";
-import {JobRegistry} from "../JobRegistry.sol";
-import {IJobRegistry} from "../interfaces/IJobRegistry.sol";
+import {Coordinator} from "../Coordinator.sol";
+
+
 
 /// @author Victor Brevig
 contract LinearAuction is ILinearAuction {
-    JobRegistry public immutable jobRegistry;
+    Coordinator public immutable coordinator;
     mapping(uint256 => Params) public params;
 
-    constructor(JobRegistry _jobRegistry) {
-        jobRegistry = _jobRegistry;
+    constructor(Coordinator _coordinator) {
+        coordinator = _coordinator;
     }
 
     modifier onlyJobRegistry() {
-        if (msg.sender != address(jobRegistry)) revert NotJobRegistry();
+        if (!coordinator.isJobRegistry(msg.sender)) revert NotJobRegistry();
         _;
     }
 

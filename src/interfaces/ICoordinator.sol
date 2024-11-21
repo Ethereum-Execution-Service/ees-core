@@ -3,7 +3,9 @@ pragma solidity ^0.8.0;
 
 interface ICoordinator {
     struct Executor {
+        // slot 0
         uint256 balance;
+        // slot 1
         bool active;
         bool initialized;
         uint32 arrayIndex;
@@ -11,7 +13,10 @@ interface ICoordinator {
         uint8 lastCheckinRound;
         uint96 lastCheckinEpoch;
         uint96 executionsInRoundsInEpoch;
+        // slot 2
         uint256 stakingTimestamp;
+        // slot 3
+        uint256 registeredModules;
     }
 
     struct CommitData {
@@ -22,7 +27,7 @@ interface ICoordinator {
 
     struct InitSpec {
         address stakingToken;
-        uint256 stakingAmount;
+        uint256 stakingAmountPerModule;
         uint256 minimumStakingPeriod;
         uint256 stakingBalanceThreshold;
         uint256 inactiveSlashingAmount;
@@ -43,7 +48,7 @@ interface ICoordinator {
         address _feeRecipient,
         uint8 _jobRegistryIndex
     ) external returns (uint256[] memory failedIndices);
-    function stake() external;
+    function stake(uint256 _modulesBitset) external returns (uint256 stakingAmount);
     function unstake() external;
     function topup(uint256 _amount) external;
     function slashInactiveExecutor(address _executor, uint8 _round, address _recipient) external;
@@ -63,6 +68,8 @@ interface ICoordinator {
     event CheckIn(address indexed executor, uint192 indexed epoch, uint8 round);
     event ExecutorDeactivated(address indexed executor);
     event ExecutorActivated(address indexed executor);
+    event ModulesRegistered(address indexed executor, uint256 indexed modulesBitset);
+    event ModulesDeregistered(address indexed executor, uint256 indexed modulesBitset);
 
     error NotActiveExecutor();
     error NotInitializedExecutor();
@@ -80,5 +87,8 @@ interface ICoordinator {
     error AlreadyCheckedIn();
     error CheckInOutsideRound();
     error MinimumStakingPeriodNotOver();
-    error TopupBelowMinimum();
+    error FinalBalanceBelowMinimum();
+    error ExecutorNotRegisteredForModules();
+    error JobRegistryNotSet();
+    error DesignatedExecutorSupportsModules();
 }

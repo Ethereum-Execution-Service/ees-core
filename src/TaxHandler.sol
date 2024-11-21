@@ -2,10 +2,11 @@
 pragma solidity 0.8.27;
 
 import {Owned} from "solmate/src/auth/Owned.sol";
+import {ModuleRegistry} from "./ModuleRegistry.sol";
 
 /// @author Victor Brevig
 /// @notice TaxHandler is responsible for handling tax updates for EES.
-contract TaxHandler is Owned {
+contract TaxHandler is ModuleRegistry {
     uint256 internal lastExecutionTaxUpdate;
     uint256 internal lastProtocolPoolCutUpdate;
     uint24 internal constant executionTaxUpdateCooldown = 7 days;
@@ -27,7 +28,7 @@ contract TaxHandler is Owned {
     error TaxUpdateTooLarge();
     error UpdateOnCooldown();
 
-    constructor(address _owner, uint256 _executionTax, uint256 _protocolPoolCutBps) Owned(_owner) {
+    constructor(address _owner, uint256 _executionTax, uint256 _protocolPoolCutBps) ModuleRegistry(_owner) {
         require(_protocolPoolCutBps < BPS_DENOMINATOR, "TaxHandler: protocol pool cut bps must be less than 100%");
         lastExecutionTaxUpdate = block.timestamp;
         executionTax = _executionTax;

@@ -11,6 +11,8 @@ import {IPriceOracle} from "../../src/interfaces/IPriceOracle.sol";
 import {Coordinator} from "../../src/Coordinator.sol";
 import {ICoordinator} from "../../src/interfaces/ICoordinator.sol";
 import {TokenProvider} from "../utils/TokenProvider.sol";
+import {MockCoordinatorProvider} from "../utils/MockCoordinatorProvider.sol";
+import {MockCoordinator} from "../mocks/MockCoordinator.sol";
 
 contract PeggedLinearAuctionTest is Test, GasSnapshot, TokenProvider {
     MockPeggedLinearAuction feeModule;
@@ -39,26 +41,13 @@ contract PeggedLinearAuctionTest is Test, GasSnapshot, TokenProvider {
         defaultStartTime = 1641070800;
 
 
-        ICoordinator.InitSpec memory spec = ICoordinator.InitSpec({
-            stakingToken: address(token0),
-            stakingAmount: 1000,
-            minimumStakingPeriod: 2,
-            stakingBalanceThreshold: 300,
-            inactiveSlashingAmount: 200,
-            commitSlashingAmount: 50,
-            roundDuration: 15,
-            roundsPerEpoch: 5,
-            roundBuffer: 15,
-            commitPhaseDuration: 15,
-            revealPhaseDuration: 15,
-            slashingDuration: 30,
-            executionTax: 4,
-            protocolPoolCutBps: 1000
-        });
+        MockCoordinatorProvider coordinatorProvider = new MockCoordinatorProvider(address(0x3));
+        coordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());
+        jobRegistry = new JobRegistry(coordinator);
+        vm.prank(address(address(0x3)));
+        coordinator.addJobRegistry(address(jobRegistry));
 
-        jobRegistry = new JobRegistry(address2, address(0x5));
-        coordinator = new Coordinator(spec, address2);
-        feeModule = new MockPeggedLinearAuction(jobRegistry, coordinator);
+        feeModule = new MockPeggedLinearAuction(coordinator);
 
         dummyPriceOracle = new DummyPriceOracle(100);
 

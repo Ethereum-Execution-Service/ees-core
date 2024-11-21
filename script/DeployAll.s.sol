@@ -27,8 +27,8 @@ contract DeployAll is Script {
         initSpec = ICoordinator.InitSpec({
             // Base sepolia USDC copy
             stakingToken: 0x7139F4601480d20d43Fa77780B67D295805aD31a,
-            // 1000 USDC - 1000000000
-            stakingAmount: 1000000000,
+            // 500 USDC - 500000000
+            stakingAmountPerModule: 500000000,
             // 30 seconds, should probably be something like 30 days in prod
             minimumStakingPeriod: 30 seconds,
             // 400 USDC - 400000000
@@ -66,23 +66,24 @@ contract DeployAll is Script {
         coordinator = new Coordinator(initSpec, treasury);
         console2.log("Coordinator Deployed:", address(coordinator));
 
-        jobRegistry = new JobRegistry(treasury, address(coordinator));
+        jobRegistry = new JobRegistry(coordinator);
         console2.log("JobRegistry Deployed:", address(jobRegistry));
 
         coordinator.addJobRegistry(address(jobRegistry));
 
-        regularTimeInterval = new RegularTimeInterval(jobRegistry);
+        regularTimeInterval = new RegularTimeInterval(coordinator);
         console2.log("RegularTimeInterval Deployed:", address(regularTimeInterval));
 
-        linearAuction = new LinearAuction(jobRegistry);
+        linearAuction = new LinearAuction(coordinator);
         console2.log("LinearAuction Deployed:", address(linearAuction));
 
-        peggedLinearAuction = new PeggedLinearAuction(jobRegistry, coordinator);
+        peggedLinearAuction = new PeggedLinearAuction(coordinator);
         console2.log("PeggedLinearAuction Deployed:", address(peggedLinearAuction));
 
-        jobRegistry.addExecutionModule(regularTimeInterval);
-        jobRegistry.addFeeModule(linearAuction);
-        jobRegistry.addFeeModule(peggedLinearAuction);
+
+        coordinator.addExecutionModule(regularTimeInterval);
+        coordinator.addFeeModule(linearAuction);
+        coordinator.addFeeModule(peggedLinearAuction);
 
         vm.stopBroadcast();
     }

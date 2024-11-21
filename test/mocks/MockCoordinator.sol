@@ -24,8 +24,8 @@ contract MockCoordinator is Coordinator {
         executorInfo[_executor].stakingTimestamp = _stakingTimestamp;
     }
 
-    function getStakingAmount() public view returns (uint256) {
-        return stakingAmount;
+    function getStakingAmountPerModule() public view returns (uint256) {
+        return stakingAmountPerModule;
     }
 
     function setEpochEndTime(uint256 _epochEndTime) public {

@@ -8,11 +8,15 @@ import {ICoordinator} from "../../src/interfaces/ICoordinator.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {Executor} from "../actors/Executor.sol";
 import {DummyJobRegistry} from "../mocks/dummyContracts/DummyJobRegistry.sol";
+import {DummyExecutionModule} from "../mocks/dummyContracts/DummyExecutionModule.sol";
+import {DummyFeeModule} from "../mocks/dummyContracts/DummyFeeModule.sol";
 
 contract CoordinatorHandler is Test, TokenProvider {
   MockCoordinator coordinator;
   TokenProvider tokenProvider;
   DummyJobRegistry jobRegistry;
+  DummyExecutionModule dummyExecutionModule;
+  DummyFeeModule dummyFeeModule;
   Executor[] public executors;
 
   uint256 public totalProtocolWithdrawalAmount;
@@ -24,7 +28,7 @@ contract CoordinatorHandler is Test, TokenProvider {
     emit TokensInitialized();
     ICoordinator.InitSpec memory spec = ICoordinator.InitSpec({
       stakingToken: address(token0),
-      stakingAmount: 1000,
+      stakingAmountPerModule: 500,
       minimumStakingPeriod: 2,
       stakingBalanceThreshold: 300,
       inactiveSlashingAmount: 200,
@@ -40,8 +44,13 @@ contract CoordinatorHandler is Test, TokenProvider {
     });
     coordinator = new MockCoordinator(spec, address(0x5));
     jobRegistry = new DummyJobRegistry();
-    vm.prank(address(0x5));
+    dummyExecutionModule = new DummyExecutionModule();
+    dummyFeeModule = new DummyFeeModule(address(token0), 1_000_000);
+    vm.startPrank(address(0x5));
     coordinator.addJobRegistry(address(jobRegistry));
+    coordinator.addExecutionModule(dummyExecutionModule);
+    coordinator.addFeeModule(dummyFeeModule);
+    vm.stopPrank();
     coordinator.initiateEpoch();
   }
 
@@ -51,7 +60,8 @@ contract CoordinatorHandler is Test, TokenProvider {
     setERC20TestTokens(address(executor));
     setERC20TestTokenApprovals(vm, address(executor), address(coordinator));
     executors.push(executor);
-    executor.stake();
+    uint256 modulesToRegister = (1 << 0) | (1 << 1);
+    executor.stake(modulesToRegister);
   }
 
   function unstake(uint256 index) public {
@@ -59,9 +69,10 @@ contract CoordinatorHandler is Test, TokenProvider {
     index = bound(index, 0, executors.length - 1);
 
     // if executor is not initialized, stake. This is to avoid further useless tests for this executor.
-    (,, bool initialized,,,,,,) = coordinator.executorInfo(address(executors[index]));
+    (,, bool initialized,,,,,,,) = coordinator.executorInfo(address(executors[index]));
     if (!initialized) {
-      executors[index].stake();
+      uint256 modulesToRegister = (1 << 0) | (1 << 1);
+      executors[index].stake(modulesToRegister);
     }
 
     executors[index].unstake();
@@ -72,11 +83,12 @@ contract CoordinatorHandler is Test, TokenProvider {
     index = bound(index, 0, executors.length - 1);
     
     // if executor is not initialized, stake. This is to avoid further useless tests for this executor.
-    (uint256 stakingBalance,,bool initialized,,,,,,) = coordinator.executorInfo(address(executors[index]));
+    (uint256 stakingBalance,,bool initialized,,,,,,,) = coordinator.executorInfo(address(executors[index]));
     if (!initialized) {
-      executors[index].stake();
+      uint256 modulesToRegister = (1 << 0) | (1 << 1);
+      executors[index].stake(modulesToRegister);
     }
-    uint256 stakingAmount = coordinator.getStakingAmount();
+    uint256 stakingAmount = coordinator.getStakingAmountPerModule() * 2;
     // Bound amount between minimum required and max available
     if (stakingBalance < stakingAmount) {
         uint256 minRequired = stakingAmount - stakingBalance;
@@ -93,12 +105,13 @@ contract CoordinatorHandler is Test, TokenProvider {
     index = bound(index, 0, executors.length - 1);
     
     // if executor is not initialized, stake. If not active, topup.
-    (uint256 stakingBalance,bool active,bool initialized,,,,,,) = coordinator.executorInfo(address(executors[index]));
+    (uint256 stakingBalance,bool active,bool initialized,,,,,,,) = coordinator.executorInfo(address(executors[index]));
     if (!initialized) {
-      executors[index].stake();
+      uint256 modulesToRegister = (1 << 0) | (1 << 1);
+      executors[index].stake(modulesToRegister);
     }
     else if (!active) {
-      uint256 stakingAmount = coordinator.getStakingAmount();
+      uint256 stakingAmount = coordinator.getStakingAmountPerModule() * 2;
       if (stakingBalance < stakingAmount) {
         executors[index].topup(stakingAmount - stakingBalance);
       }
@@ -119,24 +132,26 @@ contract CoordinatorHandler is Test, TokenProvider {
     slashIndex = bound(slashIndex, 0, executors.length - 1);
 
     // if executor is not initialized, stake. If not active, topup.
-    (uint256 stakingBalance, bool active, bool initialized,,,,,,) = coordinator.executorInfo(address(executors[index]));
+    (uint256 stakingBalance, bool active, bool initialized,,,,,,,) = coordinator.executorInfo(address(executors[index]));
     if (!initialized) {
-      executors[index].stake();
+      uint256 modulesToRegister = (1 << 0) | (1 << 1);
+      executors[index].stake(modulesToRegister);
     }
     else if (!active) {
-      uint256 stakingAmount = coordinator.getStakingAmount();
+      uint256 stakingAmount = coordinator.getStakingAmountPerModule() * 2;
       if (stakingBalance < stakingAmount) {
         executors[index].topup(stakingAmount - stakingBalance);
       }
     }
 
     // executor to slash should also be active and initialized
-    (uint256 stakingBalanceSlash, bool activeSlash, bool initializedSlash,,,,,,) = coordinator.executorInfo(address(executors[slashIndex]));
+    (uint256 stakingBalanceSlash, bool activeSlash, bool initializedSlash,,,,,,,) = coordinator.executorInfo(address(executors[slashIndex]));
     if (!initializedSlash) {
-      executors[slashIndex].stake();
+      uint256 modulesToRegister = (1 << 0) | (1 << 1);
+      executors[slashIndex].stake(modulesToRegister);
     }
     else if (!activeSlash) {
-      uint256 stakingAmount = coordinator.getStakingAmount();
+      uint256 stakingAmount = coordinator.getStakingAmountPerModule() * 2;
       if (stakingBalanceSlash < stakingAmount) {
         executors[slashIndex].topup(stakingAmount - stakingBalanceSlash);
       }
@@ -151,24 +166,26 @@ contract CoordinatorHandler is Test, TokenProvider {
     round = uint8(bound(round, 0, coordinator.getRoundsPerEpoch() - 1));
 
     // if executor is not initialized, stake. If not active, topup.
-    (uint256 stakingBalance, bool active, bool initialized,,,,,,) = coordinator.executorInfo(address(executors[index]));
+    (uint256 stakingBalance, bool active, bool initialized,,,,,,,) = coordinator.executorInfo(address(executors[index]));
     if (!initialized) {
-      executors[index].stake();
+      uint256 modulesToRegister = (1 << 0) | (1 << 1);
+      executors[index].stake(modulesToRegister);
     }
     else if (!active) {
-      uint256 stakingAmount = coordinator.getStakingAmount();
+      uint256 stakingAmount = coordinator.getStakingAmountPerModule() * 2;
       if (stakingBalance < stakingAmount) {
         executors[index].topup(stakingAmount - stakingBalance);
       }
     }
 
     // executor to slash should also be active and initialized
-    (uint256 stakingBalanceSlash, bool activeSlash, bool initializedSlash,,,,,,) = coordinator.executorInfo(address(executors[slashIndex]));
+    (uint256 stakingBalanceSlash, bool activeSlash, bool initializedSlash,,,,,,,) = coordinator.executorInfo(address(executors[slashIndex]));
     if (!initializedSlash) {
-      executors[slashIndex].stake();
+      uint256 modulesToRegister = (1 << 0) | (1 << 1);
+      executors[slashIndex].stake(modulesToRegister);
     }
     else if (!activeSlash) {
-      uint256 stakingAmount = coordinator.getStakingAmount();
+      uint256 stakingAmount = coordinator.getStakingAmountPerModule() * 2;
       if (stakingBalanceSlash < stakingAmount) {
         executors[slashIndex].topup(stakingAmount - stakingBalanceSlash);
       }
@@ -180,7 +197,7 @@ contract CoordinatorHandler is Test, TokenProvider {
   function getTotalExecutorBalances() public view returns (uint256) {
     uint256 totalBalance;
     for (uint256 i = 0; i < executors.length; i++) {
-      (uint256 balance,,,,,,,,) = coordinator.executorInfo(address(executors[i]));
+      (uint256 balance,,,,,,,,,) = coordinator.executorInfo(address(executors[i]));
       totalBalance += balance;
     }
     return totalBalance;
@@ -253,7 +270,7 @@ contract CoordinatorHandler is Test, TokenProvider {
     uint256 initializedExecutors;
     uint256 activeExecutors;
     for (uint256 i = 0; i < executors.length; i++) {
-      (, bool active, bool initialized,,,,,,) = coordinator.executorInfo(address(executors[i]));
+      (, bool active, bool initialized,,,,,,,) = coordinator.executorInfo(address(executors[i]));
       if (initialized) initializedExecutors++;
       if (active) activeExecutors++;
     }
@@ -272,7 +289,7 @@ contract CoordinatorHandler is Test, TokenProvider {
     // First, count how many executors meet our criteria
     uint256 count = 0;
     for (uint256 i = 0; i < coordinator.getNumberOfActiveExecutors(); i++) {
-        (,,,, uint8 roundsCheckedInEpoch,,, uint96 executionsInEpochCreatedBeforeEpoch,) = coordinator.executorInfo(coordinator.activeExecutors(i));
+        (,,,, uint8 roundsCheckedInEpoch,,, uint96 executionsInEpochCreatedBeforeEpoch,,) = coordinator.executorInfo(coordinator.activeExecutors(i));
         if(roundsCheckedInEpoch != 0 || executionsInEpochCreatedBeforeEpoch != 0) {
             count++;
         }
@@ -284,7 +301,7 @@ contract CoordinatorHandler is Test, TokenProvider {
     // Fill the array
     uint256 currentIndex = 0;
     for (uint256 i = 0; i < coordinator.getNumberOfActiveExecutors(); i++) {
-        (,,,, uint8 roundsCheckedInEpoch,,, uint96 executionsInEpochCreatedBeforeEpoch,) = coordinator.executorInfo(coordinator.activeExecutors(i));
+        (,,,, uint8 roundsCheckedInEpoch,,, uint96 executionsInEpochCreatedBeforeEpoch,,) = coordinator.executorInfo(coordinator.activeExecutors(i));
         if(roundsCheckedInEpoch != 0 || executionsInEpochCreatedBeforeEpoch != 0) {
             executorsWithInfo[currentIndex] = coordinator.activeExecutors(i);
             currentIndex++;

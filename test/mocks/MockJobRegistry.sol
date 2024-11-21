@@ -2,10 +2,11 @@
 pragma solidity 0.8.27;
 
 import {JobRegistry} from "../../src/JobRegistry.sol";
+import {Coordinator} from "../../src/Coordinator.sol";
 
 /// @author Victor Brevig
 contract MockJobRegistry is JobRegistry {
-    constructor(address _treasury, address _executionContract) JobRegistry(_treasury, _executionContract) {}
+    constructor(Coordinator _coordinator) JobRegistry(_coordinator) {}
 
     bool revertOnExecute;
 

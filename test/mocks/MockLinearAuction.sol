@@ -2,11 +2,11 @@
 pragma solidity 0.8.27;
 
 import {LinearAuction} from "../../src/feeModules/LinearAuction.sol";
-import {JobRegistry} from "../../src/JobRegistry.sol";
+import {Coordinator} from "../../src/Coordinator.sol";
 
 /// @author Victor Brevig
 contract MockLinearAuction is LinearAuction {
-    constructor(JobRegistry _jobRegistry) LinearAuction(_jobRegistry) {}
+    constructor(Coordinator _coordinator) LinearAuction(_coordinator) {}
 
     // Helper function to set job parameters directly for testing
     function setJobParams(

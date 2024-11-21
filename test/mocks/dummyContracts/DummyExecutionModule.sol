@@ -2,20 +2,15 @@
 pragma solidity 0.8.27;
 
 import {IExecutionModule} from "../../../src/interfaces/IExecutionModule.sol";
-import {JobRegistry} from "../../../src/JobRegistry.sol";
-import {IJobRegistry} from "../../../src/interfaces/IJobRegistry.sol";
 
 contract DummyExecutionModule is IExecutionModule {
-    JobRegistry public immutable jobRegistry;
-
     uint256 public counter;
 
     bool internal jobExpired;
     bool internal isInExecutionMode;
     bool internal initialExecution;
 
-    constructor(JobRegistry _jobRegistry) {
-        jobRegistry = _jobRegistry;
+    constructor() {
         counter = 0;
         jobExpired = false;
         isInExecutionMode = false;

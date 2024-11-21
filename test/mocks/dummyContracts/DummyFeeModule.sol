@@ -6,17 +6,12 @@ import {JobRegistry} from "../../../src/JobRegistry.sol";
 import {IJobRegistry} from "../../../src/interfaces/IJobRegistry.sol";
 
 contract DummyFeeModule is IFeeModule {
-    JobRegistry public immutable jobRegistry;
-
-    error NotJobRegistry();
-
     uint256 public counter;
 
     address public executionFeeToken;
     uint256 public executionFee;
 
-    constructor(JobRegistry _jobRegistry, address _executionFeeToken, uint256 _executionFee) {
-        jobRegistry = _jobRegistry;
+    constructor(address _executionFeeToken, uint256 _executionFee) {
         executionFeeToken = _executionFeeToken;
         executionFee = _executionFee;
         counter = 0;

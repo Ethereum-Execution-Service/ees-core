@@ -3,6 +3,8 @@ pragma solidity 0.8.27;
 
 import {Test} from "forge-std/src/Test.sol";
 import {JobRegistry} from "../src/JobRegistry.sol";
+import {MockCoordinatorProvider} from "./utils/MockCoordinatorProvider.sol";
+import {MockCoordinator} from "./mocks/MockCoordinator.sol";
 
 // forge test --match-contract EIP712
 contract EIP712Test is Test {
@@ -13,7 +15,9 @@ contract EIP712Test is Test {
     JobRegistry jobRegistry;
 
     function setUp() public {
-        jobRegistry = new JobRegistry(address(0x2), address(0x3));
+        MockCoordinatorProvider coordinatorProvider = new MockCoordinatorProvider(address(0x3));
+        MockCoordinator mockCoordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());
+        jobRegistry = new JobRegistry(mockCoordinator);
     }
 
     function testDomainSeparator() public {

@@ -56,12 +56,10 @@ interface IJobRegistry {
         bytes calldata _sponsorSignature,
         uint256 _index
     ) external returns (uint256 index);
-    function execute(uint256 _index, address _feeRecipient) external returns (uint96, uint256, address);
+    function execute(uint256 _index, address _feeRecipient) external returns (uint96, uint256, address, uint8, uint8);
     function deleteJob(uint256 _index) external;
     function deactivateJob(uint256 _index) external;
     function revokeSponsorship(uint256 _index) external;
-    function addExecutionModule(IExecutionModule _module) external;
-    function addFeeModule(IFeeModule _module) external;
     function updateFeeModule(
         FeeModuleInput calldata _feeModuleInput,
         address _sponsor,
@@ -118,4 +116,7 @@ interface IJobRegistry {
 
     /// @notice Thrown when the job is not expired or is active
     error JobNotExpiredOrActive();
+
+    /// @notice Thrown when at least one module is not valid
+    error InvalidModule();
 }

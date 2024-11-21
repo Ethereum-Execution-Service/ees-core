@@ -4,12 +4,16 @@ pragma solidity 0.8.27;
 import {Test} from "forge-std/src/Test.sol";
 import {MockJobRegistry} from "./mocks/MockJobRegistry.sol";
 import {InvalidNonce} from "../src/PermitErrors.sol";
+import {MockCoordinatorProvider} from "./utils/MockCoordinatorProvider.sol";
+import {MockCoordinator} from "./mocks/MockCoordinator.sol";
 
 contract NonceBitmapTest is Test {
     MockJobRegistry jobRegistry;
 
     function setUp() public {
-        jobRegistry = new MockJobRegistry(address(0x3), address(0x5));
+        MockCoordinatorProvider coordinatorProvider = new MockCoordinatorProvider(address(0x3));
+        MockCoordinator coordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());
+        jobRegistry = new MockJobRegistry(coordinator);
     }
 
     function test_LowNonces() public {

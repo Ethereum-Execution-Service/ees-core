@@ -9,26 +9,35 @@ import {JobRegistry} from "../../src/JobRegistry.sol";
 import {JobSpecificationSignature} from "../utils/JobSpecificationSignature.sol";
 import {IRegularTimeInterval} from "../../src/interfaces/executionModules/IRegularTimeInterval.sol";
 import {MockRegularTimeInterval} from "../mocks/MockRegularTimeInterval.sol";
+import {MockCoordinatorProvider} from "../utils/MockCoordinatorProvider.sol";
+import {MockCoordinator} from "../mocks/MockCoordinator.sol";
 
 contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignature, GasSnapshot {
     JobRegistry jobRegistry;
     MockRegularTimeInterval executionModule;
+    MockCoordinatorProvider coordinatorProvider;
+    MockCoordinator coordinator;
 
     uint256 defaultStartTime;
     uint32 defaultExecutionWindow;
 
     address from;
     uint256 fromPrivateKey;
-
+    
     address address0 = address(0x0);
     address address2 = address(0x2);
 
     function setUp() public {
         defaultExecutionWindow = 1800;
         defaultStartTime = 1641070800;
-        vm.prank(address0);
-        jobRegistry = new JobRegistry(address2, address(0x5));
-        executionModule = new MockRegularTimeInterval(jobRegistry);
+
+
+        coordinatorProvider = new MockCoordinatorProvider(address(0x3));
+        coordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());
+        jobRegistry = new JobRegistry(coordinator);
+        vm.prank(address(address(0x3)));
+        coordinator.addJobRegistry(address(jobRegistry));
+        executionModule = new MockRegularTimeInterval(coordinator);
         fromPrivateKey = 0x12341234;
         from = vm.addr(fromPrivateKey);
     }

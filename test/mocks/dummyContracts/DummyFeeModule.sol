@@ -23,12 +23,13 @@ contract DummyFeeModule is IFeeModule {
 
     function onExecuteJob(
         uint256 _index,
-        uint32 _executionWindow,
+        uint24 _executionWindow,
+        uint24 _zeroFeeWindow,
         uint256 _executionTime,
         uint256 _variableGasConsumption
-    ) external override returns (uint256, address) {
+    ) external override returns (uint256, address, bool) {
         counter++;
-        return (executionFee, executionFeeToken);
+        return (executionFee, executionFeeToken, false);
     }
 
     function onUpdateData(uint256 _index, bytes calldata _inputs) public override {}

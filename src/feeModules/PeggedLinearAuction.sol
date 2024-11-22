@@ -35,47 +35,59 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
      */
     function onExecuteJob(
         uint256 _index,
-        uint32 _executionWindow,
+        uint24 _executionWindow,
+        uint24 _zeroFeeWindow,
         uint256 _executionTime,
         uint256 _variableGasConsumption
-    ) external override onlyJobRegistry returns (uint256 executionFee, address executionFeeToken) {
+    ) external override onlyJobRegistry returns (uint256 executionFee, address executionFeeToken, bool inZeroFeeWindow) {
         Params memory job = params[_index];
-
-        (address taxToken, uint256 executionTax, uint256 protocolPoolCutBps) = coordinator.getTaxConfig();
-        
-        // get tak token decimals
-        uint8 taxTokenDecimals = ERC20(taxToken).decimals();
-
-        // tokens per 1 eth in tokenDecimals and tokens per 1 USD in tokenDecimals
-        (uint256 priceInETH, uint256 priceInUSD) = job.priceOracle.getPrice(job.executionFeeToken, job.oracleData);
-
-        // we have to scale executorTax and protocolTax to feeTokenDecimals
-        // should we just do this in the oracle? Since this is the only place we use priceInUSD
-
-        // total tax in fee tokens and fee token decimals
-        uint256 totalTax = (priceInUSD * executionTax) / taxTokenDecimals;
-
-        // wei / gas
-        uint256 baseFee = block.basefee;
-        // gas
-        uint256 totalGasConsumption = _variableGasConsumption + _GAS_OVERHEAD;
-
-        // we have to scale price from per ETH to per wei basis, so div by 10**18
-        // number of tokens to pay for base fee in fee token decimals
-        uint256 totalFeeBase = (priceInETH * baseFee * totalGasConsumption) / 10**18;
-
-        uint256 feeDiff;
-        unchecked {
-            feeDiff = job.maxOverheadBps - job.minOverheadBps;
-        }
-
-        uint256 secondsInExecutionWindow = block.timestamp - _executionTime;
-        // calculate fee overhead as linear function between min and max over execution window
-        uint256 feeOverheadBps = ((feeDiff * secondsInExecutionWindow) / (_executionWindow - 1)) + job.minOverheadBps;
-
-        // return execution fee in fee tokens and fee token address
-        executionFee = totalTax + ((totalFeeBase * feeOverheadBps) / _BASE_BPS);
         executionFeeToken = job.executionFeeToken;
+
+
+        if(block.timestamp - _executionTime < _zeroFeeWindow) {
+            executionFee = 0;
+            inZeroFeeWindow = true;
+        } else {
+            // else calculate fee as a linear function between minOverheadBps and maxOverheadBps of base fee plus tax over _executionWindow, starting from _zeroFeeWindow
+            (address taxToken, uint256 executionTax, uint256 protocolPoolCutBps) = coordinator.getTaxConfig();
+        
+            // get tak token decimals
+            uint8 taxTokenDecimals = ERC20(taxToken).decimals();
+
+            // tokens per 1 eth in tokenDecimals and tokens per 1 USD in tokenDecimals
+            (uint256 priceInETH, uint256 priceInUSD) = job.priceOracle.getPrice(job.executionFeeToken, job.oracleData);
+
+            // we have to scale executorTax and protocolTax to feeTokenDecimals
+            // should we just do this in the oracle? Since this is the only place we use priceInUSD
+
+            // total tax in fee tokens and fee token decimals
+            uint256 totalTax = (priceInUSD * executionTax) / taxTokenDecimals;
+
+            // wei / gas
+            uint256 baseFee = block.basefee;
+            // gas
+            uint256 totalGasConsumption = _variableGasConsumption + _GAS_OVERHEAD;
+
+            // we have to scale price from per ETH to per wei basis, so div by 10**18
+            // number of tokens to pay for base fee in fee token decimals
+            uint256 totalFeeBase = (priceInETH * baseFee * totalGasConsumption) / 10**18;
+
+            uint256 feeDiff;
+            uint256 windowDiff;
+            unchecked {
+                feeDiff = job.maxOverheadBps - job.minOverheadBps;
+                windowDiff = _executionWindow - _zeroFeeWindow - 1;
+            }
+
+            uint256 secondsAfterZeroFeeWindow = block.timestamp - (_executionTime + _zeroFeeWindow);
+            // calculate fee overhead as linear function between min and max over execution window
+            // reaches maxExecutionFee at _executionTime + _executionWindow - 1, the last timestep that the job can be executed
+            uint256 feeOverheadBps = ((feeDiff * secondsAfterZeroFeeWindow) / windowDiff) + job.minOverheadBps;
+
+            // return execution fee in fee tokens and fee token address
+            executionFee = totalTax + ((totalFeeBase * feeOverheadBps) / _BASE_BPS);
+            inZeroFeeWindow = false;
+        }
     }
 
     /**

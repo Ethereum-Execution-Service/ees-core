@@ -8,8 +8,10 @@ import {ModuleRegistry} from "./ModuleRegistry.sol";
 /// @notice TaxHandler is responsible for handling tax updates for EES.
 contract TaxHandler is ModuleRegistry {
     uint256 internal lastExecutionTaxUpdate;
+    uint256 internal lastZeroFeeExecutionTaxUpdate;
     uint256 internal lastProtocolPoolCutUpdate;
     uint24 internal constant executionTaxUpdateCooldown = 7 days;
+    uint24 internal constant zeroFeeExecutionTaxUpdateCooldown = 7 days;
     uint24 internal constant protocolPoolCutUpdateCooldown = 7 days;
     // 10%
     uint16 internal constant executionTaxUpdateBps = 1_000;
@@ -17,6 +19,7 @@ contract TaxHandler is ModuleRegistry {
     uint16 internal constant protocolPoolCutUpdateBps = 1_000;
 
     uint256 internal executionTax; // in units of tax token
+    uint256 internal zeroFeeExecutionTax; // in units of tax token
     uint256 internal protocolPoolCutBps; // in basis points (e.g. 1000 = 10%)
     uint256 internal constant BPS_DENOMINATOR = 10000; // 100% in basis points
 
@@ -28,10 +31,11 @@ contract TaxHandler is ModuleRegistry {
     error TaxUpdateTooLarge();
     error UpdateOnCooldown();
 
-    constructor(address _owner, uint256 _executionTax, uint256 _protocolPoolCutBps) ModuleRegistry(_owner) {
+    constructor(address _owner, uint256 _executionTax, uint256 _zeroFeeExecutionTax, uint256 _protocolPoolCutBps) ModuleRegistry(_owner) {
         require(_protocolPoolCutBps < BPS_DENOMINATOR, "TaxHandler: protocol pool cut bps must be less than 100%");
         lastExecutionTaxUpdate = block.timestamp;
         executionTax = _executionTax;
+        zeroFeeExecutionTax = _zeroFeeExecutionTax;
         lastProtocolPoolCutUpdate = block.timestamp;
         protocolPoolCutBps = _protocolPoolCutBps;
         maxRewardPerExecution = (executionTax * protocolPoolCutBps) / BPS_DENOMINATOR;
@@ -54,6 +58,23 @@ contract TaxHandler is ModuleRegistry {
         lastExecutionTaxUpdate = block.timestamp;
         executionTax = _executionTax;
         maxRewardPerExecution = (executionTax * protocolPoolCutBps) / BPS_DENOMINATOR;
+    }
+
+    /**
+     * @notice Update the zero fee execution tax.
+     * @dev Can update zeroFeeExecutionTax at most executionTaxUpdateBps basis points every zeroFeeExecutionTaxUpdateCooldown seconds. 
+     * @param _zeroFeeExecutionTax The new zero fee execution tax.
+     */
+    function updateZeroFeeExecutionTax(uint256 _zeroFeeExecutionTax) public onlyOwner {
+        // can change value at most X percent every Y time
+        if (block.timestamp < lastZeroFeeExecutionTaxUpdate + zeroFeeExecutionTaxUpdateCooldown) revert UpdateOnCooldown();
+
+        uint256 diff = _zeroFeeExecutionTax > zeroFeeExecutionTax ? _zeroFeeExecutionTax - zeroFeeExecutionTax : zeroFeeExecutionTax - _zeroFeeExecutionTax;
+        uint256 maxDiff = zeroFeeExecutionTax * executionTaxUpdateBps / 10_000;
+        if (diff > maxDiff) revert TaxUpdateTooLarge();
+
+        lastZeroFeeExecutionTaxUpdate = block.timestamp;
+        zeroFeeExecutionTax = _zeroFeeExecutionTax;
     }
 
     /**

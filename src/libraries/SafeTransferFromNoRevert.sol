@@ -19,8 +19,6 @@ library SafeTransferFromNoRevert {
         address to,
         uint256 amount
     ) internal returns (bool success) {
-        bool success;
-
         /// @solidity memory-safe-assembly
         assembly {
             // Get a pointer to some free memory.

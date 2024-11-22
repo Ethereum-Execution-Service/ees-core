@@ -41,6 +41,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
     uint8 revealPhaseDuration = 15;
     uint8 slashingDuration = 30;
     uint256 executionTax = 4;
+    uint256 zeroFeeExecutionTax = 2;
     uint256 protocolPoolCutBps = 1000;
 
     uint256 defaultEpochEndTime = 1000;
@@ -67,6 +68,7 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
             revealPhaseDuration: revealPhaseDuration,
             slashingDuration: slashingDuration,
             executionTax: executionTax,
+            zeroFeeExecutionTax: zeroFeeExecutionTax,
             protocolPoolCutBps: protocolPoolCutBps
         });
         coordinator = new MockCoordinator(spec, treasury);
@@ -118,9 +120,9 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(time);
         vm.prank(executor);
-        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, 0);
+        (,, uint256 successfulExecutions) = coordinator.executeBatch(indices, gasLimits, executor, 0);
         (uint256 balance,,,,,,,,,) = coordinator.executorInfo(executor);
-        assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
+        assertEq(successfulExecutions, 1, "number of successful executions mismatch");
         assertEq(balance, stakingAmountPerModule * 2 - executionTax, "executor balance mismatch");
         assertEq(coordinator.getNextEpochPoolBalance(), executionTax, "next epoch pool balance mismatch");
     }
@@ -162,12 +164,12 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration());
         vm.prank(executor);
-        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, 0);
+        (,, uint256 successfulExecutions) = coordinator.executeBatch(indices, gasLimits, executor, 0);
         (uint256 balance,,,,, uint8 lastCheckinRound, uint96 lastCheckinEpoch,,,) = coordinator.executorInfo(executor);
         uint256 newPoolBalance = coordinator.getEpochPoolBalance();
         assertEq(newPoolBalance, prevPoolBalance, "pool balance mismatch");
 
-        assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
+        assertEq(successfulExecutions, 1, "number of successful executions mismatch");
         assertEq(balance, stakingAmountPerModule * 2 - executionTax, "executor balance mismatch");
         assertEq(lastCheckinEpoch, 10, "latest executed epoch mismatch");
         assertEq(lastCheckinRound, 0, "latest executed round mismatch");
@@ -225,10 +227,10 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(time);
         vm.prank(executor);
-        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, 0);
+        (,, uint256 successfulExecutions) = coordinator.executeBatch(indices, gasLimits, executor, 0);
         (uint256 balance,,,,,,,,,) = coordinator.executorInfo(executor);
 
-        assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
+        assertEq(successfulExecutions, 1, "number of successful executions mismatch");
         assertEq(balance, stakingAmountPerModule * 2 - executionTax, "executor balance mismatch");
         assertEq(coordinator.getNextEpochPoolBalance(), 0, "next epoch pool balance mismatch");
     }
@@ -245,11 +247,10 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(defaultEpochEndTime);
         vm.prank(executor);
-        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, 0);
+        (,, uint256 successfulExecutions) = coordinator.executeBatch(indices, gasLimits, executor, 0);
         (uint256 balance,,,,,,,,,) = coordinator.executorInfo(executor);
 
-        assertEq(failedJobs.length, 1, "number of failed jobs mismatch");
-        assertEq(failedJobs[0], 0, "failed job mismatch");
+        assertEq(successfulExecutions, 0, "number of successful executions mismatch");
         assertEq(balance, stakingAmountPerModule * 2, "executor balance mismatch");
         assertEq(coordinator.getNextEpochPoolBalance(), 0, "next epoch pool balance mismatch");
     }
@@ -267,10 +268,10 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(time);
         vm.prank(executor);
-        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, 0);
+        (,, uint256 successfulExecutions) = coordinator.executeBatch(indices, gasLimits, executor, 0);
         (uint256 balance,,,,,,,,,) = coordinator.executorInfo(executor);
 
-        assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
+        assertEq(successfulExecutions, 1, "number of successful executions mismatch");
         assertEq(balance, stakingAmountPerModule * 2 - executionTax, "executor balance mismatch");
         assertEq(coordinator.getNextEpochPoolBalance(), executionTax, "next epoch pool balance mismatch");
     }
@@ -286,10 +287,10 @@ contract CoordinatorTest is Test, TokenProvider, SignatureGenerator, GasSnapshot
 
         vm.warp(time);
         vm.prank(executor);
-        uint256[] memory failedJobs = coordinator.executeBatch(indices, gasLimits, executor, 0);
+        (,, uint256 successfulExecutions) = coordinator.executeBatch(indices, gasLimits, executor, 0);
         (uint256 balance,,,,,,,,,) = coordinator.executorInfo(executor);
 
-        assertEq(failedJobs.length, 0, "number of failed jobs mismatch");
+        assertEq(successfulExecutions, 1, "number of successful executions mismatch");
         assertEq(balance, stakingAmountPerModule * 2 - executionTax, "executor balance mismatch");
         assertEq(coordinator.getNextEpochPoolBalance(), executionTax, "next epoch pool balance mismatch");
     }

@@ -40,6 +40,7 @@ contract CoordinatorHandler is Test, TokenProvider {
       revealPhaseDuration: 15,
       slashingDuration: 30,
       executionTax: 4,
+      zeroFeeExecutionTax: 2,
       protocolPoolCutBps: 1000
     });
     coordinator = new MockCoordinator(spec, address(0x5));

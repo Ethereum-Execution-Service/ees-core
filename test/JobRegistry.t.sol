@@ -37,7 +37,8 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
     uint8 defaultProtocolFeeRatio;
     uint256 defaultMaxExecutionFee;
-    uint32 defaultExecutionWindow;
+    uint24 defaultExecutionWindow;
+    uint24 defaultZeroFeeWindow;
 
     address address0 = address(0x0);
     address address2 = address(0x2);
@@ -52,7 +53,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         defaultProtocolFeeRatio = 2;
         defaultMaxExecutionFee = 100;
         defaultExecutionWindow = 1800;
-
+        defaultZeroFeeWindow = 0;
         initializeERC20Tokens();
         defaultFeeToken = address(token0);
 
@@ -97,6 +98,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -120,6 +122,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -146,6 +149,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             maxExecutions: 0,
             ignoreAppRevert: false,
             executionModule: 0x00,
@@ -173,7 +177,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
-
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -201,6 +205,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             maxExecutions: 0,
             ignoreAppRevert: false,
             executionModule: module,
@@ -224,6 +229,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: executionModule,
@@ -247,6 +253,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -268,6 +275,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -280,7 +288,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(address2);
         uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", index);
 
-        (address owner,,,,,,,,,,,,) = jobRegistry.jobs(index);
+        (address owner,,,,,,,,,,,,,) = jobRegistry.jobs(index);
 
         assertEq(index, index2, "index mismatch");
         assertEq(owner, address2, "owner mismatch");
@@ -297,6 +305,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -310,7 +319,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(from);
         jobRegistry.deleteJob(index);
-        (address owner,,,,,,,,,,,,) = jobRegistry.jobs(index);
+        (address owner,,,,,,,,,,,,,) = jobRegistry.jobs(index);
         assertEq(owner, address(0));
     }
 
@@ -325,6 +334,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -350,6 +360,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -367,7 +378,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(sponsor);
         jobRegistry.revokeSponsorship(index);
-        (,,,,,,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
+        (,,,,,,,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
 
         assertEq(sponsorSet, address(0));
     }
@@ -381,6 +392,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -398,7 +410,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(sponsor);
         jobRegistry.revokeSponsorship(index);
-        (,,,,,,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
+        (,,,,,,,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
 
         assertEq(sponsorSet, from);
     }
@@ -412,6 +424,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -429,7 +442,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(from);
         jobRegistry.revokeSponsorship(index);
-        (,,,,,,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
+        (,,,,,,,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
 
         assertEq(sponsorSet, from);
     }
@@ -445,6 +458,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -474,6 +488,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -503,6 +518,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -529,6 +545,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 1,
             executionModule: 0x00,
@@ -543,7 +560,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(address(coordinator));
         jobRegistry.execute(index, from);
 
-        (, bool active,,,,,,,,uint48 executionCounter,,,) = jobRegistry.jobs(index);
+        (, bool active,,,,,,,,,uint48 executionCounter,,,) = jobRegistry.jobs(index);
 
         assertEq(active, false, "active mismatch");
         assertEq(executionCounter, 1, "execution counter mismatch");
@@ -559,6 +576,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: true,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -575,7 +593,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(address(coordinator));
         jobRegistry.execute(index, from);
 
-        (, bool active,,,,,,,,uint48 executionCounter,,,) = jobRegistry.jobs(index);
+        (, bool active,,,,,,,,,uint48 executionCounter,,,) = jobRegistry.jobs(index);
         assertEq(active, true, "active mismatch");
         assertEq(executionCounter, 0, "execution counter mismatch");
     }
@@ -592,6 +610,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -626,6 +645,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -659,6 +679,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -682,6 +703,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -694,7 +716,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(address2);
         uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", index);
 
-        (address owner,,,,,,,,,,,,) = jobRegistry.jobs(index);
+        (address owner,,,,,,,,,,,,,) = jobRegistry.jobs(index);
 
         assertEq(index, index2, "index mismatch");
         assertEq(owner, address2, "owner mismatch");
@@ -710,6 +732,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -730,6 +753,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -753,6 +777,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -773,6 +798,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -785,8 +811,8 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(address2);
         uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", UINT256_MAX);
 
-        (address owner,,,,,,,,,,,,) = jobRegistry.jobs(index);
-        (address owner2,,,,,,,,,,,,) = jobRegistry.jobs(index2);
+        (address owner,,,,,,,,,,,,,) = jobRegistry.jobs(index);
+        (address owner2,,,,,,,,,,,,,) = jobRegistry.jobs(index2);
 
         assertEq(index, 0);
         assertEq(index2, 1);
@@ -804,6 +830,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -829,7 +856,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             getFeeModuleInputSignature(feeModuleInput, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
         jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig);
-        (,,,,,, bytes1 feeModuleSet,,address sponsorSet,,,,) = jobRegistry.jobs(index);
+        (,,,,,, bytes1 feeModuleSet,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, sponsor, "sponsor mismatch");
         assertEq(uint8(feeModuleSet), uint8(0x01), "fee module mismatch");
     }
@@ -846,6 +873,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -885,6 +913,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: true,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -912,7 +941,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
         vm.prank(from);
         jobRegistry.updateFeeModule(feeModuleInput, address(0), "");
-        (,,,,,, bytes1 feeModuleSet,, address sponsorSet,,,,) = jobRegistry.jobs(index);
+        (,,,,,, bytes1 feeModuleSet,,, address sponsorSet,,,,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, from, "sponsor mismatch");
         assertEq(uint8(feeModuleSet), uint8(0x01), "fee module mismatch");
     }
@@ -927,6 +956,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -965,6 +995,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -1001,6 +1032,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -1026,7 +1058,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             getFeeModuleInputSignature(feeModuleInput, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
         jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig);
-        (,,,,,, bytes1 feeModuleSet,, address sponsorSet,,,,) = jobRegistry.jobs(index);
+        (,,,,,, bytes1 feeModuleSet,,, address sponsorSet,,,,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, sponsor, "sponsor mismatch");
         assertEq(uint8(feeModuleSet), uint8(0x02), "fee module mismatch");
     }
@@ -1041,6 +1073,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -1052,7 +1085,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
         jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
-        (,,,,,,,,, uint48 executionCounter,,,) = jobRegistry.jobs(0);
+        (,,,,,,,,,, uint48 executionCounter,,,) = jobRegistry.jobs(0);
         assertEq(executionCounter, 1, "execution counter mismatch");
     }
 
@@ -1066,6 +1099,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,
@@ -1091,6 +1125,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 1,
             executionModule: 0x00,
@@ -1117,6 +1152,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             sponsorCanUpdateFeeModule: false,
             application: dummyApplication,
             executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
             ignoreAppRevert: false,
             maxExecutions: 0,
             executionModule: 0x00,

@@ -39,6 +39,7 @@ interface ICoordinator {
         uint8 revealPhaseDuration;
         uint8 slashingDuration;
         uint256 executionTax;
+        uint256 zeroFeeExecutionTax;
         uint256 protocolPoolCutBps;
     }
 
@@ -47,7 +48,7 @@ interface ICoordinator {
         uint256[] calldata _gasLimits,
         address _feeRecipient,
         uint8 _jobRegistryIndex
-    ) external returns (uint256[] memory failedIndices);
+    ) external returns (uint256 standardTax, uint256 zeroFeeTax, uint256 successfulExecutions);
     function stake(uint256 _modulesBitset) external returns (uint256 stakingAmount);
     function unstake() external;
     function topup(uint256 _amount) external;
@@ -57,7 +58,7 @@ interface ICoordinator {
     function commit(bytes32 _commitment) external;
     function reveal(bytes calldata _signature) external;
 
-    event BatchExecution(uint8 jobRegistryIndex, uint256[] failedIndices, uint256 totalTax);
+    event BatchExecution(uint8 jobRegistryIndex, uint256 standardTax, uint256 zeroFeeTax);
     event EpochInitiated(uint192 epoch, uint256 previousEpochPoolDistributed, uint256 protocolCut);
     event SlashInactiveExecutor(
         address indexed executor, address indexed slasher, uint192 indexed epoch, uint8 round, uint256 amount

@@ -30,22 +30,35 @@ contract LinearAuction is ILinearAuction {
      */
     function onExecuteJob(
         uint256 _index,
-        uint32 _executionWindow,
+        uint24 _executionWindow,
+        uint24 _zeroFeeWindow,
         uint256 _executionTime,
         uint256 /* _variableGasConsumption */
-    ) external override onlyJobRegistry returns (uint256 executionFee, address executionFeeToken) {
+    ) external override onlyJobRegistry returns (uint256 executionFee, address executionFeeToken, bool inZeroFeeWindow) {
         Params memory job = params[_index];
-
-        uint256 feeDiff;
-        unchecked {
-            feeDiff = job.maxExecutionFee - job.minExecutionFee;
-        }
-        uint256 secondsInAuctionPeriod = block.timestamp - _executionTime;
-
-        executionFee = ((feeDiff * secondsInAuctionPeriod) / (_executionWindow - 1)) + job.minExecutionFee;
         executionFeeToken = job.executionFeeToken;
 
-        return (executionFee, executionFeeToken);
+        if(block.timestamp - _executionTime < _zeroFeeWindow) {
+            // if the job is within the zero fee window, the execution fee is 0
+            executionFee = 0;
+            inZeroFeeWindow = true;
+        }
+        else {
+            // else calculate fee as a linear function between minExecutionFee and maxExecutionFee over _executionWindow, starting from _zeroFeeWindow
+            uint256 feeDiff;
+            uint256 windowDiff;
+            unchecked {
+                // job creation ensures maxExecutionFee >= minExecutionFee and _executionWindow > _zeroFeeWindow
+                feeDiff = job.maxExecutionFee - job.minExecutionFee;
+                windowDiff = _executionWindow - _zeroFeeWindow - 1;
+            }
+
+            
+            uint256 secondsAfterZeroFeeWindow = block.timestamp - (_executionTime + _zeroFeeWindow);
+            // reaches maxExecutionFee at _executionTime + _executionWindow - 1, the last timestep that the job can be executed
+            executionFee = ((feeDiff * secondsAfterZeroFeeWindow) / windowDiff) + job.minExecutionFee;
+            inZeroFeeWindow = false;
+        }
     }
 
     /**

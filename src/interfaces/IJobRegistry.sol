@@ -7,21 +7,25 @@ import {IFeeModule} from "./IFeeModule.sol";
 
 interface IJobRegistry {
     struct Job {
-        address owner;
-        bool active;
-        bool ignoreAppRevert;
+        // slot 0
+        address owner; // 20 bytes
+        bool active; // 1 byte
+        bool ignoreAppRevert; // 1 byte
         // having both sponsorFallbackToOwner and sponsorCanUpdateFeeModule is dangerous as sponsor can update fee module and revoke immediately
-        bool sponsorFallbackToOwner;
-        bool sponsorCanUpdateFeeModule;
-        bytes1 executionModule;
-        bytes1 feeModule;
-        uint32 executionWindow;
-        address sponsor;
-        uint48 executionCounter;
-        uint48 maxExecutions;
-        IApplication application;
+        bool sponsorFallbackToOwner; // 1 byte
+        bool sponsorCanUpdateFeeModule; // 1 byte
+        bytes1 executionModule; // 1 byte
+        bytes1 feeModule; // 1 byte
+        uint24 executionWindow; // 3 bytes
+        uint24 zeroFeeWindow; // 3 bytes
+        // slot 1
+        address sponsor; // 20 bytes
+        uint48 executionCounter; // 6 bytes
+        uint48 maxExecutions; // 6 bytes
+        // slot 2
+        IApplication application; // 20 bytes
         // uint96 is sufficient to hold UNIX block.timestamp for practical future
-        uint96 creationTime;
+        uint96 creationTime; // 12 bytes
     }
 
     struct JobSpecification {
@@ -31,7 +35,8 @@ interface IJobRegistry {
         bool sponsorFallbackToOwner;
         bool sponsorCanUpdateFeeModule;
         IApplication application;
-        uint32 executionWindow;
+        uint24 executionWindow;
+        uint24 zeroFeeWindow;
         uint48 maxExecutions;
         bool ignoreAppRevert;
         bytes1 executionModule;
@@ -56,7 +61,7 @@ interface IJobRegistry {
         bytes calldata _sponsorSignature,
         uint256 _index
     ) external returns (uint256 index);
-    function execute(uint256 _index, address _feeRecipient) external returns (uint96, uint256, address, uint8, uint8);
+    function execute(uint256 _index, address _feeRecipient) external returns (uint96, uint256, address, uint8, uint8, bool);
     function deleteJob(uint256 _index) external;
     function deactivateJob(uint256 _index) external;
     function revokeSponsorship(uint256 _index) external;
@@ -79,7 +84,8 @@ interface IJobRegistry {
         bool success,
         uint48 executionNumber,
         uint256 executionFee,
-        address executionFeeToken
+        address executionFeeToken,
+        bool inZeroFeeWindow
     );
     event FeeModuleUpdate(uint256 indexed index, address indexed owner, address indexed sponsor);
 

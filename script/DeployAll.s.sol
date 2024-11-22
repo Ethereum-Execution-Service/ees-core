@@ -45,6 +45,8 @@ contract DeployAll is Script {
             slashingDuration: 15,
             // 0.06 USDC - 60000
             executionTax: 60000,
+            // 0.02 USDC - 20000
+            zeroFeeExecutionTax: 20000,
             // 10% in basis points
             protocolPoolCutBps: 1000
         });

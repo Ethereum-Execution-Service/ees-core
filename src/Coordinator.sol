@@ -63,7 +63,7 @@ contract Coordinator is ICoordinator, TaxHandler {
 
     mapping(address => CommitData) public commitmentMap;
 
-    constructor(InitSpec memory _spec, address _treasury) TaxHandler(_treasury, _spec.executionTax, _spec.protocolPoolCutBps) {
+    constructor(InitSpec memory _spec, address _treasury) TaxHandler(_treasury, _spec.executionTax, _spec.zeroFeeExecutionTax, _spec.protocolPoolCutBps) {
         require(
             _spec.stakingBalanceThresholdPerModule <= _spec.stakingAmountPerModule,
             "Staking: threshold must be less than or equal to staking amount"
@@ -108,8 +108,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         uint256[] calldata _gasLimits,
         address _feeRecipient,
         uint8 _jobRegistryIndex
-    ) public returns (uint256[] memory failedIndices) {
-        // check that caller is active executor
+    ) public returns (uint256, uint256, uint256) {
         Executor memory executor = executorInfo[msg.sender];
 
         bool inRound;
@@ -140,14 +139,14 @@ contract Coordinator is ICoordinator, TaxHandler {
                 uint256 executorIndex = uint256(keccak256(abi.encodePacked(seed, round))) % numberOfActiveExecutors;
                 designatedExecutor = activeExecutors[executorIndex];
                 designatedExecutorModules = executorInfo[designatedExecutor].registeredModules;
-                if (designatedExecutor == msg.sender && !executor.active) revert NotActiveExecutor();
             }
         }
         // could put these in assembly in memory, but be careful not to override anything
         address jobRegistryCache = jobRegistries[_jobRegistryIndex];
         uint256 indicesLength = _indices.length;
         uint8 epochDurationCache = epochDuration;
-        uint96 numberOfExecutedJobs;
+        uint96 executionCount;
+        uint96 executionCountZeroFee;
         assembly {
             // Get the current free memory pointer
             let inputPtr := mload(0x40)
@@ -156,16 +155,13 @@ contract Coordinator is ICoordinator, TaxHandler {
             // function selector doesnt change, so we can store it in memory once
             mstore(inputPtr, shl(224, 0xc032dc30)) // Function selector for execute(uint256,address)
 
-            // Store the pointer to the start of our data
-            failedIndices := add(inputPtr, 0x60)
-
-            // Reserve 32 bytes for length, start writing data after that
-            let writePtr := add(failedIndices, 0x20)
-            let failedCount := 0
             let i := 0
 
-            // Allocate memory for return data (96 + 256 + 160 + 8 + 8 bits = 528 bits = 66 bytes)
-            let returnDataPtr := add(writePtr, mul(indicesLength, 0x20))
+            // Allocate memory for return data (6 values * 32 bytes = 192 bytes)
+            let returnDataPtr := mload(0x40)
+
+            // Update free memory pointer
+            mstore(0x40, add(returnDataPtr, 0xC0))  // advance by 192 bytes (6 * 32)
             
             let epochStartTime := sub(sload(epochEndTime.slot), epochDurationCache)
 
@@ -183,74 +179,70 @@ contract Coordinator is ICoordinator, TaxHandler {
                     inputPtr,       // input memory
                     0x44,           // input size
                     returnDataPtr,  // output memory
-                    0xA0            // output size (5 * 32 bytes)
+                    0xC0            // output size (6 * 32 bytes)
                 )
-                // If call succeeded, verify the executor is registered for both modules
-                let shouldVerifyModules := and(success, inRound)
-                if shouldVerifyModules {
-                    // Load the execution module and fee module from the last two 32-byte words
-                    let executionModuleId := and(mload(add(returnDataPtr, 0x80)), 0xFF)  // 4th word
-                    let feeModuleId := and(mload(add(returnDataPtr, 0xA0)), 0xFF)        // 5th word
-                    
-                    // Check if executor is registered for both modules
-                    let requiredModules := or(shl(1, executionModuleId), shl(1, feeModuleId))
 
-                    switch eq(caller(), designatedExecutor)
-                    case 1 {
-                        // If we ARE the designated executor, we must support BOTH modules
-                        if iszero(eq(and(designatedExecutorModules, requiredModules), requiredModules)) {
-                            // Error selector for ExecutorNotRegisteredForModules()
-                            let free_mem_ptr := mload(0x40)
-                            mstore(free_mem_ptr, 0xff1edc1d00000000000000000000000000000000000000000000000000000000)
-                            revert(free_mem_ptr, 0x04)
-                        }
-                    }
-                    case 0 {
-                        // If we are NOT the designated executor, designated executor must NOT support at least one module
-                        if eq(and(designatedExecutorModules, requiredModules), requiredModules) {
-                            // Error selector for DesignatedExecutorSupportsModules()
-                            let free_mem_ptr := mload(0x40)
-                            mstore(free_mem_ptr, 0x7738dd2200000000000000000000000000000000000000000000000000000000)
-                            revert(free_mem_ptr, 0x04)
-                        }
-                    }
-                }
                 if iszero(success) {
-                    mstore(writePtr, index)
-                    writePtr := add(writePtr, 32)
-                    failedCount := add(failedCount, 1)
+                    i := add(i, 1)
+                    continue
+                }
+
+                // check if in zero fee window
+                let inZeroFeeWindow := mload(add(returnDataPtr, 0xC0)) // 6th word
+
+                switch inZeroFeeWindow
+                case 1 {
+                    // job is in zero fee window
+                    executionCountZeroFee := add(executionCountZeroFee, 1)
+                }
+                case 0 {
+                    // job is not in zero fee window, have to perform checks
+                    executionCount := add(executionCount, 1)
+
+                    // Verify the executor is registered for both modules
+                    if inRound {
+                        // Load the execution module and fee module from the last two 32-byte words
+                        let executionModuleId := and(mload(add(returnDataPtr, 0x80)), 0xFF)  // 4th word
+                        let feeModuleId := and(mload(add(returnDataPtr, 0xA0)), 0xFF)        // 5th word
+                        // Check if executor is registered for both modules
+                        let requiredModules := or(shl(1, executionModuleId), shl(1, feeModuleId))
+
+                        switch eq(caller(), designatedExecutor)
+                        case 1 {
+                            // If we ARE the designated executor, we must support BOTH modules
+                            if iszero(eq(and(designatedExecutorModules, requiredModules), requiredModules)) {
+                                // Error selector for ExecutorNotRegisteredForModules()
+                                let free_mem_ptr := mload(0x40)
+                                mstore(free_mem_ptr, 0xff1edc1d00000000000000000000000000000000000000000000000000000000)
+                                revert(free_mem_ptr, 0x04)
+                            }
+                        }
+                        case 0 {
+                            // If we are NOT the designated executor, designated executor must NOT support at least one module
+                            if eq(and(designatedExecutorModules, requiredModules), requiredModules) {
+                                // Error selector for DesignatedExecutorSupportsModules()
+                                let free_mem_ptr := mload(0x40)
+                                mstore(free_mem_ptr, 0x7738dd2200000000000000000000000000000000000000000000000000000000)
+                                revert(free_mem_ptr, 0x04)
+                            }
+                        }
+                    }
                 }
                 i := add(i, 1)
-            }
-            mstore(failedIndices, failedCount)
-            mstore(0x40, writePtr)
-        }
-
-        unchecked {
-            // numberOfExecutedJobs cannot underflow as failedIndices.length <= indicesLength. Can safely cast since the difference is less than uint96 max value realistically.
-            // executedJobsInRoundsOfEpoch cannot realistically overflow uint96
-            numberOfExecutedJobs = uint96(indicesLength - failedIndices.length);
-            if(inRound) {
-                executedJobsInRoundsOfEpoch += numberOfExecutedJobs;
             }
         }
 
         // TAXING AND POOL BALANCES UPDATE
         uint256 totalTax;
+        uint256 standardTax;
+        uint256 zeroFeeTax;
         uint256 newBalance = executor.balance;
-        if (numberOfExecutedJobs > 0) {
+        if (executionCount > 0) {
             // UPDATE EXECUTOR BALANCE AND COMPUTE TAX
+            // handle normal tax for jobs not in
             unchecked {
-                // totalTax is never greater than uint256 max value realistically
-                totalTax = executionTax * numberOfExecutedJobs;
-            }
-
-            if(executor.initialized) {
-                // if executor is initialized, use internal balance
-                newBalance = (executorInfo[msg.sender].balance -= totalTax);
-            }
-            else {
-                ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), totalTax);
+                // standardTax is never greater than uint256 max value realistically
+                standardTax = executionTax * executionCount;
             }
             
             // UPDATE POOL AND PROTOCOL BALANCES
@@ -258,28 +250,59 @@ contract Coordinator is ICoordinator, TaxHandler {
                 // next epoch pool balance or protocol balance will never exceed uint256 max value since there are not enough tokens in existence
                 // during designated rounds, tax goes to protocol balance.
                 // otherwise, tax goes to next epoch pool balance.
+                // we increament executedJobsInRoundsOfEpoch only if we are in a round
                 if(inRound) {
-                    protocolBalance += totalTax;
+                    executedJobsInRoundsOfEpoch += executionCount;
+                    protocolBalance += standardTax;
                 }
                 else {
-                    nextEpochPoolBalance += totalTax;
+                    nextEpochPoolBalance += standardTax;
                 }
             }
         }
+        if(executionCountZeroFee > 0) {
+            // handle zero fee tax for jobs not in zero fee window
+            unchecked {
+                // totalTax is never greater than uint256 max value realistically
+                zeroFeeTax = zeroFeeExecutionTax * executionCountZeroFee;
+            }
 
-        if (inRound) {
+            // UPDATE POOL AND PROTOCOL BALANCES
+            // split zero fee tax between pool and protocol
+            unchecked {
+                // halfZeroTax can never be greater than zeroFeeTax
+                uint256 halfZeroFeeTax = zeroFeeTax / 2;
+                nextEpochPoolBalance += halfZeroFeeTax;
+                protocolBalance += zeroFeeTax - halfZeroFeeTax;
+            }
+        }
+        unchecked {
+            totalTax = standardTax + zeroFeeTax;
+        }
+        if(totalTax > 0) {
+            if(executor.initialized) {
+                // if executor is initialized, use internal balance
+                newBalance = (executorInfo[msg.sender].balance -= totalTax);
+            }
+            else {
+                ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), totalTax);
+            }
+        }
+
+        if (inRound && designatedExecutor == msg.sender) {
+            if(!executor.active) revert NotActiveExecutor();
 
             bool checkInEpoch = executor.lastCheckinEpoch != epoch;
             bool checkInRound = executor.lastCheckinRound != round;
 
-            // add to poolCutReceivers if this is first time executor checks in this epoch and numberOfExecutedJobs > 0
-            if (checkInEpoch && numberOfExecutedJobs > 0) {
+            // add to poolCutReceivers if this is first time executor checks in this epoch and executionCount > 0
+            if (checkInEpoch && executionCount > 0) {
                 poolCutReceivers.push(msg.sender);
             }
 
             // check that this is first time in this epoch and round that caller is checking in
             if (checkInEpoch || checkInRound) {
-                // set lastCheckinEpoch to epoch and lastCheckinRound to round and increase executionsInRoundsInEpoch by numberOfExecutedJobs in one storage write (they reside in same slot)
+                // set lastCheckinEpoch to epoch and lastCheckinRound to round and increase executionsInRoundsInEpoch by executionCount in one storage write (they reside in same slot)
                 assembly {
                     let epochValue := sload(epoch.slot)
                     let slot := executorInfo.slot
@@ -300,7 +323,7 @@ contract Coordinator is ICoordinator, TaxHandler {
                     // Get current executionsInEpochCreatedBeforeEpoch value
                     let currentExecutions := shr(160, currentValue)
                     // Add new executions to it
-                    let newExecutions := add(currentExecutions, numberOfExecutedJobs)
+                    let newExecutions := add(currentExecutions, executionCount)
                     
                     // Pack values:
                     // [0-47]: preserved bits (active, initialized, arrayIndex) (6 bytes)
@@ -324,9 +347,9 @@ contract Coordinator is ICoordinator, TaxHandler {
                     sstore(add(executorSlot, 1), packedValue)
                 }
                 emit CheckIn(msg.sender, epoch, round);
-            } else if (numberOfExecutedJobs > 0) {
+            } else if (executionCount > 0) {
                 // increment executions of jobs created before epoch. We dont update check in data
-                executorInfo[msg.sender].executionsInRoundsInEpoch += numberOfExecutedJobs;
+                executorInfo[msg.sender].executionsInRoundsInEpoch += executionCount;
             }
         }
 
@@ -337,7 +360,8 @@ contract Coordinator is ICoordinator, TaxHandler {
             executorInfo[msg.sender].active = false;
             emit ExecutorDeactivated(deactivatedExecutor);
         }
-        emit BatchExecution(_jobRegistryIndex, failedIndices, totalTax);
+        emit BatchExecution(_jobRegistryIndex, standardTax, zeroFeeTax);
+        return (standardTax, zeroFeeTax, executionCount + executionCountZeroFee);
     }
 
     /**
@@ -857,13 +881,15 @@ contract Coordinator is ICoordinator, TaxHandler {
             inactiveSlashingAmountPerModule,
             commitSlashingAmountPerModule,
             roundsPerEpoch,
-            executionTax,
             roundDuration,
             roundBuffer,
             slashingDuration,
             commitPhaseDuration,
             revealPhaseDuration,
-            modules.length
+            modules.length,
+            executionTax,
+            zeroFeeExecutionTax,
+            protocolPoolCutBps
         );
     }
 

@@ -17,7 +17,7 @@ contract LinearAuctionTest is Test, GasSnapshot {
     address defaultFeeToken = address(0x3);
     uint256 defaultMinExecutionFee;
     uint256 defaultMaxExecutionFee;
-    uint32 defaultExecutionWindow;
+    uint24 defaultExecutionWindow;
     uint256 defaultStartTime;
 
     address from;
@@ -55,7 +55,7 @@ contract LinearAuctionTest is Test, GasSnapshot {
         feeModule.onCreateJob(0, abi.encode(defaultFeeToken, minExecutionFee, maxExecutionFee));
         vm.warp(defaultStartTime + secondsInAuctionPeriod);
         vm.prank(address(jobRegistry));
-        (uint256 executionFee,) = feeModule.onExecuteJob(0, defaultExecutionWindow, defaultStartTime, 0);
+        (uint256 executionFee,,) = feeModule.onExecuteJob(0, defaultExecutionWindow, 0, defaultStartTime, 0);
         emit ExecutionFee(executionFee);
     }
 
@@ -72,7 +72,7 @@ contract LinearAuctionTest is Test, GasSnapshot {
 
         vm.warp(defaultStartTime + secondsInAuctionPeriod);
         vm.prank(address(jobRegistry));
-        (uint256 executionFee,) = feeModule.onExecuteJob(0, defaultExecutionWindow, defaultStartTime, 0);
+        (uint256 executionFee,,) = feeModule.onExecuteJob(0, defaultExecutionWindow, 0, defaultStartTime, 0);
 
         uint256 correctExecutionFee = (
             ((maxExecutionFee - minExecutionFee) * secondsInAuctionPeriod) / (defaultExecutionWindow - 1)
@@ -103,7 +103,7 @@ contract LinearAuctionTest is Test, GasSnapshot {
         vm.assume(caller != address(jobRegistry));
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(ILinearAuction.NotJobRegistry.selector));
-        feeModule.onExecuteJob(0, defaultExecutionWindow, block.timestamp, 0);
+        feeModule.onExecuteJob(0, defaultExecutionWindow, 0, block.timestamp, 0);
     }
 
     function test_CreateJobNotJobRegistry(address caller) public {

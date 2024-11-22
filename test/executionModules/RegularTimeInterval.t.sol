@@ -162,7 +162,7 @@ contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignatu
         assertFalse(initialExecution, "initialExecution mismatch");
     }
 
-    function test_JobIsExpired(uint32 cooldown, uint40 lastExecution, uint32 executionWindow, uint256 time) public {
+    function test_JobIsExpired(uint32 cooldown, uint40 lastExecution, uint24 executionWindow, uint256 time) public {
         // Should return true when the job is expired
         time = bound(time, uint256(lastExecution) + uint256(cooldown) + uint256(executionWindow), type(uint256).max);
         uint256 jobIndex = 0;
@@ -172,7 +172,7 @@ contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignatu
         assertTrue(isExpired, "Job should be expired");
     }
 
-    function test_JobIsNotExpired(uint32 cooldown, uint40 lastExecution, uint32 executionWindow, uint256 time) public {
+    function test_JobIsNotExpired(uint32 cooldown, uint40 lastExecution, uint24 executionWindow, uint256 time) public {
         // Should return false when the job is not expired
         vm.assume(uint256(lastExecution) + uint256(cooldown) + uint256(executionWindow) > 0);
         time = bound(time, 0, uint256(lastExecution) + uint256(cooldown) + uint256(executionWindow) - 1);
@@ -183,11 +183,11 @@ contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignatu
         assertFalse(isExpired, "Job should not be expired");
     }
 
-    function test_JobIsInExecutionMode(uint32 cooldown, uint40 lastExecution, uint32 executionWindow, uint256 time)
+    function test_JobIsInExecutionMode(uint32 cooldown, uint40 lastExecution, uint24 executionWindow, uint256 time)
         public
     {
         // Should return true when the job is in execution mode
-        executionWindow = uint32(bound(executionWindow, 1, type(uint32).max));
+        executionWindow = uint24(bound(executionWindow, 1, type(uint32).max));
         vm.assume(uint256(lastExecution) + uint256(cooldown) + uint256(executionWindow) > 0);
         time = bound(
             time,
@@ -201,7 +201,7 @@ contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignatu
         assertTrue(isInExecutionMode, "Job should be in execution mode");
     }
 
-    function test_JobIsBeforeExecutionMode(uint32 cooldown, uint40 lastExecution, uint32 executionWindow, uint256 time)
+    function test_JobIsBeforeExecutionMode(uint32 cooldown, uint40 lastExecution, uint24 executionWindow, uint256 time)
         public
     {
         // Should return false when the job is before execution mode
@@ -214,11 +214,11 @@ contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignatu
         assertFalse(isInExecutionMode, "Job should not be in execution mode");
     }
 
-    function test_JobIsAfterExecutionMode(uint32 cooldown, uint40 lastExecution, uint32 executionWindow, uint256 time)
+    function test_JobIsAfterExecutionMode(uint32 cooldown, uint40 lastExecution, uint24 executionWindow, uint256 time)
         public
     {
         // Should return false when the job is after execution mode
-        executionWindow = uint32(bound(executionWindow, 1, type(uint32).max));
+        executionWindow = uint24(bound(executionWindow, 1, type(uint32).max));
         time = bound(time, uint256(lastExecution) + uint256(cooldown) + uint256(executionWindow), type(uint256).max);
         uint256 jobIndex = 0;
         executionModule.setJobParams(jobIndex, lastExecution, cooldown);

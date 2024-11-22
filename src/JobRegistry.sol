@@ -93,7 +93,7 @@ contract JobRegistry is IJobRegistry, EIP712 {
         bool active = true;
         if (initialExecution) {
             _specification.application.onExecuteJob(index, msg.sender, 0);
-            emit JobExecuted(index, msg.sender, address(_specification.application), true, 0, 0, address(0));
+            emit JobExecuted(index, msg.sender, address(_specification.application), true, 0, 0, address(0), false);
             // can have initial execution and maxExecution = 1, then we just deactivate immediately
             if (_specification.maxExecutions == 1) active = false;
         }
@@ -107,6 +107,7 @@ contract JobRegistry is IJobRegistry, EIP712 {
             executionModule: _specification.executionModule,
             feeModule: _specification.feeModule,
             executionWindow: _specification.executionWindow,
+            zeroFeeWindow: _specification.zeroFeeWindow,
             sponsor: _hasSponsorship ? _sponsor : msg.sender,
             executionCounter: initialExecution ? 1 : 0,
             maxExecutions: _specification.maxExecutions,
@@ -131,7 +132,7 @@ contract JobRegistry is IJobRegistry, EIP712 {
      * @param _index Index of the job in the jobs array.
      * @param _feeRecipient Address who receives execution fee tokens.
      */
-    function execute(uint256 _index, address _feeRecipient) external override returns (uint96, uint256, address, uint8, uint8) {
+    function execute(uint256 _index, address _feeRecipient) external override returns (uint96, uint256, address, uint8, uint8, bool) {
         if (msg.sender != address(coordinator)) revert Unauthorized();
         Job memory job = jobs[_index];
 
@@ -171,17 +172,19 @@ contract JobRegistry is IJobRegistry, EIP712 {
             totalGas = _EXECUTION_GAS_OVERHEAD + startVariableGas - gasleft();
         }
         // fee module monitors its own gas usage
-        (uint256 executionFee, address executionFeeToken) =
-            feeModule.onExecuteJob(_index, job.executionWindow, executionTime, totalGas);
+        (uint256 executionFee, address executionFeeToken, bool inZeroFeeWindow) =
+            feeModule.onExecuteJob(_index, job.executionWindow, job.zeroFeeWindow, executionTime, totalGas);
 
-        // transfer fee to fee recipient
-        // we try to transfer from sponsor first, if that fails and sponsorFallbackToOwner is true, we transfer from owner and set sponsor to owner
-        if(!ERC20(executionFeeToken).safeTransferFromNoRevert(job.sponsor, _feeRecipient, executionFee)) {
-            if(job.sponsorFallbackToOwner) {
-                ERC20(executionFeeToken).safeTransferFrom(job.owner, _feeRecipient, executionFee);
-                job.sponsor = job.owner;
-            } else {
-                revert TransferFailed();
+        if(executionFee > 0) {
+            // transfer fee to fee recipient
+            // we try to transfer from sponsor first, if that fails and sponsorFallbackToOwner is true, we transfer from owner and set sponsor to owner
+            if(!ERC20(executionFeeToken).safeTransferFromNoRevert(job.sponsor, _feeRecipient, executionFee)) {
+                if(job.sponsorFallbackToOwner) {
+                    ERC20(executionFeeToken).safeTransferFrom(job.owner, _feeRecipient, executionFee);
+                    job.sponsor = job.owner;
+                } else {
+                    revert TransferFailed();
+                }
             }
         }
 
@@ -192,10 +195,11 @@ contract JobRegistry is IJobRegistry, EIP712 {
             success,
             success ? job.executionCounter + 1 : job.executionCounter,
             executionFee,
-            executionFeeToken
+            executionFeeToken,
+            inZeroFeeWindow
         );
 
-        return (job.creationTime, executionFee, executionFeeToken, uint8(job.executionModule), uint8(job.feeModule));
+        return (job.creationTime, executionFee, executionFeeToken, uint8(job.executionModule), uint8(job.feeModule), inZeroFeeWindow);
     }
 
     /**

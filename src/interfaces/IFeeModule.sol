@@ -15,10 +15,11 @@ interface IFeeModule {
      */
     function onExecuteJob(
         uint256 _index,
-        uint32 _executionWindow,
+        uint24 _executionWindow,
+        uint24 _zeroFeeWindow,
         uint256 _executionTime,
         uint256 _variableGasConsumption
-    ) external returns (uint256, address);
+    ) external returns (uint256, address, bool);
 
     /**
      * @dev Should be restricted to only be called by the JobRegistry contract.

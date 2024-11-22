@@ -91,6 +91,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
     function test_CreateJobWithoutSponsor() public {
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -109,12 +110,13 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "", "", UINT256_MAX);
         assertEq(jobRegistry.getJobsArrayLength(), 1, "jobs array length mismatch");
     }
 
     function test_CreateJobWithSponsor() public {
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -132,9 +134,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         bytes memory sponsorSig =
-            getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
     }
 
     function test_CreateJobWithSponsorExpiredSignature(uint256 createTime, uint256 deadline) public {
@@ -142,6 +144,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         createTime = bound(createTime, 1, block.timestamp);
         deadline = bound(deadline, 0, createTime - 1);
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: deadline,
             reusableNonce: false,
@@ -160,16 +163,17 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         bytes memory sponsorSig =
-            getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
         vm.warp(createTime);
         vm.expectRevert(abi.encodeWithSelector(SignatureExpired.selector, deadline));
-        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
     }
 
     function test_CreateJobWithSponsorReusingNonce() public {
         // Should revert with InvalidNonce if nonce is already used
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -187,17 +191,18 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         bytes memory sponsorSig =
-            getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
         vm.prank(from);
         vm.expectRevert(abi.encodeWithSelector(InvalidNonce.selector));
-        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
     }
 
     function testFail_CreationWithUnsupportedExecutionModule(bytes1 module) public {
         vm.assume(module != 0x00);
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -216,12 +221,13 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
     }
 
     function testFail_CreationWithUnsupportedModule(bytes1 executionModule, bytes1 feeModule) public {
         vm.assume(executionModule != 0x00 && executionModule != 0x01 && feeModule != 0x00 && feeModule != 0x01);
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -240,12 +246,13 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
     }
 
     function test_ReuseExpiredJobIndex(address caller) public {
         // Anyone should be able to delete a job that is expired (even if application reverts)
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -263,11 +270,12 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
 
         dummyExecutionModule.expireJob();
 
         IJobRegistry.JobSpecification memory jobSpecification2 = IJobRegistry.JobSpecification({
+            owner: address2,
             nonce: 1,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -286,7 +294,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(address2);
-        uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", index);
+        uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "","", index);
 
         (address owner,,,,,,,,,,,,,) = jobRegistry.jobs(index);
 
@@ -298,6 +306,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
     function test_DeleteActiveJobAsOwner() public {
         // Should be able to delete an active job as the owner
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -315,7 +324,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
 
         vm.prank(from);
         jobRegistry.deleteJob(index);
@@ -327,6 +336,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         // Should revert when trying to delete an active job as a non-owner
         vm.assume(caller != from);
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -344,7 +354,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
 
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.Unauthorized.selector));
@@ -353,6 +363,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
     function test_RevokeSponsorshipSponsorNoFallbackToOwner() public {
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -371,10 +382,10 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         bytes memory sponsorSig =
-            getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
 
         vm.prank(sponsor);
         jobRegistry.revokeSponsorship(index);
@@ -385,6 +396,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
     function test_RevokeSponsorshipSponsorWithFallbackToOwner() public {
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -403,10 +415,10 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         bytes memory sponsorSig =
-            getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
 
         vm.prank(sponsor);
         jobRegistry.revokeSponsorship(index);
@@ -417,6 +429,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
     function test_RevokeSponsorshipOwner() public {
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -435,10 +448,10 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         bytes memory sponsorSig =
-            getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
 
         vm.prank(from);
         jobRegistry.revokeSponsorship(index);
@@ -451,6 +464,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.assume(caller != from && caller != sponsor);
 
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -469,10 +483,10 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         bytes memory sponsorSig =
-            getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
 
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.Unauthorized.selector));
@@ -481,6 +495,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
     function test_ExecuteDeletedJob() public {
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -498,7 +513,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
 
         vm.prank(from);
         jobRegistry.deleteJob(index);
@@ -511,6 +526,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
     function test_ExecuteNotExecutionContract(address caller) public {
         vm.assume(caller != address(coordinator));
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -528,7 +544,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
 
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.Unauthorized.selector));
@@ -538,6 +554,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
     function test_ExecuteReachingMaxExecutions() public {
         // should inactivate a job it it reaches max executions
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -555,7 +572,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
 
         vm.prank(address(coordinator));
         jobRegistry.execute(index, from);
@@ -569,6 +586,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
     function test_ExecuteUnsuccessfulWithIgnore() public {
         // should inactivate a job it it reaches max executions
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -586,7 +604,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
 
         dummyApplication.setRevertOnExecute(true);
 
@@ -603,6 +621,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         uint256 startBalanceExecutor = token0.balanceOf(executor);
         _executionFee = bound(_executionFee, 0, startBalanceFrom);
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -621,7 +640,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
 
         dummyFeeModule.setExecutionFee(_executionFee);
         vm.prank(address(coordinator));
@@ -638,6 +657,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         _executionFee = bound(_executionFee, 0, startBalanceFrom);
 
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -656,10 +676,10 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         bytes memory sponsorSig =
-            getJobSpecificationSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig, UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
 
         dummyFeeModule.setExecutionFee(_executionFee);
         vm.prank(address(coordinator));
@@ -672,6 +692,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
     function test_ReuseDeletedJobIndex() public {
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -690,12 +711,13 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
 
         vm.prank(from);
         jobRegistry.deleteJob(index);
 
         IJobRegistry.JobSpecification memory jobSpecification2 = IJobRegistry.JobSpecification({
+            owner: address2,
             nonce: 1,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -714,7 +736,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(address2);
-        uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", index);
+        uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "","", index);
 
         (address owner,,,,,,,,,,,,,) = jobRegistry.jobs(index);
 
@@ -725,6 +747,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
 
     function test_ReuseJobIndexAlreadyTaken() public {
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -743,9 +766,10 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
 
         IJobRegistry.JobSpecification memory jobSpecification2 = IJobRegistry.JobSpecification({
+            owner: address2,
             nonce: 1,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -764,12 +788,13 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(address2);
-        uint256 setIndex = jobRegistry.createJob(jobSpecification2, address(0), "", index);
+        uint256 setIndex = jobRegistry.createJob(jobSpecification2, address(0), "","", index);
         assertEq(setIndex, 1, "index mismatch");
     }
 
     function test_CreateJobEndOfArray() public {
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -788,9 +813,10 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
 
         IJobRegistry.JobSpecification memory jobSpecification2 = IJobRegistry.JobSpecification({
+            owner: address2,
             nonce: 1,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -809,7 +835,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(address2);
-        uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "", UINT256_MAX);
+        uint256 index2 = jobRegistry.createJob(jobSpecification2, address(0), "","", UINT256_MAX);
 
         (address owner,,,,,,,,,,,,,) = jobRegistry.jobs(index);
         (address owner2,,,,,,,,,,,,,) = jobRegistry.jobs(index2);
@@ -823,6 +849,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
     function test_UpdateFeeModuleWithSponsor() public {
         // Should be able to update fee module with sponsorship
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -840,7 +867,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
         coordinator.addFeeModule(dummyFeeModule2);
@@ -866,6 +893,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         createTime = bound(createTime, 1, block.timestamp);
         deadline = bound(deadline, 0, createTime - 1);
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -883,7 +911,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
         coordinator.addFeeModule(dummyFeeModule2);
@@ -906,6 +934,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
     function test_UpdateFeeModuleDataNoSponsor() public {
         // Should be able to update fee module without sponsorship
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -924,7 +953,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
 
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
@@ -949,6 +978,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
     function test_UpdateFeeModuleInExecutionMode() public {
         // Should revert with JobInExecutionMode when updating fee module of a job that is in execution mode
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -966,7 +996,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
         coordinator.addFeeModule(dummyFeeModule2);
@@ -988,6 +1018,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         // Should revert with Unauthorized when updating fee module of a job from a caller that is not the owner of the job
         vm.assume(caller != from);
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -1005,7 +1036,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
         coordinator.addFeeModule(dummyFeeModule2);
@@ -1025,6 +1056,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
     function test_MigrateFeeModuleWithSponsor() public {
         // Should be able to migrate fee module with sponsorship
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -1042,7 +1074,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             applicationInput: ""
         });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
         coordinator.addFeeModule(dummyFeeModule2);
@@ -1066,6 +1098,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
     function test_CreateJobInitialExecution() public {
         // Should execute once when execution module returns true for initial execution
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -1084,7 +1117,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
         (,,,,,,,,,, uint48 executionCounter,,,) = jobRegistry.jobs(0);
         assertEq(executionCounter, 1, "execution counter mismatch");
     }
@@ -1092,6 +1125,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
     function test_NoMaxExecutionLimit() public {
         // Should be able to execute twice when maxExecutions is set to 0
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -1110,7 +1144,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
         vm.prank(address(coordinator));
         jobRegistry.execute(0, from);
     }
@@ -1118,6 +1152,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
     function test_MaxExecutionLimitOfOne() public {
         // Should revert when trying to execute more than once when maxExecutions set to 1. Job is deactivated
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -1136,7 +1171,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
         vm.prank(address(coordinator));
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.JobNotActive.selector));
         jobRegistry.execute(0, from);
@@ -1145,6 +1180,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
     function test_DeactivateJobNotOwner(address caller) public {
         vm.assume(caller != from);
         IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
             nonce: 0,
             deadline: UINT256_MAX,
             reusableNonce: false,
@@ -1163,7 +1199,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         });
 
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, address(0), "", UINT256_MAX);
+        jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.Unauthorized.selector));
         jobRegistry.deactivateJob(0);

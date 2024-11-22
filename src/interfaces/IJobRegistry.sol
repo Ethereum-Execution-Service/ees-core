@@ -29,6 +29,7 @@ interface IJobRegistry {
     }
 
     struct JobSpecification {
+        address owner;
         uint256 nonce;
         uint256 deadline;
         bool reusableNonce;
@@ -59,6 +60,7 @@ interface IJobRegistry {
         JobSpecification calldata _specification,
         address _sponsor,
         bytes calldata _sponsorSignature,
+        bytes calldata _ownerSignature,
         uint256 _index
     ) external returns (uint256 index);
     function execute(uint256 _index, address _feeRecipient) external returns (uint96, uint256, address, uint8, uint8, bool);

@@ -51,14 +51,25 @@ contract JobRegistry is IJobRegistry, EIP712 {
         JobSpecification calldata _specification,
         address _sponsor,
         bytes calldata _sponsorSignature,
+        bytes calldata _ownerSignature,
         uint256 _index
     ) public override returns (uint256 index) {
-        bool _hasSponsorship = _sponsor != address(0);
-        if (_hasSponsorship) {
-            if (block.timestamp > _specification.deadline) revert SignatureExpired(_specification.deadline);
+        // SIGNATURE CHECKS
+        bool hasSponsorship = _sponsor != address(0);
+        bool callerIsOwner = msg.sender == _specification.owner;
+        if((hasSponsorship || !callerIsOwner) && block.timestamp > _specification.deadline) {
+            revert SignatureExpired(_specification.deadline);
+        }
+        if (hasSponsorship) {
             // do not consume nonce if it is reusable, but still check if it is used
             _useUnorderedNonce(_sponsor, _specification.nonce, !_specification.reusableNonce);
-            _sponsorSignature.verify(_hashTypedData(_specification.hash()), _sponsor);
+            // we do not include owner in the hash, since the sponsor can sign for any owner
+            _sponsorSignature.verify(_hashTypedData(_specification.hashNoOwner()), _sponsor);
+        }
+        if(!callerIsOwner) {
+            // always consume owner nonce
+            _useUnorderedNonce(_specification.owner, _specification.nonce, true);
+            _ownerSignature.verify(_hashTypedData(_specification.hash()), _specification.owner);
         }
 
         // attempts to reuse index of existing expired job if _index is existing. Otherwise creates new job at jobs.length.
@@ -108,7 +119,7 @@ contract JobRegistry is IJobRegistry, EIP712 {
             feeModule: _specification.feeModule,
             executionWindow: _specification.executionWindow,
             zeroFeeWindow: _specification.zeroFeeWindow,
-            sponsor: _hasSponsorship ? _sponsor : msg.sender,
+            sponsor: hasSponsorship ? _sponsor : msg.sender,
             executionCounter: initialExecution ? 1 : 0,
             maxExecutions: _specification.maxExecutions,
             application: _specification.application,
@@ -300,8 +311,8 @@ contract JobRegistry is IJobRegistry, EIP712 {
             revert JobInExecutionMode();
         }
 
-        bool _hasSponsorship = _sponsor != address(0);
-        if (_hasSponsorship) {
+        bool hasSponsorship = _sponsor != address(0);
+        if (hasSponsorship) {
             if (block.timestamp > _feeModuleInput.deadline) revert SignatureExpired(_feeModuleInput.deadline);
             _useUnorderedNonce(_sponsor, _feeModuleInput.nonce, !_feeModuleInput.reusableNonce);
             _sponsorSignature.verify(_hashTypedData(_feeModuleInput.hash()), _sponsor);

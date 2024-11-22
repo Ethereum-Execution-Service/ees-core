@@ -2,9 +2,9 @@
 pragma solidity 0.8.27;
 
 import {Test} from "forge-std/src/Test.sol";
-import {SignatureGenerator} from "./utils/SignatureGenerator.sol";
-import {MockERC1271} from "./mocks/MockERC1271.sol";
-import {PublicERC6492Validator} from "../src/PublicERC6492Validator.sol";
+import {SignatureGenerator} from "../utils/SignatureGenerator.sol";
+import {MockERC1271} from "../mocks/MockERC1271.sol";
+import {PublicERC6492Validator} from "../../src/PublicERC6492Validator.sol";
 
 
 contract SignatureVerificationTest is Test, SignatureGenerator {

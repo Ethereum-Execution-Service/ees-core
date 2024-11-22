@@ -3,11 +3,11 @@ pragma solidity 0.8.27;
 
 import {Test} from "forge-std/src/Test.sol";
 import {console} from "forge-std/src/console.sol";
-import {CoordinatorHandler} from "./handlers/CoordinatorHandler.sol";
-import {MockCoordinator} from "./mocks/MockCoordinator.sol";
-import {MockERC20} from "./mocks/MockERC20.sol";
-import {DummyJobRegistry} from "./mocks/dummyContracts/DummyJobRegistry.sol";
-import {ICoordinator} from "../src/interfaces/ICoordinator.sol";
+import {CoordinatorHandler} from "../handlers/CoordinatorHandler.sol";
+import {MockCoordinator} from "../mocks/MockCoordinator.sol";
+import {MockERC20} from "../mocks/MockERC20.sol";
+import {DummyJobRegistry} from "../mocks/dummyContracts/DummyJobRegistry.sol";
+import {ICoordinator} from "../../src/interfaces/ICoordinator.sol";
 contract CoordinatorInvariant is Test {
   CoordinatorHandler public coordinatorHandler;
 

@@ -2,11 +2,11 @@
 pragma solidity 0.8.27;
 
 import {Test} from "forge-std/src/Test.sol";
-import {MockJobRegistry} from "./mocks/MockJobRegistry.sol";
-import {MockCoordinatorProvider} from "./utils/MockCoordinatorProvider.sol";
-import {MockCoordinator} from "./mocks/MockCoordinator.sol";
-import {PublicERC6492Validator} from "../src/PublicERC6492Validator.sol";
-import {IJobRegistry} from "../src/interfaces/IJobRegistry.sol";
+import {MockJobRegistry} from "../mocks/MockJobRegistry.sol";
+import {MockCoordinatorProvider} from "../utils/MockCoordinatorProvider.sol";
+import {MockCoordinator} from "../mocks/MockCoordinator.sol";
+import {PublicERC6492Validator} from "../../src/PublicERC6492Validator.sol";
+import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
 
 contract NonceBitmapTest is Test {
     MockJobRegistry jobRegistry;

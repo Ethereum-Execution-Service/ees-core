@@ -4,7 +4,6 @@ pragma solidity 0.8.27;
 import {Test} from "forge-std/src/Test.sol";
 import {TokenProvider} from "./utils/TokenProvider.sol";
 import {GasSnapshot} from "forge-gas-snapshot/src/GasSnapshot.sol";
-import {SignatureExpired, InvalidNonce} from "../src/PermitErrors.sol";
 import {IJobRegistry} from "../src/interfaces/IJobRegistry.sol";
 import {IApplication} from "../src/interfaces/IApplication.sol";
 import {MockJobRegistry} from "./mocks/MockJobRegistry.sol";
@@ -17,6 +16,7 @@ import {StdUtils} from "forge-std/src/StdUtils.sol";
 import {MockCoordinator} from "./mocks/MockCoordinator.sol";
 import {ICoordinator} from "../src/interfaces/ICoordinator.sol";
 import {MockCoordinatorProvider} from "./utils/MockCoordinatorProvider.sol";
+import {PublicERC6492Validator} from "../src/PublicERC6492Validator.sol";
 
 contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeModuleInputSignature, GasSnapshot {
     MockJobRegistry jobRegistry;
@@ -69,8 +69,9 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         coordinator.addFeeModule(dummyFeeModule);
         vm.stopPrank();
 
+        PublicERC6492Validator publicERC6492Validator = new PublicERC6492Validator();
         vm.prank(address0);
-        jobRegistry = new MockJobRegistry(coordinator);
+        jobRegistry = new MockJobRegistry(coordinator, publicERC6492Validator);
         
 
         fromPrivateKey = 0x12341234;
@@ -166,7 +167,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
         vm.warp(createTime);
-        vm.expectRevert(abi.encodeWithSelector(SignatureExpired.selector, deadline));
+        vm.expectRevert(abi.encodeWithSelector(IJobRegistry.SignatureExpired.selector, deadline));
         jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
     }
 
@@ -195,7 +196,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
         vm.prank(from);
         jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
         vm.prank(from);
-        vm.expectRevert(abi.encodeWithSelector(InvalidNonce.selector));
+        vm.expectRevert(abi.encodeWithSelector(IJobRegistry.InvalidNonce.selector));
         jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
     }
 
@@ -927,7 +928,7 @@ contract JobRegistryTest is Test, TokenProvider, JobSpecificationSignature, FeeM
             getFeeModuleInputSignature(feeModuleInput, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
         vm.warp(createTime);
-        vm.expectRevert(abi.encodeWithSelector(SignatureExpired.selector, deadline));
+        vm.expectRevert(abi.encodeWithSelector(IJobRegistry.SignatureExpired.selector, deadline));
         jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig);
     }
 

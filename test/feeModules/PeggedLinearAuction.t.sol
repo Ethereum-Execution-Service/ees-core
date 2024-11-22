@@ -13,6 +13,8 @@ import {ICoordinator} from "../../src/interfaces/ICoordinator.sol";
 import {TokenProvider} from "../utils/TokenProvider.sol";
 import {MockCoordinatorProvider} from "../utils/MockCoordinatorProvider.sol";
 import {MockCoordinator} from "../mocks/MockCoordinator.sol";
+import {MockJobRegistry} from "../mocks/MockJobRegistry.sol";
+import {PublicERC6492Validator} from "../../src/PublicERC6492Validator.sol";
 
 contract PeggedLinearAuctionTest is Test, GasSnapshot, TokenProvider {
     MockPeggedLinearAuction feeModule;
@@ -43,7 +45,8 @@ contract PeggedLinearAuctionTest is Test, GasSnapshot, TokenProvider {
 
         MockCoordinatorProvider coordinatorProvider = new MockCoordinatorProvider(address(0x3));
         coordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());
-        jobRegistry = new JobRegistry(coordinator);
+        PublicERC6492Validator publicERC6492Validator = new PublicERC6492Validator();
+        jobRegistry = new MockJobRegistry(coordinator, publicERC6492Validator);
         vm.prank(address(address(0x3)));
         coordinator.addJobRegistry(address(jobRegistry));
 

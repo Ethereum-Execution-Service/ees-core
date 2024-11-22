@@ -3,9 +3,10 @@ pragma solidity 0.8.27;
 
 import {Test} from "forge-std/src/Test.sol";
 import {MockJobRegistry} from "./mocks/MockJobRegistry.sol";
-import {InvalidNonce} from "../src/PermitErrors.sol";
 import {MockCoordinatorProvider} from "./utils/MockCoordinatorProvider.sol";
 import {MockCoordinator} from "./mocks/MockCoordinator.sol";
+import {PublicERC6492Validator} from "../src/PublicERC6492Validator.sol";
+import {IJobRegistry} from "../src/interfaces/IJobRegistry.sol";
 
 contract NonceBitmapTest is Test {
     MockJobRegistry jobRegistry;
@@ -13,7 +14,8 @@ contract NonceBitmapTest is Test {
     function setUp() public {
         MockCoordinatorProvider coordinatorProvider = new MockCoordinatorProvider(address(0x3));
         MockCoordinator coordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());
-        jobRegistry = new MockJobRegistry(coordinator);
+        PublicERC6492Validator publicERC6492Validator = new PublicERC6492Validator();
+        jobRegistry = new MockJobRegistry(coordinator, publicERC6492Validator);
     }
 
     function test_LowNonces() public {
@@ -21,11 +23,11 @@ contract NonceBitmapTest is Test {
         jobRegistry.useUnorderedNonce(address(this), 0, true);
         jobRegistry.useUnorderedNonce(address(this), 1, true);
 
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 1, true);
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 5, true);
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 0, true);
         jobRegistry.useUnorderedNonce(address(this), 4, true);
     }
@@ -34,9 +36,9 @@ contract NonceBitmapTest is Test {
         jobRegistry.useUnorderedNonce(address(this), 255, true);
         jobRegistry.useUnorderedNonce(address(this), 256, true);
 
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 255, true);
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 256, true);
     }
 
@@ -44,22 +46,22 @@ contract NonceBitmapTest is Test {
         jobRegistry.useUnorderedNonce(address(this), 2 ** 240, true);
         jobRegistry.useUnorderedNonce(address(this), 2 ** 240 + 1, true);
 
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 2 ** 240, true);
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 2 ** 240 + 1, true);
     }
 
     function test_InvalidateFullWord() public {
         jobRegistry.invalidateUnorderedNonces(0, 2 ** 256 - 1);
 
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 0, true);
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 1, true);
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 254, true);
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 255, true);
         jobRegistry.useUnorderedNonce(address(this), 256, true);
     }
@@ -70,23 +72,23 @@ contract NonceBitmapTest is Test {
         jobRegistry.useUnorderedNonce(address(this), 0, true);
         jobRegistry.useUnorderedNonce(address(this), 254, true);
         jobRegistry.useUnorderedNonce(address(this), 255, true);
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 256, true);
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), 511, true);
         jobRegistry.useUnorderedNonce(address(this), 512, true);
     }
 
     function test_UsingNonceTwiceFails(uint256 nonce) public {
         jobRegistry.useUnorderedNonce(address(this), nonce, true);
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), nonce, true);
     }
 
     function test_UseTwoRandomNonces(uint256 first, uint256 second) public {
         jobRegistry.useUnorderedNonce(address(this), first, true);
         if (first == second) {
-            vm.expectRevert(InvalidNonce.selector);
+            vm.expectRevert(IJobRegistry.InvalidNonce.selector);
             jobRegistry.useUnorderedNonce(address(this), second, true);
         } else {
             jobRegistry.useUnorderedNonce(address(this), second, true);
@@ -122,7 +124,7 @@ contract NonceBitmapTest is Test {
     function test_ConsumeReusableNonce(uint256 nonce) public {
         jobRegistry.useUnorderedNonce(address(this), nonce, false);
         jobRegistry.useUnorderedNonce(address(this), nonce, true);
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), nonce, true);
     }
     
@@ -131,7 +133,7 @@ contract NonceBitmapTest is Test {
         uint256 wordPos = nonce / 256;
         uint256 mask = 1 << (nonce % 256);
         jobRegistry.invalidateUnorderedNonces(wordPos, mask);
-        vm.expectRevert(InvalidNonce.selector);
+        vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), nonce, true);
     }
     

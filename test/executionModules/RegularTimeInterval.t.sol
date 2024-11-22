@@ -11,6 +11,8 @@ import {IRegularTimeInterval} from "../../src/interfaces/executionModules/IRegul
 import {MockRegularTimeInterval} from "../mocks/MockRegularTimeInterval.sol";
 import {MockCoordinatorProvider} from "../utils/MockCoordinatorProvider.sol";
 import {MockCoordinator} from "../mocks/MockCoordinator.sol";
+import {PublicERC6492Validator} from "../../src/PublicERC6492Validator.sol";
+import {MockJobRegistry} from "../mocks/MockJobRegistry.sol";
 
 contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignature, GasSnapshot {
     JobRegistry jobRegistry;
@@ -34,7 +36,8 @@ contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignatu
 
         coordinatorProvider = new MockCoordinatorProvider(address(0x3));
         coordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());
-        jobRegistry = new JobRegistry(coordinator);
+        PublicERC6492Validator publicERC6492Validator = new PublicERC6492Validator();
+        jobRegistry = new MockJobRegistry(coordinator, publicERC6492Validator);
         vm.prank(address(address(0x3)));
         coordinator.addJobRegistry(address(jobRegistry));
         executionModule = new MockRegularTimeInterval(coordinator);

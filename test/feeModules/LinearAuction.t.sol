@@ -9,6 +9,8 @@ import {MockLinearAuction} from "../mocks/MockLinearAuction.sol";
 import {Coordinator} from "../../src/Coordinator.sol";
 import {MockCoordinatorProvider} from "../utils/MockCoordinatorProvider.sol";
 import {MockCoordinator} from "../mocks/MockCoordinator.sol";
+import {MockJobRegistry} from "../mocks/MockJobRegistry.sol";
+import {PublicERC6492Validator} from "../../src/PublicERC6492Validator.sol";
 
 contract LinearAuctionTest is Test, GasSnapshot {
     MockLinearAuction feeModule;
@@ -37,7 +39,8 @@ contract LinearAuctionTest is Test, GasSnapshot {
 
         MockCoordinatorProvider coordinatorProvider = new MockCoordinatorProvider(address(0x3));
         coordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());
-        jobRegistry = new JobRegistry(coordinator);
+        PublicERC6492Validator publicERC6492Validator = new PublicERC6492Validator();
+        jobRegistry = new MockJobRegistry(coordinator, publicERC6492Validator);
         vm.prank(address(0x3));
         coordinator.addJobRegistry(address(jobRegistry));
         

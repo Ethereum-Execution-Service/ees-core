@@ -5,7 +5,7 @@ import {Test} from "forge-std/src/Test.sol";
 import {JobRegistry} from "../src/JobRegistry.sol";
 import {MockCoordinatorProvider} from "./utils/MockCoordinatorProvider.sol";
 import {MockCoordinator} from "./mocks/MockCoordinator.sol";
-
+import {PublicERC6492Validator} from "../src/PublicERC6492Validator.sol";
 // forge test --match-contract EIP712
 contract EIP712Test is Test {
     bytes32 private constant TYPE_HASH =
@@ -17,7 +17,8 @@ contract EIP712Test is Test {
     function setUp() public {
         MockCoordinatorProvider coordinatorProvider = new MockCoordinatorProvider(address(0x3));
         MockCoordinator mockCoordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());
-        jobRegistry = new JobRegistry(mockCoordinator);
+        PublicERC6492Validator publicERC6492Validator = new PublicERC6492Validator();
+        jobRegistry = new JobRegistry(mockCoordinator, publicERC6492Validator);
     }
 
     function testDomainSeparator() public {

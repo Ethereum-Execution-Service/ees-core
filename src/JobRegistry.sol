@@ -5,25 +5,26 @@ import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {IExecutionModule} from "./interfaces/IExecutionModule.sol";
 import {IFeeModule} from "./interfaces/IFeeModule.sol";
 import {IApplication} from "./interfaces/IApplication.sol";
-import {SignatureVerification} from "./libraries/SignatureVerification.sol";
 import {JobSpecificationHash} from "./libraries/JobSpecificationHash.sol";
 import {FeeModuleInputHash} from "./libraries/FeeModuleInputHash.sol";
-import {SignatureExpired, InvalidNonce} from "./PermitErrors.sol";
 import {EIP712} from "./EIP712.sol";
 import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {Coordinator} from "./Coordinator.sol";
 import {SafeTransferFromNoRevert} from "./libraries/SafeTransferFromNoRevert.sol";
+import {PublicERC6492Validator} from "./PublicERC6492Validator.sol";
+import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 
 /// @author Victor Brevig
 /// @notice JobRegistry keeps track of all jobs in the EES. It is through this contract jobs are created, managed and deleted.
-contract JobRegistry is IJobRegistry, EIP712 {
+contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     using SafeTransferLib for ERC20;
     using SafeTransferFromNoRevert for ERC20;
-    using SignatureVerification for bytes;
     using JobSpecificationHash for JobSpecification;
     using FeeModuleInputHash for FeeModuleInput;
+
+    PublicERC6492Validator public immutable publicERC6492Validator;
 
     Job[] public jobs;
 
@@ -35,8 +36,9 @@ contract JobRegistry is IJobRegistry, EIP712 {
     // for single use nonces
     mapping(address => mapping(uint256 => uint256)) public nonceBitmap;
 
-    constructor(Coordinator _coordinator) {
+    constructor(Coordinator _coordinator, PublicERC6492Validator _publicERC6492Validator) {
         coordinator = _coordinator;
+        publicERC6492Validator = _publicERC6492Validator;
     }
 
     /**
@@ -53,7 +55,7 @@ contract JobRegistry is IJobRegistry, EIP712 {
         bytes calldata _sponsorSignature,
         bytes calldata _ownerSignature,
         uint256 _index
-    ) public override returns (uint256 index) {
+    ) public override nonReentrant returns (uint256 index) {
         // SIGNATURE CHECKS
         bool hasSponsorship = _sponsor != address(0);
         bool callerIsOwner = msg.sender == _specification.owner;
@@ -64,12 +66,12 @@ contract JobRegistry is IJobRegistry, EIP712 {
             // do not consume nonce if it is reusable, but still check if it is used
             _useUnorderedNonce(_sponsor, _specification.nonce, !_specification.reusableNonce);
             // we do not include owner in the hash, since the sponsor can sign for any owner
-            _sponsorSignature.verify(_hashTypedData(_specification.hashNoOwner()), _sponsor);
+            if(!publicERC6492Validator.isValidSignatureNowAllowSideEffects(_sponsor, _hashTypedData(_specification.hashNoOwner()), _sponsorSignature)) revert InvalidSignature();
         }
         if(!callerIsOwner) {
             // always consume owner nonce
             _useUnorderedNonce(_specification.owner, _specification.nonce, true);
-            _ownerSignature.verify(_hashTypedData(_specification.hash()), _specification.owner);
+            if(!publicERC6492Validator.isValidSignatureNowAllowSideEffects(_specification.owner, _hashTypedData(_specification.hash()), _ownerSignature)) revert InvalidSignature();
         }
 
         // attempts to reuse index of existing expired job if _index is existing. Otherwise creates new job at jobs.length.
@@ -143,7 +145,7 @@ contract JobRegistry is IJobRegistry, EIP712 {
      * @param _index Index of the job in the jobs array.
      * @param _feeRecipient Address who receives execution fee tokens.
      */
-    function execute(uint256 _index, address _feeRecipient) external override returns (uint96, uint256, address, uint8, uint8, bool) {
+    function execute(uint256 _index, address _feeRecipient) external override nonReentrant returns (uint96, uint256, address, uint8, uint8, bool) {
         if (msg.sender != address(coordinator)) revert Unauthorized();
         Job memory job = jobs[_index];
 
@@ -198,7 +200,6 @@ contract JobRegistry is IJobRegistry, EIP712 {
                 }
             }
         }
-
         emit JobExecuted(
             _index,
             job.owner,
@@ -209,7 +210,6 @@ contract JobRegistry is IJobRegistry, EIP712 {
             executionFeeToken,
             inZeroFeeWindow
         );
-
         return (job.creationTime, executionFee, executionFeeToken, uint8(job.executionModule), uint8(job.feeModule), inZeroFeeWindow);
     }
 
@@ -224,16 +224,14 @@ contract JobRegistry is IJobRegistry, EIP712 {
         emit JobDeactivated(_index, job.owner, address(job.application));
     }
 
-
     /**
      * @notice Deletes the job from the jobs array and calls onDeleteJob on execution module and application.
      * @param _index The index of the job in the jobs array.
      */
-    function deleteJob(uint256 _index) public override {
+    function deleteJob(uint256 _index) public override nonReentrant {
         if (msg.sender != jobs[_index].owner) revert Unauthorized();
         _deleteJob(_index);
     }
-
 
     /**
      * @notice Deletes the job from the jobs array and calls onDeleteJob on execution module and application.
@@ -242,7 +240,6 @@ contract JobRegistry is IJobRegistry, EIP712 {
     function _deleteJob(uint256 _index) private {
         Job memory job = jobs[_index];
 
-        
         (address executionModuleAddress,) = coordinator.modules(uint8(job.executionModule));
         IExecutionModule executionModule = IExecutionModule(executionModuleAddress);
         (address feeModuleAddress,) = coordinator.modules(uint8(job.feeModule));
@@ -297,7 +294,7 @@ contract JobRegistry is IJobRegistry, EIP712 {
         FeeModuleInput calldata _feeModuleInput,
         address _sponsor,
         bytes calldata _sponsorSignature
-    ) public override {
+    ) public override nonReentrant {
         Job storage job = jobs[_feeModuleInput.index];
         // if job.sponsorCanUpdateFeeModule both sponsor and owner can update fee module
         // if !job.sponsorCanUpdateFeeModule only owner can update fee module
@@ -315,7 +312,7 @@ contract JobRegistry is IJobRegistry, EIP712 {
         if (hasSponsorship) {
             if (block.timestamp > _feeModuleInput.deadline) revert SignatureExpired(_feeModuleInput.deadline);
             _useUnorderedNonce(_sponsor, _feeModuleInput.nonce, !_feeModuleInput.reusableNonce);
-            _sponsorSignature.verify(_hashTypedData(_feeModuleInput.hash()), _sponsor);
+            if(!publicERC6492Validator.isValidSignatureNowAllowSideEffects(_sponsor, _hashTypedData(_feeModuleInput.hash()), _sponsorSignature)) revert InvalidSignature();
             job.sponsor = _sponsor;
         } else {
             job.sponsor = job.owner;

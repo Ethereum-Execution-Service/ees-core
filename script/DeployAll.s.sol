@@ -9,6 +9,7 @@ import {LinearAuction} from "../src/feeModules/LinearAuction.sol";
 import {PeggedLinearAuction} from "../src/feeModules/PeggedLinearAuction.sol";
 import {Coordinator} from "../src/Coordinator.sol";
 import {ICoordinator} from "../src/interfaces/ICoordinator.sol";
+import {PublicERC6492Validator} from "../src/PublicERC6492Validator.sol";
 
 contract DeployAll is Script {
     address treasury;
@@ -56,6 +57,7 @@ contract DeployAll is Script {
         public
         returns (
             Coordinator coordinator,
+            PublicERC6492Validator publicERC6492Validator,
             JobRegistry jobRegistry,
             RegularTimeInterval regularTimeInterval,
             LinearAuction linearAuction,
@@ -68,7 +70,10 @@ contract DeployAll is Script {
         coordinator = new Coordinator(initSpec, treasury);
         console2.log("Coordinator Deployed:", address(coordinator));
 
-        jobRegistry = new JobRegistry(coordinator);
+        publicERC6492Validator = new PublicERC6492Validator();
+        console2.log("PublicERC6492Validator Deployed:", address(publicERC6492Validator));
+
+        jobRegistry = new JobRegistry(coordinator, publicERC6492Validator);
         console2.log("JobRegistry Deployed:", address(jobRegistry));
 
         coordinator.addJobRegistry(address(jobRegistry));

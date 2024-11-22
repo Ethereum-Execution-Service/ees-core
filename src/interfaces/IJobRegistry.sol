@@ -130,4 +130,14 @@ interface IJobRegistry {
 
     /// @notice Thrown when the transfer of execution fee fails
     error TransferFailed();
+
+    /// @notice Thrown when validating an inputted signature that is stale
+    /// @param signatureDeadline The timestamp at which a signature is no longer valid
+    error SignatureExpired(uint256 signatureDeadline);
+
+    /// @notice Thrown when validating that the inputted nonce has not been used
+    error InvalidNonce();
+
+    /// @notice Thrown when the signature is invalid.
+    error InvalidSignature();
 }

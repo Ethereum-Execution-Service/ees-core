@@ -494,9 +494,10 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @notice Slashes the executor for not executing in the given round with inactiveSlashingAmountPerModule times the number of registered modules.
      * @notice If executor's balance goes below threshold, executor is deactivated.
      * @notice Cannot only be called during slashing window.
+     * @notice If the recipiant is an initialized executor, reward will go to internal balance, otherwise normal ERC20 transfer.
      * @param _executor The address of the executor to be slashed.
      * @param _round The round the executor is being slashed for.
-     * @param _recipient The address to send slashing reward to. Must be an active executor.
+     * @param _recipient The address to send slashing reward to.
      */
     function slashInactiveExecutor(address _executor, uint8 _round, address _recipient) public {
         // *** CHECKS ***
@@ -539,8 +540,9 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @notice Slashes the executor for committing without revealing with commitSlashingAmountPerModule times the number of registered modules.
      * @notice If executor's balance goes below threshold, executor is deactivated.
      * @notice Cannot only be called during slashing window.
+     * @notice If the recipiant is an initialized executor, reward will go to internal balance, otherwise normal ERC20 transfer.
      * @param _executor The address of the executor to be slashed.
-     * @param _recipient The address to send slashing reward to. Must be an active executor.
+     * @param _recipient The address to send slashing reward to.
      */
     function slashCommitter(address _executor, address _recipient) public {
         // *** CHECKS ***
@@ -843,10 +845,11 @@ contract Coordinator is ICoordinator, TaxHandler {
 
     /**
      * @notice Slashes the executor for the given amount and sends half to the recipient.
+     * @notice If the recipiant is an initialized executor, reward will go to internal balance, otherwise normal ERC20 transfer.
      * @dev Should only be called when the executor is active.
      * @param _amount The amount to slash from the executor's balance.
      * @param _executor The address of the executor to be slashed.
-     * @param _recipient The address to reward half of the slashed amount to. Must be an active executor.
+     * @param _recipient The address to reward half of the slashed amount to.
      */
     function _slash(uint256 _amount, Executor storage _executor, address _recipient) private {
         // *** BALANCE THRESHOLD CHECK AND POTENTIAL DEACTIVATION ***
@@ -865,7 +868,7 @@ contract Coordinator is ICoordinator, TaxHandler {
                 executorInfo[_recipient].balance += rewardAmount;
             } else {
                 // if recipient is not an initialized executor, do normal ERC20 transfer
-                ERC20(stakingToken).safeTransfer(msg.sender, rewardAmount);
+                ERC20(stakingToken).safeTransfer(_recipient, rewardAmount);
             }
             protocolBalance += _amount - rewardAmount;
         } 

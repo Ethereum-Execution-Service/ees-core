@@ -9,6 +9,19 @@ import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 import {TaxHandler} from "./TaxHandler.sol";
 import {ModuleRegistry} from "./ModuleRegistry.sol";
 
+
+/**
+__/\\\\\\\\\\\\\\\__/\\\\\\\\\\\\\\\_____/\\\\\\\\\\\___        
+ _\/\\\///////////__\/\\\///////////____/\\\/////////\\\_       
+  _\/\\\_____________\/\\\______________\//\\\______\///__      
+   _\/\\\\\\\\\\\_____\/\\\\\\\\\\\_______\////\\\_________     
+    _\/\\\///////______\/\\\///////___________\////\\\______    
+     _\/\\\_____________\/\\\_____________________\////\\\___   
+      _\/\\\_____________\/\\\______________/\\\______\//\\\__  
+       _\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\\_\///\\\\\\\\\\\/___ 
+        _\///////////////__\///////////////____\///////////_____
+ */
+
 /// @author Victor Brevig
 /// @notice Coordinator is responsible for coordination of executors including job execution, staking and slashing.
 contract Coordinator is ICoordinator, TaxHandler {
@@ -111,13 +124,14 @@ contract Coordinator is ICoordinator, TaxHandler {
     ) public returns (uint256, uint256, uint256) {
         Executor memory executor = executorInfo[msg.sender];
 
+        // *** IN ROUND CHECKS ***
         bool inRound;
         uint8 round;
         uint256 designatedExecutorModules;
         address designatedExecutor;
         if (block.timestamp < epochEndTime - slashingDuration && block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration)
         {
-            // we are in an epoch
+            // we are in alternating open competition and designated rounds of the epoch
             uint256 timeIntoRounds;
             unchecked {
                 // safe given that 1) epochEndTime > block.timestamp and 2) block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
@@ -141,7 +155,8 @@ contract Coordinator is ICoordinator, TaxHandler {
                 designatedExecutorModules = executorInfo[designatedExecutor].registeredModules;
             }
         }
-        // could put these in assembly in memory, but be careful not to override anything
+
+        // *** JOB REGISTRY EXECUTION CALLS ***
         address jobRegistryCache = jobRegistries[_jobRegistryIndex];
         uint256 indicesLength = _indices.length;
         uint8 epochDurationCache = epochDuration;
@@ -232,25 +247,24 @@ contract Coordinator is ICoordinator, TaxHandler {
             }
         }
 
-        // TAXING AND POOL BALANCES UPDATE
+        // *** TAXING AND POOL BALANCE UPDATE ***
         uint256 totalTax;
         uint256 standardTax;
         uint256 zeroFeeTax;
         uint256 newBalance = executor.balance;
         if (executionCount > 0) {
-            // UPDATE EXECUTOR BALANCE AND COMPUTE TAX
-            // handle normal tax for jobs not in
+            // handle normal tax for jobs not in zero fee window
             unchecked {
                 // standardTax is never greater than uint256 max value realistically
                 standardTax = executionTax * executionCount;
             }
             
-            // UPDATE POOL AND PROTOCOL BALANCES
+            // update pool and protocol balances
             unchecked {
                 // next epoch pool balance or protocol balance will never exceed uint256 max value since there are not enough tokens in existence
                 // during designated rounds, tax goes to protocol balance.
                 // otherwise, tax goes to next epoch pool balance.
-                // we increament executedJobsInRoundsOfEpoch only if we are in a round
+                // increament executedJobsInRoundsOfEpoch only if we are in a round
                 if(inRound) {
                     executedJobsInRoundsOfEpoch += executionCount;
                     protocolBalance += standardTax;
@@ -261,13 +275,13 @@ contract Coordinator is ICoordinator, TaxHandler {
             }
         }
         if(executionCountZeroFee > 0) {
-            // handle zero fee tax for jobs not in zero fee window
+            // handle zero fee tax
             unchecked {
                 // totalTax is never greater than uint256 max value realistically
                 zeroFeeTax = zeroFeeExecutionTax * executionCountZeroFee;
             }
 
-            // UPDATE POOL AND PROTOCOL BALANCES
+            // update pool and protocol balances
             // split zero fee tax between pool and protocol
             unchecked {
                 // halfZeroTax can never be greater than zeroFeeTax
@@ -276,6 +290,8 @@ contract Coordinator is ICoordinator, TaxHandler {
                 protocolBalance += zeroFeeTax - halfZeroFeeTax;
             }
         }
+
+        // *** TAX TRANSFER ***
         unchecked {
             totalTax = standardTax + zeroFeeTax;
         }
@@ -289,6 +305,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             }
         }
 
+        // *** DESIGNATED EXECUTOR UPDATES ***
         if (inRound && designatedExecutor == msg.sender) {
             if(!executor.active) revert NotActiveExecutor();
 
@@ -353,6 +370,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             }
         }
 
+        // *** BALANCE THRESHOLD CHECK AND POTENTIAL DEACTIVATION ***
         // check if executor balance is below threshold and deactivate if true
         if(executor.active && newBalance < stakingBalanceThresholdPerModule * _countModules(executor.registeredModules)) {
             (address deactivatedExecutor, address lastExecutor) = _deactivateExecutor(executor.arrayIndex);
@@ -360,6 +378,8 @@ contract Coordinator is ICoordinator, TaxHandler {
             executorInfo[msg.sender].active = false;
             emit ExecutorDeactivated(deactivatedExecutor);
         }
+
+
         emit BatchExecution(_jobRegistryIndex, standardTax, zeroFeeTax);
         return (standardTax, zeroFeeTax, executionCount + executionCountZeroFee);
     }
@@ -372,6 +392,7 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @param _modulesBitset The bitset of modules to register for.
      */
     function stake(uint256 _modulesBitset) public returns (uint256 stakingAmount) {
+        // *** CHECKS ***
         if (
             block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
                 && block.timestamp < epochEndTime
@@ -380,12 +401,12 @@ contract Coordinator is ICoordinator, TaxHandler {
         }
         if (executorInfo[msg.sender].initialized) revert AlreadyStaked();
 
-        // MODULE REGISTRATION CHECK
+        // *** MODULE REGISTRATION CHECK ***
         // only allow registration for existing modules
         uint256 numberOfModules = _countModules(_modulesBitset & _getValidModulesMask());
         if(numberOfModules < 2) revert NumberOfRegisteredModulesBelowMinimum();
         
-        // STAKING
+        // *** STAKING ***
         stakingAmount = stakingAmountPerModule * numberOfModules;
         ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), stakingAmount);
 
@@ -411,13 +432,13 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @dev If the executor is active it is deactivated removing it from activeExecutors and numberOfActiveExecutors is decremented. The executor is removed from executorInfo.
      */
     function unstake() public {
+        // *** CHECKS ***
         if (
             block.timestamp >= epochEndTime - epochDuration + commitPhaseDuration
                 && block.timestamp < epochEndTime
         ) {
             revert InvalidBlockTime();
         }
-
         Executor memory executor = executorInfo[msg.sender];
         if (!executor.initialized) revert NotActiveExecutor();
         unchecked {
@@ -427,9 +448,9 @@ contract Coordinator is ICoordinator, TaxHandler {
             }
         }
 
+        // *** DELETION, DEACTIVATION AND TRANSFER ***
         delete executorInfo[msg.sender];
         delete commitmentMap[msg.sender];
-
         if (executor.active) {
             (address deactivatedExecutor, address lastExecutor) = _deactivateExecutor(executor.arrayIndex);
             executorInfo[lastExecutor].arrayIndex = executor.arrayIndex;
@@ -444,24 +465,25 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @param _amount The amount to topup the staking balance with stakingToken.
      */
     function topup(uint256 _amount) public {
+        // *** CHECKS ***
         if (
             block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
                 && block.timestamp < epochEndTime
         ) {
             revert InvalidBlockTime();
         }
-
         Executor storage executor = executorInfo[msg.sender];
         if (!executor.initialized) revert NotInitializedExecutor();
-
         uint256 numberOfModules = _countModules(executor.registeredModules);
         if (executor.balance + _amount < stakingAmountPerModule * numberOfModules) revert FinalBalanceBelowMinimum();
 
+        // *** TRANSFER ***
         ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), _amount);
         unchecked {
             // sum of all user balances will never exceed uint256 max value
             executor.balance += _amount;
         }
+        // *** POTENTIAL ACTIVATION ***
         if (!executor.active && executor.balance >= stakingAmountPerModule * numberOfModules) {
             executor.active = true;
             _activateExecutor(msg.sender);
@@ -478,13 +500,12 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @param _recipient The address to send slashing reward to. Must be an active executor.
      */
     function slashInactiveExecutor(address _executor, uint8 _round, address _recipient) public {
+        // *** CHECKS ***
         if (block.timestamp >= epochEndTime || block.timestamp < epochEndTime - slashingDuration) {
             revert InvalidBlockTime();
         }
         if (_round >= roundsPerEpoch) revert RoundExceedingTotal();
-
         uint192 currentEpoch = epoch;
-
         // check if the executor did execute this epoch
         Executor storage executor = executorInfo[_executor];
         // dont have to check if executor is active becasue we verify that executor.arayIndex is selected
@@ -492,6 +513,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         if (executor.arrayIndex != executorIndex) revert ExecutorNotSelectedForRound();
         if (executor.lastCheckinEpoch == currentEpoch && executor.lastCheckinRound == _round) revert RoundExecuted();
 
+        // *** LAST CHECKIN UPDATE ***
         // prevent from slashing again - set lastCheckinEpoch to currentEpoch and lastCheckinRound to _round in one storage write (they reside in same slot)
         assembly {
             let slot := executorInfo.slot
@@ -507,6 +529,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             sstore(add(executorSlot, 1), finalVal)
         }
 
+        // *** SLASHING ***
         uint256 slashAmount = inactiveSlashingAmountPerModule * _countModules(executor.registeredModules);
         _slash(slashAmount, executor, _recipient);
 
@@ -521,6 +544,7 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @param _recipient The address to send slashing reward to. Must be an active executor.
      */
     function slashCommitter(address _executor, address _recipient) public {
+        // *** CHECKS ***
         if (block.timestamp >= epochEndTime || block.timestamp < epochEndTime - slashingDuration) {
             revert InvalidBlockTime();
         }
@@ -529,10 +553,12 @@ contract Coordinator is ICoordinator, TaxHandler {
         if (commitData.epoch != currentEpoch) revert OldEpoch();
         if (commitData.revealed) revert CommitmentRevealed();
 
-        // slash the committer
+        // *** SLASHING ***
         Executor storage executor = executorInfo[_executor];
         uint256 slashAmount = commitSlashingAmountPerModule * _countModules(executor.registeredModules);
         _slash(slashAmount, executor, _recipient);
+        
+        // *** PREVENT FROM SLASHING AGAIN ***
         commitData.revealed = true;
 
         emit SlashCommitter(_executor, _recipient, currentEpoch, slashAmount);
@@ -543,20 +569,21 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @notice Cannot be called before last epoch is done plut slashing duration has passed.
      */
     function initiateEpoch() public {
+        // *** CHECKS ***
         if (block.timestamp < epochEndTime) revert InvalidBlockTime();
 
-        // TAKE POOL CUT
+        // *** POOL CUT CALCULATION ***
         uint256 protocolCut = (epochPoolBalance * protocolPoolCutBps) / BPS_DENOMINATOR;
         protocolBalance += protocolCut;
         epochPoolBalance -= protocolCut;
 
+        // *** REWARD DISTRIBUTION ***
         uint256 totalDistributed;
         // distribute pool balance to designated excutors of epoch who executed jobs which were created before epoch started
         if(executedJobsInRoundsOfEpoch > 0) {
-
             uint256 maxRewardTokensPerRound = epochPoolBalance / roundsPerEpoch;
-
             uint256 numberOfReceivers = poolCutReceivers.length;
+
             for (uint256 i; i < numberOfReceivers;) {
                 unchecked {
                     // Safe because:
@@ -589,18 +616,16 @@ contract Coordinator is ICoordinator, TaxHandler {
             executedJobsInRoundsOfEpoch = 0;
         }
 
+        // *** EPOCH UPDATES ***
         unchecked {
             // pool balances will never overflow uint256 in practise (not enough tokens in existence)
             epochPoolBalance += nextEpochPoolBalance;
         }
         nextEpochPoolBalance = 0;
-        
-
         unchecked {
             // block.timestamp + uint8 will not reach uint256 in practise
             epochEndTime = block.timestamp + epochDuration;
         }
-
         uint192 newEpoch;
         unchecked {
             // number of epochs should not exceed uint192
@@ -616,13 +641,15 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @param _commitment The commitment to be stored for the executor.
      */
     function commit(bytes32 _commitment) public {
+        // *** CHECKS ***
         if (block.timestamp >= epochEndTime - epochDuration + commitPhaseDuration) {
             revert InvalidBlockTime();
         }
         if (!executorInfo[msg.sender].active) revert NotActiveExecutor();
 
+        // *** COMMITMENT STORAGE ***
         commitmentMap[msg.sender] = CommitData({commitment: _commitment, epoch: epoch, revealed: false});
-
+        
         emit Commitment(msg.sender, epoch);
     }
 
@@ -633,6 +660,7 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @param _signature The signature to be verified and used to update the seed.
      */
     function reveal(bytes calldata _signature) public {
+        // *** CHECKS ***
         if (
             block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
                 || block.timestamp < epochEndTime - epochDuration + commitPhaseDuration
@@ -647,6 +675,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         if (commitData.revealed) revert CommitmentRevealed();
         if (commitData.epoch != epoch) revert OldEpoch();
 
+        // *** REVEAL ***
         commitData.revealed = true;
         seed = keccak256(abi.encodePacked(seed, _signature));
 
@@ -669,6 +698,7 @@ contract Coordinator is ICoordinator, TaxHandler {
     * @param _modulesBitset Bitset representing all modules to register for
     */
     function registerModules(uint256 _modulesBitset) external {
+        // *** CHECKS ***
         Executor storage executor = executorInfo[msg.sender];
         if (!executor.initialized) revert NotInitializedExecutor();
         if (_hasCommonModules(executor.registeredModules, _modulesBitset)) revert SomeModulesAlreadyRegistered();
@@ -676,6 +706,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         // only allow registration for existing modules
         uint256 validModules = _modulesBitset & _getValidModulesMask();
         
+        // *** TRANSFER STAKE ***
         // executor has to stake for each registered module
         // if the executor balance is already below thereshold, this will not be enough to activate it
         uint256 numberOfModules = _countModules(validModules);
@@ -684,6 +715,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         }
         executor.lastRegistrationTimestamp = block.timestamp;
 
+        // *** MODULE REGISTRATION ***
         _registerModule(executor, validModules);
         
         emit ModulesRegistered(msg.sender, executor.registeredModules);
@@ -694,11 +726,12 @@ contract Coordinator is ICoordinator, TaxHandler {
     * @param _modulesBitset Bitset representing all modules to deregister from
     */
     function deregisterModules(uint256 _modulesBitset) external {
+        // *** CHECKS ***
         Executor storage executor = executorInfo[msg.sender];
         if (!executor.initialized) revert NotInitializedExecutor();
         
+        // *** DEREGISTRATION ***
         _deregisterModule(executor, _modulesBitset);
-
         if(_countModules(executor.registeredModules) < 2) revert NumberOfRegisteredModulesBelowMinimum();
         
         emit ModulesDeregistered(msg.sender, executor.registeredModules);
@@ -812,6 +845,7 @@ contract Coordinator is ICoordinator, TaxHandler {
      * @param _recipient The address to reward half of the slashed amount to. Must be an active executor.
      */
     function _slash(uint256 _amount, Executor storage _executor, address _recipient) private {
+        // *** BALANCE THRESHOLD CHECK AND POTENTIAL DEACTIVATION ***
         if ((_executor.balance -= _amount) < stakingBalanceThresholdPerModule * _countModules(_executor.registeredModules)) {
             // index in activeStakers array
             (address deactivatedExecutor,address lastExecutor) = _deactivateExecutor(_executor.arrayIndex);
@@ -819,7 +853,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             _executor.active = false;
             emit ExecutorDeactivated(deactivatedExecutor);
         }
-        
+        // *** SLASH REWARD TRANSFER ***
         unchecked {
             // no division by zero. Total token balances will not exceed uint256 max value
             uint256 rewardAmount = _amount / 2;

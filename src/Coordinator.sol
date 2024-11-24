@@ -131,13 +131,12 @@ contract Coordinator is ICoordinator, TaxHandler {
         address designatedExecutor;
         if (block.timestamp < epochEndTime - slashingDuration && block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration)
         {
-            // we are in alternating open competition and designated rounds of the epoch
+            // in alternating open competition and designated rounds part of the epoch
             uint256 timeIntoRounds;
             unchecked {
                 // safe given that 1) epochEndTime > block.timestamp and 2) block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
                 timeIntoRounds = epochDuration - selectionPhaseDuration - (epochEndTime - block.timestamp);
                 // totalRoundDuration is > 0 becasue of constructor check on totalRoundDuration
-                // current round within the epoch
                 inRound = timeIntoRounds % totalRoundDuration < roundDuration;
             }
 
@@ -583,7 +582,12 @@ contract Coordinator is ICoordinator, TaxHandler {
         if(executedJobsInRoundsOfEpoch > 0) {
             uint256 maxRewardTokensPerRound = epochPoolBalance / roundsPerEpoch;
             uint256 numberOfReceivers = poolCutReceivers.length;
-
+            // skip distribution if no rewards to give
+            if (maxRewardTokensPerRound == 0) {
+                delete poolCutReceivers;
+                executedJobsInRoundsOfEpoch = 0;
+                return;
+            }
             for (uint256 i; i < numberOfReceivers;) {
                 unchecked {
                     // Safe because:

@@ -87,7 +87,6 @@ interface ICoordinator {
     error RoundExceedingTotal();
     error AlreadyCheckedIn();
     error CheckInOutsideRound();
-    error MinimumRegistrationPeriodNotOver();
     error FinalBalanceBelowMinimum();
     error ExecutorNotRegisteredForModules();
     error JobRegistryNotSet();

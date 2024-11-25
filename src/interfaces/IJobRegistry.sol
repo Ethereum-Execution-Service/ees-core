@@ -89,7 +89,7 @@ interface IJobRegistry {
         address executionFeeToken,
         bool inZeroFeeWindow
     );
-    event FeeModuleUpdate(uint256 indexed index, address indexed owner, address indexed sponsor);
+    event FeeModuleUpdate(uint256 indexed index, address indexed owner, address indexed sponsor, bytes1 feeModule);
 
     /// @notice Emits an event when the owner successfully invalidates an unordered nonce.
     event UnorderedNonceInvalidation(address indexed owner, uint256 word, uint256 mask);

@@ -13,6 +13,7 @@ import {DummyExecutionModule} from "../mocks/dummyContracts/DummyExecutionModule
 import {DummyFeeModule} from "../mocks/dummyContracts/DummyFeeModule.sol";
 import {PublicERC6492Validator} from "../../src/PublicERC6492Validator.sol";
 import {MockCoordinatorProvider} from "../utils/MockCoordinatorProvider.sol";
+import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
 
 contract JobRegistryBaseTest is Test, TokenProvider, JobSpecificationSignature, FeeModuleInputSignature, GasSnapshot {
     MockJobRegistry jobRegistry;
@@ -27,6 +28,8 @@ contract JobRegistryBaseTest is Test, TokenProvider, JobSpecificationSignature, 
     uint256 fromPrivateKey;
     address sponsor;
     uint256 sponsorPrivateKey;
+    address sponsor2;
+    uint256 sponsor2PrivateKey;
 
     uint8 defaultProtocolFeeRatio;
     uint256 defaultMaxExecutionFee;
@@ -37,6 +40,8 @@ contract JobRegistryBaseTest is Test, TokenProvider, JobSpecificationSignature, 
     address address2 = address(0x2);
     address treasury = address(0x3);
     address executor = address(0x4);
+
+    IJobRegistry.JobSpecification genericJobSpecification;
 
     function setUp() public virtual {
         defaultProtocolFeeRatio = 2;
@@ -68,6 +73,28 @@ contract JobRegistryBaseTest is Test, TokenProvider, JobSpecificationSignature, 
 
         sponsorPrivateKey = 0x43214321;
         sponsor = vm.addr(sponsorPrivateKey);
+
+        sponsor2PrivateKey = 0x56785678;
+        sponsor2 = vm.addr(sponsor2PrivateKey);
+
+        genericJobSpecification = IJobRegistry.JobSpecification({
+            owner: from,
+            nonce: 0,
+            deadline: UINT256_MAX,
+            reusableNonce: false,
+            sponsorFallbackToOwner: false,
+            sponsorCanUpdateFeeModule: false,
+            application: dummyApplication,
+            executionWindow: defaultExecutionWindow,
+            zeroFeeWindow: defaultZeroFeeWindow,
+            ignoreAppRevert: false,
+            maxExecutions: 0,
+            executionModule: 0x00,
+            feeModule: 0x01,
+            executionModuleInput: "",
+            feeModuleInput: "",
+            applicationInput: ""
+        });
 
         setERC20TestTokens(from);
         setERC20TestTokenApprovals(vm, from, address(jobRegistry));

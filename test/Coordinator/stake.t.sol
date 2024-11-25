@@ -3,15 +3,18 @@ pragma solidity 0.8.27;
 
 import "./Base.t.sol";
 import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
+import {IModuleRegistry} from "../../src/interfaces/IModuleRegistry.sol";
 
 /**
  * @notice Tests for the stake function
  */
 contract CoordinatorStakeTest is CoordinatorBaseTest {
+
   function test_Stake(uint256 time) public {
+    // should be able to stake if block.timestamp is in selection phase or after epoch
       vm.assume(
           time < defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration()
-              || time >= defaultEpochEndTime + coordinator.getSlashingDuration()
+              || time >= defaultEpochEndTime
       );
 
       uint256 startBalanceExecutor = token0.balanceOf(executor);
@@ -51,6 +54,7 @@ contract CoordinatorStakeTest is CoordinatorBaseTest {
     }
 
     function test_StakeInvalidTime(uint256 time) public {
+        // should revert if block.timestamp is between selection phase and end of epoch.
         time = bound(
             time,
             defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration(),
@@ -63,6 +67,7 @@ contract CoordinatorStakeTest is CoordinatorBaseTest {
     }
 
     function test_StakeArrayNotFull0() public {
+        // should put executor in at right index upons staking in a non-full array
         vm.prank(executor);
         coordinator.stake(modulesToRegister);
         vm.prank(secondExecutor);
@@ -80,6 +85,7 @@ contract CoordinatorStakeTest is CoordinatorBaseTest {
     }
 
     function test_StakeArrayNotFull1() public {
+        // should put executor in at right index upons staking in a non-full array
         vm.prank(executor);
         coordinator.stake(modulesToRegister);
 
@@ -99,10 +105,47 @@ contract CoordinatorStakeTest is CoordinatorBaseTest {
     }
 
     function test_StakingWhenAlreadyStaked() public {
+        // should revert if executor is already staked
         vm.prank(executor);
         coordinator.stake(modulesToRegister);
         vm.prank(executor);
         vm.expectRevert(ICoordinator.AlreadyStaked.selector);
         coordinator.stake(modulesToRegister);
+    }
+
+    function test_NumberOfRegisteredModulesBelowMinimum(uint8 numberOfModules) public {
+        // should revert if less than 2 modules are registered
+        vm.assume(numberOfModules < 2);
+        vm.prank(executor);
+        vm.expectRevert(IModuleRegistry.NumberOfRegisteredModulesBelowMinimum.selector);
+        coordinator.stake(numberOfModules);
+    }
+
+    function test_UsingUnsupportedModules() public {
+        // should only register for modules which are supported in coordiantor. Module 2 is not supported.
+        uint256 modulesToRegister = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3);
+        uint256 startBalanceExecutor = token0.balanceOf(executor);
+        vm.prank(executor);
+        coordinator.stake(modulesToRegister);
+        uint256 endBalanceExecutor = token0.balanceOf(executor);
+
+        (
+          uint256 balance,
+          bool active,
+          bool initialized,
+          uint32 arrayIndex,
+          uint8 roundsCheckedInEpoch,
+          uint8 lastCheckinRound,
+          uint96 lastCheckinEpoch,
+          uint96 executionsInEpochCreatedBeforeEpoch,
+          uint256 lastRegistrationTimestamp,
+          uint256 registeredModules
+      ) = coordinator.executorInfo(executor);
+        
+        assertEq(balance, stakingAmountPerModule * 3, "balance mismatch");
+        assertEq(startBalanceExecutor - endBalanceExecutor, stakingAmountPerModule * 3, "executor balance mismatch");
+        assertEq(registeredModules, (1 << 0) | (1 << 1) | (1 << 2), "registered modules mismatch");
+        assertTrue(active, "not active");
+        assertTrue(initialized, "not initialized");
     }
 }

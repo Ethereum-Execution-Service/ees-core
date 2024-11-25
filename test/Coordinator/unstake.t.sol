@@ -3,6 +3,7 @@ pragma solidity 0.8.27;
 
 import "./Base.t.sol";
 import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
+import {IModuleRegistry} from "../../src/interfaces/IModuleRegistry.sol";
 
 /**
  * @notice Tests for the unstake function
@@ -68,7 +69,7 @@ contract CoordinatorUnstakeTest is CoordinatorBaseTest {
 
         vm.warp(time);
         vm.prank(executor);
-        vm.expectRevert(ICoordinator.MinimumRegistrationPeriodNotOver.selector);
+        vm.expectRevert(IModuleRegistry.MinimumRegistrationPeriodNotOver.selector);
         coordinator.unstake();
     }
 

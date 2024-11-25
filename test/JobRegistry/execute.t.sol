@@ -10,27 +10,10 @@ import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
 contract JobRegistryExecuteTest is JobRegistryBaseTest {
 
   function test_ExecuteDeletedJob() public {
-      IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-          owner: from,
-          nonce: 0,
-          deadline: UINT256_MAX,
-          reusableNonce: false,
-          sponsorFallbackToOwner: false,
-          sponsorCanUpdateFeeModule: false,
-          application: dummyApplication,
-          executionWindow: defaultExecutionWindow,
-          zeroFeeWindow: defaultZeroFeeWindow,
-          ignoreAppRevert: false,
-          maxExecutions: 0,
-          executionModule: 0x00,
-          feeModule: 0x01,
-          executionModuleInput: "",
-          feeModuleInput: "",
-          applicationInput: ""
-        });
+        // should revert if the job is deleted
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
-
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        
         vm.prank(from);
         jobRegistry.deleteJob(index);
 
@@ -39,28 +22,23 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
         jobRegistry.execute(index, from);
     }
 
-    function test_ExecuteNotExecutionContract(address caller) public {
+    function test_ExecuteNotActiveJob() public {
+        // should revert if the job is not active
+        vm.startPrank(from);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        jobRegistry.deactivateJob(index);
+        vm.stopPrank();
+
+        vm.prank(address(coordinator));
+        vm.expectRevert(abi.encodeWithSelector(IJobRegistry.JobNotActive.selector));
+        jobRegistry.execute(index, from);
+    }
+
+    function test_ExecuteNotCoordinatorContract(address caller) public {
+        // should revert if the caller is not the coordinator contract
         vm.assume(caller != address(coordinator));
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
 
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.Unauthorized.selector));
@@ -69,26 +47,9 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
 
     function test_ExecuteReachingMaxExecutions() public {
         // should inactivate a job it it reaches max executions
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 1,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
+        genericJobSpecification.maxExecutions = 1;
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
 
         vm.prank(address(coordinator));
         jobRegistry.execute(index, from);
@@ -101,26 +62,9 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
 
     function test_ExecuteUnsuccessfulWithIgnore() public {
         // should inactivate a job it it reaches max executions
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: true,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
+        genericJobSpecification.ignoreAppRevert = true;
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
 
         dummyApplication.setRevertOnExecute(true);
 
@@ -136,27 +80,9 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
         uint256 startBalanceFrom = token0.balanceOf(from);
         uint256 startBalanceExecutor = token0.balanceOf(executor);
         _executionFee = bound(_executionFee, 0, startBalanceFrom);
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
 
         dummyFeeModule.setExecutionFee(_executionFee);
         vm.prank(address(coordinator));
@@ -172,30 +98,11 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
         uint256 startBalanceExecutor = token0.balanceOf(executor);
         _executionFee = bound(_executionFee, 0, startBalanceFrom);
 
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
-
         bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
 
         dummyFeeModule.setExecutionFee(_executionFee);
         vm.prank(address(coordinator));
@@ -209,56 +116,71 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
 
     function test_NoMaxExecutionLimit() public {
         // Should be able to execute twice when maxExecutions is set to 0
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
+        genericJobSpecification.maxExecutions = 0;
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
+        jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
         vm.prank(address(coordinator));
         jobRegistry.execute(0, from);
     }
 
-    function test_MaxExecutionLimitOfOne() public {
+    function test_MaxExecutionPastLimit() public {
         // Should revert when trying to execute more than once when maxExecutions set to 1. Job is deactivated
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 1,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
+        genericJobSpecification.maxExecutions = 1;
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
-        jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
+        jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
         vm.prank(address(coordinator));
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.JobNotActive.selector));
         jobRegistry.execute(0, from);
+    }
+
+    function test_FeeFallbackToOwner() public {
+        // should fallback to owner if fee module fails and set the sponsor to owner
+        genericJobSpecification.sponsorFallbackToOwner = true;
+
+        uint256 startBalanceFrom = token0.balanceOf(from);
+        dummyFeeModule.setExecutionFee(100);
+
+        bytes memory sponsorSig =
+            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        vm.prank(from);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+
+        // drain sponsor balance
+        vm.startPrank(sponsor);
+        token0.transfer(address(0), token0.balanceOf(sponsor));
+        vm.stopPrank();
+
+        vm.prank(address(coordinator));
+        jobRegistry.execute(index, address2);
+
+        (,,,,,,,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
+
+        assertEq(token0.balanceOf(sponsor), 0, "sponsor balance");
+        assertEq(token0.balanceOf(from), startBalanceFrom - 100, "from balance");
+        assertEq(token0.balanceOf(address2), 100, "address2 balance");
+        assertEq(sponsorSet, from, "sponsor mismatch");
+    }
+
+    function test_FailedSponsorTransferNoFallback() public {
+        // should revert if fee module fails and sponsorFallbackToOwner is false
+        genericJobSpecification.sponsorFallbackToOwner = false;
+
+        dummyFeeModule.setExecutionFee(100);
+
+        bytes memory sponsorSig =
+            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        vm.prank(from);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+
+        // drain sponsor balance
+        vm.startPrank(sponsor);
+        token0.transfer(address(0), token0.balanceOf(sponsor));
+        vm.stopPrank();
+
+        vm.prank(address(coordinator));
+        vm.expectRevert(abi.encodeWithSelector(IJobRegistry.TransferFailed.selector));
+        jobRegistry.execute(index, address2);
     }
 }

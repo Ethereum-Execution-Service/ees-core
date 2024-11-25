@@ -402,7 +402,8 @@ contract Coordinator is ICoordinator, TaxHandler {
 
         // *** MODULE REGISTRATION CHECK ***
         // only allow registration for existing modules
-        uint256 numberOfModules = _countModules(_modulesBitset & _getValidModulesMask());
+        uint256 validModules = _modulesBitset & _getValidModulesMask();
+        uint256 numberOfModules = _countModules(validModules);
         if(numberOfModules < 2) revert NumberOfRegisteredModulesBelowMinimum();
         
         // *** STAKING ***
@@ -419,7 +420,7 @@ contract Coordinator is ICoordinator, TaxHandler {
             lastCheckinEpoch: 0,
             executionsInRoundsInEpoch: 0,
             lastRegistrationTimestamp: block.timestamp,
-            registeredModules: _modulesBitset
+            registeredModules: validModules
         });
         _activateExecutor(msg.sender);
         emit ExecutorActivated(msg.sender);
@@ -701,6 +702,7 @@ contract Coordinator is ICoordinator, TaxHandler {
 
     /**
     * @notice Registers the executor for specific modules
+    * @notice The _modulesBitset should only contain bits for new modules to register. Otherwise the call will revert.
     * @param _modulesBitset Bitset representing all modules to register for
     */
     function registerModules(uint256 _modulesBitset) external {
@@ -715,9 +717,16 @@ contract Coordinator is ICoordinator, TaxHandler {
         // *** TRANSFER STAKE ***
         // executor has to stake for each registered module
         // if the executor balance is already below thereshold, this will not be enough to activate it
-        uint256 numberOfModules = _countModules(validModules);
-        if (numberOfModules > 0) {
-            ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), numberOfModules * stakingAmountPerModule);
+        uint256 numberOfNewModules = _countModules(validModules);
+        if (numberOfNewModules > 0) {
+            ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), numberOfNewModules * stakingAmountPerModule);
+        }
+        else {
+            revert NoModulesToRegister();
+        }
+        unchecked {
+            // sum of all user balances will never exceed uint256 max value
+            executor.balance += numberOfNewModules * stakingAmountPerModule;
         }
         executor.lastRegistrationTimestamp = block.timestamp;
 
@@ -729,12 +738,19 @@ contract Coordinator is ICoordinator, TaxHandler {
 
     /**
     * @notice Deregisters the executor from specific modules
+    * @notice The executor has to wait for the minimum registration period to be over before deregistering modules
     * @param _modulesBitset Bitset representing all modules to deregister from
     */
     function deregisterModules(uint256 _modulesBitset) external {
         // *** CHECKS ***
         Executor storage executor = executorInfo[msg.sender];
         if (!executor.initialized) revert NotInitializedExecutor();
+        unchecked {
+            // should never overflow uint256 in practise, lastRegistrationTimestamp can only be set to block.timestamp
+            if (block.timestamp < executor.lastRegistrationTimestamp + minimumRegistrationPeriod) {
+                revert MinimumRegistrationPeriodNotOver();
+            }
+        }
         
         // *** DEREGISTRATION ***
         _deregisterModule(executor, _modulesBitset);

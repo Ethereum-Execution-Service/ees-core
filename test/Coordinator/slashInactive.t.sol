@@ -40,6 +40,35 @@ contract CoordinatorSlashInactiveTest is CoordinatorBaseTest {
         assertEq(endBalanceSlasher, startBalanceSlasher + (inactiveSlashingAmountPerModule * 2) / 2, "slasher balance mismatch");
     }
 
+    function test_InactiveSlashingNotExecutor(address slasher, uint256 time, bytes32 seed) public {
+        // an un-staked (not registered executor) caller and recipient should be able to slash and receive half of slashed amount. Executor should still be active in this case
+        vm.assume(slasher != executor);
+        vm.assume(slasher != address(coordinator));
+        time = bound(time, defaultEpochEndTime - coordinator.getSlashingDuration(), defaultEpochEndTime - 1);
+
+        vm.prank(executor);
+        coordinator.stake(modulesToRegister);
+
+
+        uint256 startBalanceSlasher = token0.balanceOf(slasher);
+
+        // assume executor is selected for round 0
+        coordinator.setSeed(seed);
+        vm.assume(uint256(keccak256(abi.encodePacked(seed, uint8(0)))) % 2 == 0);
+
+        coordinator.setEpoch(1);
+
+        vm.warp(time);
+        vm.prank(slasher);
+        coordinator.slashInactiveExecutor(executor, 0, slasher);
+        uint256 endBalanceSlasher = token0.balanceOf(slasher);
+
+        (uint256 balance, bool active, bool initialized, uint32 arrayIndex,,,,,,) = coordinator.executorInfo(executor);
+        assertEq(balance, stakingAmountPerModule * 2 - inactiveSlashingAmountPerModule * 2, "balance mismatch");
+        assertTrue(active, "not active");
+        assertEq(endBalanceSlasher, startBalanceSlasher + (inactiveSlashingAmountPerModule * 2) / 2, "slasher balance mismatch");
+    }
+
     function test_SlashingRoundExecuted(address slasher, uint40 epoch, bytes32 seed) public {
         // should revert with RoundExecuted if round was executed
         vm.assume(slasher != executor);
@@ -172,6 +201,7 @@ contract CoordinatorSlashInactiveTest is CoordinatorBaseTest {
     }
 
     function test_SlashingRoundExceedingTotal(uint8 round) public {
+        // should revert with RoundExceedingTotal if round is greater than total rounds per epoch
         round = uint8(bound(round, roundsPerEpoch, type(uint8).max));
 
         vm.prank(executor);

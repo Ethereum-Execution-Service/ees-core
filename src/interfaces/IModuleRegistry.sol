@@ -27,4 +27,6 @@ interface IModuleRegistry {
 
     error SomeModulesAlreadyRegistered();
     error NumberOfRegisteredModulesBelowMinimum();
+    error NoModulesToRegister();
+    error MinimumRegistrationPeriodNotOver();
 }

@@ -9,31 +9,12 @@ import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
  */
 contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
 
-  function test_UpdateFeeModuleWithSponsor() public {
-      // Should be able to update fee module with sponsorship
-      IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-          owner: from,
-          nonce: 0,
-          deadline: UINT256_MAX,
-          reusableNonce: false,
-          sponsorFallbackToOwner: false,
-          sponsorCanUpdateFeeModule: false,
-          application: dummyApplication,
-          executionWindow: defaultExecutionWindow,
-          zeroFeeWindow: defaultZeroFeeWindow,
-          ignoreAppRevert: false,
-          maxExecutions: 0,
-          executionModule: 0x00,
-          feeModule: 0x01,
-          executionModuleInput: "",
-          feeModuleInput: "",
-          applicationInput: ""
-        });
+  function test_UpdateFeeModuleWithNewSponsor() public {
+      // should be able to update fee module with new sponsorship
+
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
-        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
-        vm.prank(treasury);
-        coordinator.addFeeModule(dummyFeeModule2);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
             reusableNonce: false,
@@ -52,32 +33,13 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
     }
 
     function test_UpdateFeeModuleWithSponsorExpiredSignature(uint256 createTime, uint256 deadline) public {
-        // Should revert with ExpiredSignature when updating fee module with an expired signature
+        // should revert with ExpiredSignature when updating fee module with an expired signature
         createTime = bound(createTime, 1, block.timestamp);
         deadline = bound(deadline, 0, createTime - 1);
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
+        
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
-        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
-        vm.prank(treasury);
-        coordinator.addFeeModule(dummyFeeModule2);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
             reusableNonce: false,
@@ -95,32 +57,9 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
     }
 
     function test_UpdateFeeModuleDataNoSponsor() public {
-        // Should be able to update fee module without sponsorship
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: true,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
-
+        // should be able to update fee module without sponsorship
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
-
-        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
-        vm.prank(treasury);
-        coordinator.addFeeModule(dummyFeeModule2);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
 
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -139,30 +78,10 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
     }
 
     function test_UpdateFeeModuleInExecutionMode() public {
-        // Should revert with JobInExecutionMode when updating fee module of a job that is in execution mode
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
+        // should revert with JobInExecutionMode when updating fee module of a job that is in execution mode
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
-        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
-        vm.prank(treasury);
-        coordinator.addFeeModule(dummyFeeModule2);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
             reusableNonce: false,
@@ -178,31 +97,11 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
     }
 
     function test_UpdateFeeModuleNotOwner(address caller) public {
-        // Should revert with Unauthorized when updating fee module of a job from a caller that is not the owner of the job
+        // should revert with Unauthorized when updating fee module of a job from a caller that is not the owner of the job
         vm.assume(caller != from);
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
-        DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
-        vm.prank(treasury);
-        coordinator.addFeeModule(dummyFeeModule2);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
             reusableNonce: false,
@@ -216,28 +115,62 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
         jobRegistry.updateFeeModule(feeModuleInput, address(0), "");
     }
 
-    function test_MigrateFeeModuleWithSponsor() public {
-        // Should be able to migrate fee module with sponsorship
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
+    function test_UpdateFeeModuleSponsorAllowed() public {
+        // sponsor should be able to update fee module if sponsorCanUpdateFeeModule is true
+
+        genericJobSpecification.sponsorCanUpdateFeeModule = true;
+        bytes memory sponsorSig =
+            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+
+        IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
+            nonce: 1,
+            reusableNonce: false,
+            deadline: UINT256_MAX,
+            index: index,
+            feeModule: 0x01,
+            feeModuleInput: ""
+        });
+        vm.prank(sponsor);
+        jobRegistry.updateFeeModule(feeModuleInput, address(0), "");
+        (,,,,,, bytes1 feeModuleSet,,, address sponsorSet,,,,) = jobRegistry.jobs(index);
+        assertEq(sponsorSet, sponsor, "sponsor mismatch");
+        assertEq(uint8(feeModuleSet), uint8(0x01), "fee module mismatch");
+    }
+
+    function test_UpdateFeeModuleSponsorAllowedToNewSponsor() public {
+        // sponsor should be able to update fee module with a new sponsorship if sponsorCanUpdateFeeModule is true
+
+        genericJobSpecification.sponsorCanUpdateFeeModule = true;
+        bytes memory sponsorSig =
+            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        vm.prank(from);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+
+        IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
+            nonce: 1,
+            reusableNonce: false,
+            deadline: UINT256_MAX,
+            index: index,
+            feeModule: 0x01,
+            feeModuleInput: ""
+        });
+
+        bytes memory sponsor2Sig =
+            getFeeModuleInputSignature(feeModuleInput, sponsor2PrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+
+        vm.prank(sponsor);
+        jobRegistry.updateFeeModule(feeModuleInput, sponsor2, sponsor2Sig);
+        (,,,,,, bytes1 feeModuleSet,,, address sponsorSet,,,,) = jobRegistry.jobs(index);
+        assertEq(sponsorSet, sponsor2, "sponsor mismatch");
+        assertEq(uint8(feeModuleSet), uint8(0x01), "fee module mismatch");
+    }
+
+    function test_MigrateFeeModuleWithSponsor() public {
+        // should be able to migrate fee module with sponsorship
+        vm.prank(from);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
         coordinator.addFeeModule(dummyFeeModule2);

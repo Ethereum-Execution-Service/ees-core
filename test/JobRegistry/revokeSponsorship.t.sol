@@ -10,30 +10,12 @@ import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
 contract JobRegistryRevokeSponsorshipTest is JobRegistryBaseTest {
 
   function test_RevokeSponsorshipSponsorNoFallbackToOwner() public {
-      IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-          owner: from,
-          nonce: 0,
-          deadline: UINT256_MAX,
-          reusableNonce: false,
-          sponsorFallbackToOwner: false,
-          sponsorCanUpdateFeeModule: false,
-          application: dummyApplication,
-          executionWindow: defaultExecutionWindow,
-          zeroFeeWindow: defaultZeroFeeWindow,
-          ignoreAppRevert: false,
-          maxExecutions: 0,
-          executionModule: 0x00,
-          feeModule: 0x01,
-          executionModuleInput: "",
-          feeModuleInput: "",
-          applicationInput: ""
-        });
-
+        // when sponsor revokes sponsorship with no fallback to owner, the sponsor is set to 0
         bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
 
         vm.prank(sponsor);
         jobRegistry.revokeSponsorship(index);
@@ -43,30 +25,14 @@ contract JobRegistryRevokeSponsorshipTest is JobRegistryBaseTest {
     }
 
     function test_RevokeSponsorshipSponsorWithFallbackToOwner() public {
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: true,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
+        // when sponsor revokes sponsorship with fallback to owner, the owner is set as sponsor
+        genericJobSpecification.sponsorFallbackToOwner = true;
 
         bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
 
         vm.prank(sponsor);
         jobRegistry.revokeSponsorship(index);
@@ -76,30 +42,12 @@ contract JobRegistryRevokeSponsorshipTest is JobRegistryBaseTest {
     }
 
     function test_RevokeSponsorshipOwner() public {
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
-
+        // when owner revokes sponsorship, sponsor is set to owner
         bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
 
         vm.prank(from);
         jobRegistry.revokeSponsorship(index);
@@ -109,32 +57,14 @@ contract JobRegistryRevokeSponsorshipTest is JobRegistryBaseTest {
     }
 
     function test_RevokeSponsorShipNotOwnerOrSponsor(address caller) public {
+        // should revert if the caller is not the owner or the sponsor
         vm.assume(caller != from && caller != sponsor);
 
-        IJobRegistry.JobSpecification memory jobSpecification = IJobRegistry.JobSpecification({
-            owner: from,
-            nonce: 0,
-            deadline: UINT256_MAX,
-            reusableNonce: false,
-            sponsorFallbackToOwner: false,
-            sponsorCanUpdateFeeModule: false,
-            application: dummyApplication,
-            executionWindow: defaultExecutionWindow,
-            zeroFeeWindow: defaultZeroFeeWindow,
-            ignoreAppRevert: false,
-            maxExecutions: 0,
-            executionModule: 0x00,
-            feeModule: 0x01,
-            executionModuleInput: "",
-            feeModuleInput: "",
-            applicationInput: ""
-        });
-
         bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(jobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(jobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
 
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.Unauthorized.selector));

@@ -37,6 +37,31 @@ contract CoordinatorSlashCommitterTest is CoordinatorBaseTest {
         assertEq(endBalanceSlasher, startBalanceSlasher + (commitSlashingAmountPerModule * 2) / 2, "slasher balance mismatch");
     }
 
+    function test_SlashCommitterNotExecutor(address slasher, uint256 time) public {
+        // an un-staked (not registered executor) caller and recipient should be able to slash and receive half of slashed amount. Executor should still be active in this case
+        vm.assume(slasher != executor);
+        vm.assume(slasher != address(coordinator));
+        time = bound(time, defaultEpochEndTime - coordinator.getSlashingDuration(), defaultEpochEndTime - 1);
+        vm.prank(executor);
+        coordinator.stake(modulesToRegister);
+
+        coordinator.setCommitment(ICoordinator.CommitData({commitment: 0, epoch: 0, revealed: false}), executor);
+
+        uint256 startBalanceSlasher = token0.balanceOf(slasher);
+
+        vm.warp(time);
+        vm.prank(slasher);
+        coordinator.slashCommitter(executor, slasher);
+        uint256 endBalanceSlasher = token0.balanceOf(slasher);
+
+        (,, bool revealed) = coordinator.commitmentMap(executor);
+        (uint256 balance, bool active,,,,,,,,) = coordinator.executorInfo(executor);
+        assertEq(balance, stakingAmountPerModule * 2 - commitSlashingAmountPerModule * 2, "balance mismatch");
+        assertTrue(active, "not active");
+        assertTrue(revealed, "not revealed");
+        assertEq(endBalanceSlasher, startBalanceSlasher + (commitSlashingAmountPerModule * 2) / 2, "slasher balance mismatch");
+    }
+
     function test_SlashCommitterBeforeTime(uint256 time) public {
         time = bound(time, 0, defaultEpochEndTime - coordinator.getSlashingDuration() - 1);
         vm.prank(executor);

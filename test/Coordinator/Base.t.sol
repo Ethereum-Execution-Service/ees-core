@@ -17,6 +17,7 @@ contract CoordinatorBaseTest is Test, TokenProvider, SignatureGenerator, GasSnap
     DummyJobRegistry jobRegistry;
     DummyExecutionModule dummyExecutionModule;
     DummyFeeModule dummyFeeModule;
+    DummyFeeModule dummyFeeModule2;
 
     address defaultStakingToken;
     // same as executor
@@ -75,11 +76,13 @@ contract CoordinatorBaseTest is Test, TokenProvider, SignatureGenerator, GasSnap
         jobRegistry = new DummyJobRegistry();
         dummyExecutionModule = new DummyExecutionModule();
         dummyFeeModule = new DummyFeeModule(defaultStakingToken, 1_000_000);
+        dummyFeeModule2 = new DummyFeeModule(defaultStakingToken, 500_000);
         vm.startPrank(treasury);
         coordinator.addJobRegistry(address(jobRegistry));
         coordinator.setEpochEndTime(defaultEpochEndTime);
         coordinator.addExecutionModule(dummyExecutionModule);
         coordinator.addFeeModule(dummyFeeModule);
+        coordinator.addFeeModule(dummyFeeModule2);
         vm.stopPrank();
 
         executorPrivateKey = 0x12341234;

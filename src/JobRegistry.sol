@@ -89,14 +89,14 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
 
         // *** SETTING INDEX ***
         // attempts to reuse index of existing expired job if _index is existing. Otherwise creates new job at jobs.length.
-        bool reuseIndex = false;
+        bool reuseIndex;
         if(_index < jobs.length) {
             (address executionModuleExistingJob,) = coordinator.modules(uint8(jobs[_index].executionModule));
             if(jobs[_index].owner == address(0)) {
-                // existingjob is already deleted, we can reuse it
+                // existing job is already deleted - reuse it
                 reuseIndex = true;
             } else if(IExecutionModule(executionModuleExistingJob).jobIsExpired(_index, jobs[_index].executionWindow)) {
-                // existing job is expired, we can reuse it but have to delete existing job first
+                // existing job is expired - reuse it but delete existing job first
                 _deleteJob(_index);
                 reuseIndex = true;
             }
@@ -182,6 +182,8 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         // *** EXECUTION MODULE CALL ***
         // pass gas consumption to fee module
         uint256 startVariableGas = gasleft();
+        // timestamp when the job was executable, used in fee module
+        // execution module should revert if job is expired or not executable at the time of execution
         uint256 executionTime = executionModule.onExecuteJob(_index, job.executionWindow);
         // it is applications reponsibility that this doesnt revert. Sponsor pays fee either way
         bool success;
@@ -214,7 +216,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
             if(!ERC20(executionFeeToken).safeTransferFromNoRevert(job.sponsor, _feeRecipient, executionFee)) {
                 if(job.sponsorFallbackToOwner) {
                     ERC20(executionFeeToken).safeTransferFrom(job.owner, _feeRecipient, executionFee);
-                    job.sponsor = job.owner;
+                    jobs[_index].sponsor = job.owner;
                 } else {
                     revert TransferFailed();
                 }
@@ -257,32 +259,6 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     }
 
     /**
-     * @notice Deletes the job from the jobs array and calls onDeleteJob on execution module and application.
-     * @param _index The index of the job in the jobs array.
-     */
-    function _deleteJob(uint256 _index) private {
-        Job memory job = jobs[_index];
-
-        (address executionModuleAddress,) = coordinator.modules(uint8(job.executionModule));
-        IExecutionModule executionModule = IExecutionModule(executionModuleAddress);
-        (address feeModuleAddress,) = coordinator.modules(uint8(job.feeModule));
-        IFeeModule feeModule = IFeeModule(feeModuleAddress);
-        
-        delete jobs[_index];
-
-        // these should never revert, the owner should always be able to delete a job
-        executionModule.onDeleteJob(_index);
-        feeModule.onDeleteJob(_index);
-
-        bool revertOnDelete;
-        try job.application.onDeleteJob(_index, job.owner) {}
-        catch {
-            revertOnDelete = true;
-        }
-        emit JobDeleted(_index, job.owner, address(job.application), revertOnDelete);
-    }
-
-    /**
      * @notice Revokes sponsorship of a job. This will make the owner the sponsor.
      * @notice Only callable by the sponsor or owner of the job.
      * @param _index Index of the job in the jobs array.
@@ -319,11 +295,12 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         bytes calldata _sponsorSignature
     ) public override nonReentrant {
         Job storage job = jobs[_feeModuleInput.index];
+        bool currentSponsorUpdating = job.sponsorCanUpdateFeeModule && msg.sender == job.sponsor;
 
         // *** CHECKS ***
         // if job.sponsorCanUpdateFeeModule both sponsor and owner can update fee module
         // if !job.sponsorCanUpdateFeeModule only owner can update fee module
-        if (msg.sender != job.owner && !(job.sponsorCanUpdateFeeModule && msg.sender == job.sponsor)) {
+        if (msg.sender != job.owner && !currentSponsorUpdating) {
             revert Unauthorized();
         }
         // Check that job is not in execution mode
@@ -333,13 +310,13 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         }
 
         // *** SPONSORSHIP AND SIGNATURE CHECKS ***
-        bool hasSponsorship = _sponsor != address(0);
-        if (hasSponsorship) {
+        bool newSponsorShip = _sponsor != address(0);
+        if (newSponsorShip) {
             if (block.timestamp > _feeModuleInput.deadline) revert SignatureExpired(_feeModuleInput.deadline);
             _useUnorderedNonce(_sponsor, _feeModuleInput.nonce, !_feeModuleInput.reusableNonce);
             if(!publicERC6492Validator.isValidSignatureNowAllowSideEffects(_sponsor, _hashTypedData(_feeModuleInput.hash()), _sponsorSignature)) revert InvalidSignature();
             job.sponsor = _sponsor;
-        } else {
+        } else if (!currentSponsorUpdating) {
             job.sponsor = job.owner;
         }
 
@@ -349,7 +326,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         if (_feeModuleInput.feeModule == job.feeModule) {
             // Update existing fee module with new data
             currentFeeModule.onUpdateData(_feeModuleInput.index, _feeModuleInput.feeModuleInput);
-            emit FeeModuleUpdate(_feeModuleInput.index, job.owner, job.sponsor);
+            emit FeeModuleUpdate(_feeModuleInput.index, job.owner, job.sponsor, _feeModuleInput.feeModule);
         } else {
             // Migrate to new fee module
             (address newFeeModuleAddress, bool isNotFeeModule) = coordinator.modules(uint8(_feeModuleInput.feeModule));
@@ -358,7 +335,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
             currentFeeModule.onDeleteJob(_feeModuleInput.index);
             newFeeModule.onCreateJob(_feeModuleInput.index, _feeModuleInput.feeModuleInput);
             job.feeModule = _feeModuleInput.feeModule;
-            emit FeeModuleUpdate(_feeModuleInput.index, job.owner, job.sponsor);
+            emit FeeModuleUpdate(_feeModuleInput.index, job.owner, job.sponsor, _feeModuleInput.feeModule);
         }
     }
 
@@ -395,6 +372,32 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     function bitmapPositions(uint256 _nonce) private pure returns (uint256 wordPos, uint256 bitPos) {
         wordPos = uint248(_nonce >> 8);
         bitPos = uint8(_nonce);
+    }
+
+        /**
+     * @notice Deletes the job from the jobs array and calls onDeleteJob on execution module and application.
+     * @param _index The index of the job in the jobs array.
+     */
+    function _deleteJob(uint256 _index) private {
+        Job memory job = jobs[_index];
+
+        (address executionModuleAddress,) = coordinator.modules(uint8(job.executionModule));
+        IExecutionModule executionModule = IExecutionModule(executionModuleAddress);
+        (address feeModuleAddress,) = coordinator.modules(uint8(job.feeModule));
+        IFeeModule feeModule = IFeeModule(feeModuleAddress);
+        
+        delete jobs[_index];
+
+        // these should never revert, the owner should always be able to delete a job
+        executionModule.onDeleteJob(_index);
+        feeModule.onDeleteJob(_index);
+
+        bool revertOnDelete;
+        try job.application.onDeleteJob(_index, job.owner) {}
+        catch {
+            revertOnDelete = true;
+        }
+        emit JobDeleted(_index, job.owner, address(job.application), revertOnDelete);
     }
 
     /**

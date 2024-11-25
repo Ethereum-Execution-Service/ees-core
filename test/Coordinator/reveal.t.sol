@@ -9,6 +9,7 @@ import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
  */
 contract CoordinatorRevealTest is CoordinatorBaseTest {
     function test_Reveal(uint192 epochNum, uint256 time) public {
+        // should reveal the commitment and set the seed
         time = bound(
             time,
             defaultEpochEndTime - coordinator.getEpochDuration() + commitPhaseDuration,
@@ -36,6 +37,7 @@ contract CoordinatorRevealTest is CoordinatorBaseTest {
     }
 
     function test_RevealBeforeRevealPhase(uint256 time) public {
+        // should revert with InvalidBlockTime if reveal phase has not started
         time = bound(time, 0, defaultEpochEndTime - coordinator.getEpochDuration() + commitPhaseDuration - 1);
         vm.prank(executor);
         coordinator.stake(modulesToRegister);
@@ -47,6 +49,7 @@ contract CoordinatorRevealTest is CoordinatorBaseTest {
     }
 
     function test_RevealAfterRevealPhase(uint256 time) public {
+        // should revert with InvalidBlockTime if reveal phase has ended
         time = bound(
             time,
             defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration(),
@@ -62,6 +65,7 @@ contract CoordinatorRevealTest is CoordinatorBaseTest {
     }
 
     function test_RevealWrongSigLength(uint192 epochNum) public {
+        // should revert with InvalidSignatureLength if the signature is not 65 bytes
         vm.prank(executor);
         coordinator.stake(modulesToRegister);
 
@@ -87,6 +91,7 @@ contract CoordinatorRevealTest is CoordinatorBaseTest {
     }
 
     function test_RevealWrongSigner(uint192 epochNum, address caller) public {
+        // should revert with InvalidSignature if the signature is not from the signer
         vm.assume(executor != caller);
 
         vm.prank(executor);
@@ -109,6 +114,7 @@ contract CoordinatorRevealTest is CoordinatorBaseTest {
     }
 
     function test_RevealWrongEpoch(uint192 epochNum, uint192 secondEpochNum) public {
+        // should revert with OldEpoch if the epoch is not the current epoch
         vm.assume(epochNum != secondEpochNum);
 
         vm.prank(executor);
@@ -131,6 +137,7 @@ contract CoordinatorRevealTest is CoordinatorBaseTest {
     }
 
     function test_RevealWrongChainId(uint192 epochNum, uint256 chainId) public {
+        // should revert with InvalidSignature if the signature is for a different chainId
         vm.assume(block.chainid != chainId);
 
         vm.prank(executor);
@@ -153,6 +160,7 @@ contract CoordinatorRevealTest is CoordinatorBaseTest {
     }
 
     function test_RevealWrongCommitment(uint192 epochNum, bytes32 commitment) public {
+        // should revert with WrongCommitment if the commitment does not match the set commitment
         vm.prank(executor);
         coordinator.stake(modulesToRegister);
 
@@ -174,6 +182,7 @@ contract CoordinatorRevealTest is CoordinatorBaseTest {
     }
 
     function test_RevealCommitmentOldEpoch(uint192 epochNum, uint192 secondEpochNum) public {
+        // should revert with OldEpoch if the set commitment epoch is not the current epoch
         vm.assume(epochNum != secondEpochNum);
 
         vm.prank(executor);
@@ -200,6 +209,7 @@ contract CoordinatorRevealTest is CoordinatorBaseTest {
     }
 
     function test_RevealAlreadyRevealed(uint192 epoch) public {
+        // should revert with CommitmentRevealed if the commitment has already been revealed this epoch
         vm.prank(executor);
         coordinator.stake(modulesToRegister);
 

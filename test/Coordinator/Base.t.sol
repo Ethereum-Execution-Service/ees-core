@@ -30,19 +30,22 @@ contract CoordinatorBaseTest is Test, TokenProvider, SignatureGenerator, GasSnap
     address thirdExecutor;
     uint256 thirdExecutorPrivateKey;
 
-    uint256 stakingAmountPerModule = 500;
-    uint256 stakingBalanceThresholdPerModule = 150;
+    address nonStakedExecutor;
+    uint256 nonStakedExecutorPrivateKey;
+
+    uint256 stakingAmountPerModule = 500000000;
+    uint256 stakingBalanceThresholdPerModule = 300000000;
     uint256 minimumRegistrationPeriod = 2;
-    uint256 inactiveSlashingAmountPerModule = 100;
-    uint256 commitSlashingAmountPerModule = 25;
+    uint256 inactiveSlashingAmountPerModule = 200000000;
+    uint256 commitSlashingAmountPerModule = 100000000;
     uint8 roundDuration = 15;
     uint8 roundsPerEpoch = 5;
     uint8 roundBuffer = 15;
     uint8 commitPhaseDuration = 15;
     uint8 revealPhaseDuration = 15;
     uint8 slashingDuration = 30;
-    uint256 executionTax = 4;
-    uint256 zeroFeeExecutionTax = 2;
+    uint256 executionTax = 60000;
+    uint256 zeroFeeExecutionTax = 20000;
     uint256 protocolPoolCutBps = 1000;
 
     uint256 defaultEpochEndTime = 1000;
@@ -94,12 +97,16 @@ contract CoordinatorBaseTest is Test, TokenProvider, SignatureGenerator, GasSnap
         thirdExecutorPrivateKey = 0x11111111;
         thirdExecutor = vm.addr(thirdExecutorPrivateKey);
 
+        nonStakedExecutorPrivateKey = 0x22222222;
+        nonStakedExecutor = vm.addr(nonStakedExecutorPrivateKey);
+
         setERC20TestTokens(executor);
         setERC20TestTokenApprovals(vm, executor, address(coordinator));
         setERC20TestTokens(secondExecutor);
         setERC20TestTokenApprovals(vm, secondExecutor, address(coordinator));
         setERC20TestTokens(thirdExecutor);
         setERC20TestTokenApprovals(vm, thirdExecutor, address(coordinator));
-        setERC20TestTokens(address(coordinator));
+        setERC20TestTokens(nonStakedExecutor);
+        setERC20TestTokenApprovals(vm, nonStakedExecutor, address(coordinator));
     }
 }

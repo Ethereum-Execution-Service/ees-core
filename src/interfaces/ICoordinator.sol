@@ -48,7 +48,7 @@ interface ICoordinator {
         uint256[] calldata _gasLimits,
         address _feeRecipient,
         uint8 _jobRegistryIndex
-    ) external returns (uint256 standardTax, uint256 zeroFeeTax, uint256 successfulExecutions);
+    ) external returns (uint256 standardTax, uint256 zeroFeeTax, uint96 successfulExecutions);
     function stake(uint256 _modulesBitset) external returns (uint256 stakingAmount);
     function unstake() external;
     function topup(uint256 _amount) external;

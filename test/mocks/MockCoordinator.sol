@@ -15,6 +15,14 @@ contract MockCoordinator is Coordinator {
         executorInfo[_executor] = _executorInfo;
     }
 
+    function getStakingBalanceThresholdPerModule() public view returns (uint256) {
+        return stakingBalanceThresholdPerModule;
+    }
+
+    function setExecutorBalance(uint256 _balance, address _executor) public {
+        executorInfo[_executor].balance = _balance;
+    }
+
     function setLastCheckin(uint8 _lastCheckinRound, uint96 _lastCheckinEpoch, address _executor) public {
         executorInfo[_executor].lastCheckinRound = _lastCheckinRound;
         executorInfo[_executor].lastCheckinEpoch = _lastCheckinEpoch;
@@ -24,12 +32,28 @@ contract MockCoordinator is Coordinator {
         executorInfo[_executor].lastRegistrationTimestamp = _lastRegistrationTimestamp;
     }
 
+    function setPoolCutReceivers(address[] memory _poolCutReceivers) public {
+        poolCutReceivers = _poolCutReceivers;
+    }
+
+    function setExecutedJobsInRoundsOfEpoch(uint96 _executedJobsInRoundsOfEpoch) public {
+        executedJobsInRoundsOfEpoch = _executedJobsInRoundsOfEpoch;
+    }
+
+    function setExecutionsInRoundsInEpoch(uint96 _executionsInRoundsInEpoch, address _executor) public {
+        executorInfo[_executor].executionsInRoundsInEpoch = _executionsInRoundsInEpoch;
+    }
+
     function getStakingAmountPerModule() public view returns (uint256) {
         return stakingAmountPerModule;
     }
 
     function setEpochEndTime(uint256 _epochEndTime) public {
         epochEndTime = _epochEndTime;
+    }
+
+    function setRoundsCheckedInEpoch(uint8 _roundsCheckedInEpoch, address _executor) public {
+        executorInfo[_executor].roundsCheckedInEpoch = _roundsCheckedInEpoch;
     }
 
     function getEpochPoolBalance() public view returns (uint256) {
@@ -98,6 +122,10 @@ contract MockCoordinator is Coordinator {
 
     function getRoundDuration() public view returns (uint256) {
         return roundDuration;
+    }
+
+    function getRoundBuffer() public view returns (uint256) {
+        return roundBuffer;
     }
 
     function getRoundsPerEpoch() public view returns (uint8) {

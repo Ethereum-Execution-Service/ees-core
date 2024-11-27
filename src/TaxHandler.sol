@@ -38,7 +38,7 @@ contract TaxHandler is ModuleRegistry {
         zeroFeeExecutionTax = _zeroFeeExecutionTax;
         lastProtocolPoolCutUpdate = block.timestamp;
         protocolPoolCutBps = _protocolPoolCutBps;
-        maxRewardPerExecution = (executionTax * protocolPoolCutBps) / BPS_DENOMINATOR;
+        maxRewardPerExecution = (executionTax * (BPS_DENOMINATOR - protocolPoolCutBps)) / BPS_DENOMINATOR;
     }
 
     /**
@@ -57,7 +57,7 @@ contract TaxHandler is ModuleRegistry {
 
         lastExecutionTaxUpdate = block.timestamp;
         executionTax = _executionTax;
-        maxRewardPerExecution = (executionTax * protocolPoolCutBps) / BPS_DENOMINATOR;
+        maxRewardPerExecution = (executionTax * (BPS_DENOMINATOR - protocolPoolCutBps)) / BPS_DENOMINATOR;
     }
 
     /**
@@ -93,7 +93,7 @@ contract TaxHandler is ModuleRegistry {
 
         lastProtocolPoolCutUpdate = block.timestamp;
         protocolPoolCutBps = _protocolPoolCutBps;
-        maxRewardPerExecution = (executionTax * protocolPoolCutBps) / BPS_DENOMINATOR;
+        maxRewardPerExecution = (executionTax * (BPS_DENOMINATOR - protocolPoolCutBps)) / BPS_DENOMINATOR;
     }
 
 }

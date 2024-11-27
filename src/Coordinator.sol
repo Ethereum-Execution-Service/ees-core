@@ -8,6 +8,7 @@ import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 import {TaxHandler} from "./TaxHandler.sol";
 import {ModuleRegistry} from "./ModuleRegistry.sol";
+import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 
 
 /**
@@ -24,7 +25,7 @@ __/\\\\\\\\\\\\\\\__/\\\\\\\\\\\\\\\_____/\\\\\\\\\\\___
 
 /// @author Victor Brevig
 /// @notice Coordinator is responsible for coordination of executors including job execution, staking and slashing.
-contract Coordinator is ICoordinator, TaxHandler {
+contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     using SafeTransferLib for ERC20;
 
     address[] public jobRegistries;
@@ -69,7 +70,7 @@ contract Coordinator is ICoordinator, TaxHandler {
     // executor info
     mapping(address => Executor) public executorInfo;
 
-    // total number of executed jobs during rounds in this epoch
+    // total number of executed jobs (non-including zero-fee jobs) during rounds in this epoch
     uint96 public executedJobsInRoundsOfEpoch;
     // addresses to receive pool cut. These are designated executors who executed at least one job during a round in an epoch. This will reset every epoch.
     address[] public poolCutReceivers;
@@ -80,6 +81,10 @@ contract Coordinator is ICoordinator, TaxHandler {
         require(
             _spec.stakingBalanceThresholdPerModule <= _spec.stakingAmountPerModule,
             "Staking: threshold must be less than or equal to staking amount"
+        );
+        require(
+            uint256(_spec.roundsPerEpoch) * uint256(_spec.roundDuration + _spec.roundBuffer) <= type(uint8).max * uint256(_spec.roundDuration + _spec.roundBuffer),
+            "Staking: rounds calculation may overflow"
         );
         totalRoundDuration = _spec.roundDuration + _spec.roundBuffer;
         require(totalRoundDuration > 0, "Staking: round duration and buffer must be greater than 0");
@@ -121,7 +126,7 @@ contract Coordinator is ICoordinator, TaxHandler {
         uint256[] calldata _gasLimits,
         address _feeRecipient,
         uint8 _jobRegistryIndex
-    ) public returns (uint256, uint256, uint256) {
+    ) public nonReentrant returns (uint256, uint256, uint96) {
         Executor memory executor = executorInfo[msg.sender];
 
         // *** IN ROUND CHECKS ***
@@ -141,12 +146,9 @@ contract Coordinator is ICoordinator, TaxHandler {
             }
 
             if (inRound) {
-                // only active executors can execute in rounds
-                if (!executor.active) revert NotActiveExecutor();
-
                 unchecked {
                     // totalRoundDuration is > 0 because of constructor check on totalRoundDuration
-                    // guarantee on no uint8 overflow?
+                    // timeIntoRounds / totalRoundDuration will not overflow uint8 becasue of constructor check
                     round = uint8(timeIntoRounds / totalRoundDuration);
                 }
                 uint256 executorIndex = uint256(keccak256(abi.encodePacked(seed, round))) % numberOfActiveExecutors;
@@ -171,11 +173,11 @@ contract Coordinator is ICoordinator, TaxHandler {
 
             let i := 0
 
-            // Allocate memory for return data (6 values * 32 bytes = 192 bytes)
+            // Allocate memory for return data (5 values * 32 bytes = 160 bytes)
             let returnDataPtr := mload(0x40)
 
             // Update free memory pointer
-            mstore(0x40, add(returnDataPtr, 0xC0))  // advance by 192 bytes (6 * 32)
+            mstore(0x40, add(returnDataPtr, 0xA0))  // advance by 160 bytes (5 * 32)
             
             let epochStartTime := sub(sload(epochEndTime.slot), epochDurationCache)
 
@@ -202,7 +204,7 @@ contract Coordinator is ICoordinator, TaxHandler {
                 }
 
                 // check if in zero fee window
-                let inZeroFeeWindow := mload(add(returnDataPtr, 0xC0)) // 6th word
+                let inZeroFeeWindow := mload(add(returnDataPtr, 0x80)) // 5th word
 
                 switch inZeroFeeWindow
                 case 1 {
@@ -216,8 +218,8 @@ contract Coordinator is ICoordinator, TaxHandler {
                     // Verify the executor is registered for both modules
                     if inRound {
                         // Load the execution module and fee module from the last two 32-byte words
-                        let executionModuleId := and(mload(add(returnDataPtr, 0x80)), 0xFF)  // 4th word
-                        let feeModuleId := and(mload(add(returnDataPtr, 0xA0)), 0xFF)        // 5th word
+                        let executionModuleId := and(mload(add(returnDataPtr, 0x40)), 0xFF)  // 3th word
+                        let feeModuleId := and(mload(add(returnDataPtr, 0x60)), 0xFF)        // 4th word
                         // Check if executor is registered for both modules
                         let requiredModules := or(shl(1, executionModuleId), shl(1, feeModuleId))
 
@@ -252,18 +254,15 @@ contract Coordinator is ICoordinator, TaxHandler {
         uint256 zeroFeeTax;
         uint256 newBalance = executor.balance;
         if (executionCount > 0) {
-            // handle normal tax for jobs not in zero fee window
+            // handle normal tax for jobs not in zero fee window and update pool and protocol balances
             unchecked {
                 // standardTax is never greater than uint256 max value realistically
                 standardTax = executionTax * executionCount;
-            }
-            
-            // update pool and protocol balances
-            unchecked {
-                // next epoch pool balance or protocol balance will never exceed uint256 max value since there are not enough tokens in existence
+
+                // next epoch pool balance and protocol balance will never exceed uint256 max value since there are not enough tokens in existence
                 // during designated rounds, tax goes to protocol balance.
                 // otherwise, tax goes to next epoch pool balance.
-                // increament executedJobsInRoundsOfEpoch only if we are in a round
+                // increment executedJobsInRoundsOfEpoch only if we are in a round
                 if(inRound) {
                     executedJobsInRoundsOfEpoch += executionCount;
                     protocolBalance += standardTax;
@@ -274,22 +273,18 @@ contract Coordinator is ICoordinator, TaxHandler {
             }
         }
         if(executionCountZeroFee > 0) {
-            // handle zero fee tax
+            // handle zero fee tax - update pool and protocol balances
             unchecked {
                 // totalTax is never greater than uint256 max value realistically
                 zeroFeeTax = zeroFeeExecutionTax * executionCountZeroFee;
-            }
-
-            // update pool and protocol balances
-            // split zero fee tax between pool and protocol
-            unchecked {
                 // halfZeroTax can never be greater than zeroFeeTax
                 uint256 halfZeroFeeTax = zeroFeeTax / 2;
+                // split zero fee tax between pool and protocol
                 nextEpochPoolBalance += halfZeroFeeTax;
                 protocolBalance += zeroFeeTax - halfZeroFeeTax;
             }
         }
-
+        
         // *** TAX TRANSFER ***
         unchecked {
             totalTax = standardTax + zeroFeeTax;
@@ -303,7 +298,6 @@ contract Coordinator is ICoordinator, TaxHandler {
                 ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), totalTax);
             }
         }
-
         // *** DESIGNATED EXECUTOR UPDATES ***
         if (inRound && designatedExecutor == msg.sender) {
             if(!executor.active) revert NotActiveExecutor();
@@ -368,7 +362,6 @@ contract Coordinator is ICoordinator, TaxHandler {
                 executorInfo[msg.sender].executionsInRoundsInEpoch += executionCount;
             }
         }
-
         // *** BALANCE THRESHOLD CHECK AND POTENTIAL DEACTIVATION ***
         // check if executor balance is below threshold and deactivate if true
         if(executor.active && newBalance < stakingBalanceThresholdPerModule * _countModules(executor.registeredModules)) {
@@ -568,42 +561,38 @@ contract Coordinator is ICoordinator, TaxHandler {
 
     /**
      * @notice Initiates a new epoch by setting the epochEndTime to the current block.timestamp + epochDuration.
-     * @notice Cannot be called before last epoch is done plut slashing duration has passed.
+     * @notice Cannot be called before last epoch is done.
      */
     function initiateEpoch() public {
         // *** CHECKS ***
         if (block.timestamp < epochEndTime) revert InvalidBlockTime();
 
         // *** POOL CUT CALCULATION ***
-        uint256 protocolCut = (epochPoolBalance * protocolPoolCutBps) / BPS_DENOMINATOR;
+        uint256 remainingPoolBalance = epochPoolBalance;
+        uint256 protocolCut = (remainingPoolBalance * protocolPoolCutBps) / BPS_DENOMINATOR;
         protocolBalance += protocolCut;
-        epochPoolBalance -= protocolCut;
+        remainingPoolBalance -= protocolCut;
 
         // *** REWARD DISTRIBUTION ***
         uint256 totalDistributed;
         // distribute pool balance to designated excutors of epoch who executed jobs which were created before epoch started
         if(executedJobsInRoundsOfEpoch > 0) {
-            uint256 maxRewardTokensPerRound = epochPoolBalance / roundsPerEpoch;
+            uint256 maxRewardTokensPerRound = remainingPoolBalance / roundsPerEpoch;
             uint256 numberOfReceivers = poolCutReceivers.length;
-            // skip distribution if no rewards to give
-            if (maxRewardTokensPerRound == 0) {
-                delete poolCutReceivers;
-                executedJobsInRoundsOfEpoch = 0;
-                return;
-            }
+
             for (uint256 i; i < numberOfReceivers;) {
                 unchecked {
                     // Safe because:
-                    // 1. epochPoolBalance * executionsInEpochCreatedBeforeEpoch cannot overflow (not enough tokens exist)
-                    // 2. Division by totalNumberOfExecutedJobsCreatedBeforeEpoch is safe (we checked > 0)
+                    // 1. executor.roundsCheckedInEpoch * maxRewardTokensPerRound cannot overflow (not enough tokens exist)
+                    // 2. maxRewardPerExecution * executor.executionsInRoundsInEpoch cannot overflow (not enough tokens exist)
                     // 3. executor.balance += executorShare cannot overflow (not enough tokens exist)
-                    // 4. ++i is safe because numberOfReceivers is less than uint256 max value
+                    // 4. totalDistributed += executorShare cannot overflow (not enough tokens exist)
+                    // 5. ++i is safe because numberOfReceivers is less than uint256 max value
 
                     // if executor has unstaked in the mean time, executor.executionsInEpochCreatedBeforeEpoch and the cut amount will be 0
                     Executor storage executor = executorInfo[poolCutReceivers[i]];
                     // max number of tokens that can be rewarded to executor for this epoch, it is scaled by number of checked in rounds
                     uint256 maxRewardTokens = executor.roundsCheckedInEpoch * maxRewardTokensPerRound;
-
                     uint256 executionRewards = maxRewardPerExecution * executor.executionsInRoundsInEpoch;
 
                     // take min of executionRewards and maxRewardTokens
@@ -611,8 +600,11 @@ contract Coordinator is ICoordinator, TaxHandler {
                         executionRewards : 
                         maxRewardTokens;
 
-                    executor.balance += executorShare;
-                    totalDistributed += executorShare;
+                    if(executorShare > 0) {
+                        // skip if executorShare is 0
+                        executor.balance += executorShare;
+                        totalDistributed += executorShare;
+                    }
                     // these are in same slot, update via assembly
                     executor.roundsCheckedInEpoch = 0;
                     executor.executionsInRoundsInEpoch = 0;
@@ -626,18 +618,18 @@ contract Coordinator is ICoordinator, TaxHandler {
         // *** EPOCH UPDATES ***
         unchecked {
             // pool balances will never overflow uint256 in practise (not enough tokens in existence)
-            epochPoolBalance += nextEpochPoolBalance;
+            // epochPoolBalance >= (totalDistributed + protocolCut) should always hold true
+            epochPoolBalance += nextEpochPoolBalance - (totalDistributed + protocolCut);
         }
         nextEpochPoolBalance = 0;
-        unchecked {
-            // block.timestamp + uint8 will not reach uint256 in practise
-            epochEndTime = block.timestamp + epochDuration;
-        }
         uint192 newEpoch;
         unchecked {
-            // number of epochs should not exceed uint192
+            // block.timestamp + uint8 will not reach uint256 in practise
+            // number of epochs will not exceed uint192 in practise
+            epochEndTime = block.timestamp + epochDuration;
             newEpoch = ++epoch;
         }
+
         seed = keccak256(abi.encodePacked(newEpoch));
         emit EpochInitiated(newEpoch, totalDistributed, protocolCut);
     }

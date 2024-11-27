@@ -63,7 +63,7 @@ interface IJobRegistry {
         bytes calldata _ownerSignature,
         uint256 _index
     ) external returns (uint256 index);
-    function execute(uint256 _index, address _feeRecipient) external returns (uint96, uint256, address, uint8, uint8, bool);
+    function execute(uint256 _index, address _feeRecipient) external returns (uint256, address, uint8, uint8, bool);
     function deleteJob(uint256 _index) external;
     function deactivateJob(uint256 _index) external;
     function revokeSponsorship(uint256 _index) external;

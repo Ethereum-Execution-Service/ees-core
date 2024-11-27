@@ -32,10 +32,10 @@ contract DeployAll is Script {
             stakingAmountPerModule: 500000000,
             // 30 seconds, should probably be something like 30 days in prod
             minimumRegistrationPeriod: 30 seconds,
+            // 300 USDC - 300000000
+            stakingBalanceThresholdPerModule: 300000000,
             // 200 USDC - 200000000
-            stakingBalanceThresholdPerModule: 200000000,
-            // 100 USDC - 100000000
-            inactiveSlashingAmountPerModule: 100000000,
+            inactiveSlashingAmountPerModule: 200000000,
             // 100 USDC - 100000000
             commitSlashingAmountPerModule: 100000000,
             roundDuration: 20,

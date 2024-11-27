@@ -161,8 +161,13 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
      * @notice Executes a job, calling onExecuteJob on the execution module, fee module and application.
      * @param _index Index of the job in the jobs array.
      * @param _feeRecipient Address who receives execution fee tokens.
+     * @return executionFee The execution fee taken.
+     * @return executionFeeToken The ERC-20 token of the execution fee.
+     * @return executionModule The execution module of the job.
+     * @return feeModule The fee module of the job.
+     * @return inZeroFeeWindow Whether the job was executed in the zero fee window.
      */
-    function execute(uint256 _index, address _feeRecipient) external override nonReentrant returns (uint96, uint256, address, uint8, uint8, bool) {
+    function execute(uint256 _index, address _feeRecipient) external override nonReentrant returns (uint256, address, uint8, uint8, bool) {
         // *** CHECKS ***
         if (msg.sender != address(coordinator)) revert Unauthorized();
         Job memory job = jobs[_index];
@@ -232,7 +237,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
             executionFeeToken,
             inZeroFeeWindow
         );
-        return (job.creationTime, executionFee, executionFeeToken, uint8(job.executionModule), uint8(job.feeModule), inZeroFeeWindow);
+        return (executionFee, executionFeeToken, uint8(job.executionModule), uint8(job.feeModule), inZeroFeeWindow);
     }
 
     /**

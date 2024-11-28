@@ -372,7 +372,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         }
 
 
-        emit BatchExecution(_jobRegistryIndex, standardTax, zeroFeeTax);
+        emit BatchExecution(_jobRegistryIndex, standardTax, zeroFeeTax, inRound);
         return (standardTax, zeroFeeTax, executionCount + executionCountZeroFee);
     }
 

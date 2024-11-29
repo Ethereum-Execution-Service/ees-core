@@ -57,6 +57,8 @@ interface ICoordinator {
     function initiateEpoch() external;
     function commit(bytes32 _commitment) external;
     function reveal(bytes calldata _signature) external;
+    function withdrawStakingBalance(uint256 _amount) external;
+    function withdrawProtocolBalance() external returns (uint256);
 
     event BatchExecution(uint8 jobRegistryIndex, uint256 standardTax, uint256 zeroFeeTax, bool inRound);
     event EpochInitiated(uint192 epoch, uint256 previousEpochPoolDistributed, uint256 protocolCut);

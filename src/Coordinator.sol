@@ -752,6 +752,23 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
+     * @notice Withdraws the staking balance from the executor.
+     * @notice The executor balance after withdrawal has to be at least the stakingAmountPerModule times the number of registered modules.
+     * @param _amount The amount to withdraw from the executor's balance.
+     */
+    function withdrawStakingBalance(uint256 _amount) public {
+        // executor balance has to be above threshold
+        Executor storage executor = executorInfo[msg.sender];
+        if (!executor.initialized) revert NotInitializedExecutor();
+
+        uint256 numberOfModules = _countModules(executor.registeredModules);
+        if (executor.balance - _amount < stakingAmountPerModule * numberOfModules) revert FinalBalanceBelowMinimum();
+
+        executor.balance -= _amount;
+        ERC20(stakingToken).safeTransfer(msg.sender, _amount);
+    }
+
+    /**
      * @notice Withdraws the protocol balance to the owner.
      * @notice Can only be called by the owner.
      * @return amount The amount of protocol balance withdrawn.

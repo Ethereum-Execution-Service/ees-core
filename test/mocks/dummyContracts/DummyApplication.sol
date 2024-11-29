@@ -18,7 +18,7 @@ contract DummyApplication is IApplication {
         revertOnDelete = false;
     }
 
-    function onCreateJob(uint256 _index, bytes1 _executionModule, address _owner, bytes calldata _inputs)
+    function onCreateJob(uint256 _index, address _owner, bool _ignoreAppRevert, bytes1 _executionModule, bytes calldata _executionModuleInput, bytes calldata _applicationInput)
         external
         override
     {}

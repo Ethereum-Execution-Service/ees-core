@@ -117,7 +117,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         feeModule.onCreateJob(index, _specification.feeModuleInput);
 
         _specification.application.onCreateJob(
-            index, _specification.executionModule, msg.sender, _specification.applicationInput
+            index, msg.sender, _specification.ignoreAppRevert, _specification.executionModule, _specification.executionModuleInput, _specification.applicationInput
         );
         bool active = true;
 

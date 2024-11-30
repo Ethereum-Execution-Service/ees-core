@@ -37,9 +37,9 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     using JobSpecificationHash for JobSpecification;
     using FeeModuleInputHash for FeeModuleInput;
 
-    PublicERC6492Validator public immutable publicERC6492Validator;
-
     Job[] public jobs;
+
+    PublicERC6492Validator public immutable publicERC6492Validator;
 
     Coordinator internal immutable coordinator;
 
@@ -117,7 +117,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         feeModule.onCreateJob(index, _specification.feeModuleInput);
 
         _specification.application.onCreateJob(
-            index, msg.sender, _specification.ignoreAppRevert, _specification.executionModule, _specification.executionModuleInput, _specification.applicationInput
+            index, msg.sender, _specification.ignoreAppRevert, _specification.executionWindow, _specification.executionModule, _specification.executionModuleInput, _specification.applicationInput
         );
         bool active = true;
 

@@ -19,7 +19,7 @@ interface IApplication {
     /// @param _executionModule The execution module of the job which is being executed.
     /// @param _executionModuleInput Bytes array containing arbitrary inputs for the execution module.
     /// @param _applicationInput Bytes array containing arbitrary inputs for the application.
-    function onCreateJob(uint256 _index, address _owner, bool _ignoreAppRevert, bytes1 _executionModule, bytes calldata _executionModuleInput, bytes calldata _applicationInput) external;
+    function onCreateJob(uint256 _index, address _owner, bool _ignoreAppRevert, uint24 _executionWindow, bytes1 _executionModule, bytes calldata _executionModuleInput, bytes calldata _applicationInput) external;
 
     /// @dev Should most likely be restricted to only be called by the JobRegistry contract.
     /// @dev Called by JobRegistry contract upon deletion of a job with this application.

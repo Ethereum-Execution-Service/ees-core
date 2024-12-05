@@ -58,19 +58,22 @@ interface ICoordinator {
     function commit(bytes32 _commitment) external;
     function reveal(bytes calldata _signature) external;
     function withdrawStakingBalance(uint256 _amount) external;
-    function withdrawProtocolBalance() external returns (uint256);
+    function withdrawProtocolBalance() external returns (uint256 amount);
+    function registerModules(uint256 _modulesBitset) external returns (uint256 stakingAmount);
+    function deregisterModules(uint256 _modulesBitset) external;
+    function addJobRegistry(address _registry) external;
 
     event BatchExecution(uint8 jobRegistryIndex, uint256 standardTax, uint256 zeroFeeTax, bool inRound);
     event EpochInitiated(uint192 epoch, uint256 previousEpochPoolDistributed, uint256 protocolCut);
-    event SlashInactiveExecutor(
-        address indexed executor, address indexed slasher, uint192 indexed epoch, uint8 round, uint256 amount
-    );
-    event SlashCommitter(address indexed executor, address indexed slasher, uint192 indexed epoch, uint256 amount);
+    event CheckIn(address indexed executor, uint192 indexed epoch, uint8 round);
     event Commitment(address indexed executor, uint192 indexed epoch);
     event Reveal(address indexed executor, uint192 indexed epoch, bytes32 newSeed);
-    event CheckIn(address indexed executor, uint192 indexed epoch, uint8 round);
-    event ExecutorDeactivated(address indexed executor);
+    event InactiveExecutorSlashed(
+        address indexed executor, address indexed slasher, uint192 indexed epoch, uint8 round, uint256 amount
+    );
+    event CommitterSlashed(address indexed executor, address indexed slasher, uint192 indexed epoch, uint256 amount);
     event ExecutorActivated(address indexed executor);
+    event ExecutorDeactivated(address indexed executor);
     event ModulesRegistered(address indexed executor, uint256 indexed modulesBitset);
     event ModulesDeregistered(address indexed executor, uint256 indexed modulesBitset);
 

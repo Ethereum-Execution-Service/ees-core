@@ -63,22 +63,24 @@ interface IJobRegistry {
         bytes calldata _ownerSignature,
         uint256 _index
     ) external returns (uint256 index);
-    function execute(uint256 _index, address _feeRecipient) external returns (uint256, address, uint8, uint8, bool);
+    function execute(uint256 _index, address _feeRecipient) external returns (uint256 executionFee, address executionFeeToken, uint8 executionModule, uint8 feeModule, bool inZeroFeeWindow);
     function deleteJob(uint256 _index) external;
     function deactivateJob(uint256 _index) external;
+    function activateJob(uint256 _index) external;
     function revokeSponsorship(uint256 _index) external;
     function updateFeeModule(
         FeeModuleInput calldata _feeModuleInput,
         address _sponsor,
         bytes calldata _sponsorSignature
     ) external;
-    function getJobsArrayLength() external view returns (uint256);
+    function getJobsArrayLength() external view returns (uint256 length);
 
     event JobCreated(uint256 indexed index, address indexed owner, address indexed application, bool initialExecution);
     event JobDeleted(
         uint256 indexed index, address indexed owner, address indexed application, bool applicationRevertedOnDelete
     );
     event JobDeactivated(uint256 indexed index, address indexed owner, address indexed application);
+    event JobActivated(uint256 indexed index, address indexed owner, address indexed application);
     event JobExecuted(
         uint256 indexed index,
         address indexed owner,
@@ -90,6 +92,7 @@ interface IJobRegistry {
         bool inZeroFeeWindow
     );
     event FeeModuleUpdate(uint256 indexed index, address indexed owner, address indexed sponsor, bytes1 feeModule);
+    event SponsorshipRevoked(uint256 indexed index, address indexed owner, address indexed newSponsor, address oldSponsor);
 
     /// @notice Emits an event when the owner successfully invalidates an unordered nonce.
     event UnorderedNonceInvalidation(address indexed owner, uint256 word, uint256 mask);

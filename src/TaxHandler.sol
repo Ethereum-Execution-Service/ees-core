@@ -3,10 +3,11 @@ pragma solidity 0.8.27;
 
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {ModuleRegistry} from "./ModuleRegistry.sol";
+import {ITaxHandler} from "./interfaces/ITaxHandler.sol";
 
 /// @author Victor Brevig
 /// @notice TaxHandler is responsible for handling tax updates for EES.
-contract TaxHandler is ModuleRegistry {
+contract TaxHandler is ModuleRegistry, ITaxHandler {
     uint256 internal lastExecutionTaxUpdate;
     uint256 internal lastZeroFeeExecutionTaxUpdate;
     uint256 internal lastProtocolPoolCutUpdate;

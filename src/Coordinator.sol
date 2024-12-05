@@ -126,7 +126,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         uint256[] calldata _gasLimits,
         address _feeRecipient,
         uint8 _jobRegistryIndex
-    ) public nonReentrant returns (uint256, uint256, uint96) {
+    ) public override nonReentrant returns (uint256, uint256, uint96) {
         Executor memory executor = executorInfo[msg.sender];
 
         // *** IN ROUND CHECKS ***
@@ -379,11 +379,11 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     /**
      * @notice Stakes the stakingToken transfering the stakingAmount to the contract and activates the executor to be able to execute jobs.
      * @notice Caller must not be an already initialized executor. To increase balance use topup instead.
-     * @notice Cannot be called during execution rounds and slashing window.
+     * @notice Cannot be called during alternating open competition and designated rounds and during slashing window.
      * @dev Activates the executor, adding it to executorInfo and increments numberOfActiveExecutors.
      * @param _modulesBitset The bitset of modules to register for.
      */
-    function stake(uint256 _modulesBitset) public returns (uint256 stakingAmount) {
+    function stake(uint256 _modulesBitset) public override returns (uint256 stakingAmount) {
         // *** CHECKS ***
         if (
             block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
@@ -416,15 +416,16 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
             registeredModules: validModules
         });
         _activateExecutor(msg.sender);
+        emit ModulesRegistered(msg.sender, validModules);
         emit ExecutorActivated(msg.sender);
     }
 
     /**
      * @notice Unstakes the stakingToken and transfers the balance from the contract to the executor and deactivates the executor.
-     * @notice Cannot be called during reveal phase, execution rounds and slashing duration.
+     * @notice Cannot be called during reveal phase, execution rounds and slashing window.
      * @dev If the executor is active it is deactivated removing it from activeExecutors and numberOfActiveExecutors is decremented. The executor is removed from executorInfo.
      */
-    function unstake() public {
+    function unstake() public override {
         // *** CHECKS ***
         if (
             block.timestamp >= epochEndTime - epochDuration + commitPhaseDuration
@@ -450,6 +451,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
             emit ExecutorDeactivated(deactivatedExecutor);
         }
         ERC20(stakingToken).safeTransfer(msg.sender, executor.balance);
+        emit ModulesDeregistered(msg.sender, executor.registeredModules);
     }
 
     /**
@@ -457,7 +459,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
      * @notice Cannot be called during execution rounds and slashing window.
      * @param _amount The amount to topup the staking balance with stakingToken.
      */
-    function topup(uint256 _amount) public {
+    function topup(uint256 _amount) public override {
         // *** CHECKS ***
         if (
             block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
@@ -477,7 +479,8 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
             executor.balance += _amount;
         }
         // *** POTENTIAL ACTIVATION ***
-        if (!executor.active && executor.balance >= stakingAmountPerModule * numberOfModules) {
+        if (!executor.active) {
+            // activate executor if executor was inactive. Have already checked that balance is enough to activate
             executor.active = true;
             _activateExecutor(msg.sender);
             emit ExecutorActivated(msg.sender);
@@ -493,7 +496,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
      * @param _round The round the executor is being slashed for.
      * @param _recipient The address to send slashing reward to.
      */
-    function slashInactiveExecutor(address _executor, uint8 _round, address _recipient) public {
+    function slashInactiveExecutor(address _executor, uint8 _round, address _recipient) public override {
         // *** CHECKS ***
         if (block.timestamp >= epochEndTime || block.timestamp < epochEndTime - slashingDuration) {
             revert InvalidBlockTime();
@@ -527,7 +530,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         uint256 slashAmount = inactiveSlashingAmountPerModule * _countModules(executor.registeredModules);
         _slash(slashAmount, executor, _recipient);
 
-        emit SlashInactiveExecutor(_executor, _recipient, currentEpoch, _round, slashAmount);
+        emit InactiveExecutorSlashed(_executor, _recipient, currentEpoch, _round, slashAmount);
     }
 
     /**
@@ -538,7 +541,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
      * @param _executor The address of the executor to be slashed.
      * @param _recipient The address to send slashing reward to.
      */
-    function slashCommitter(address _executor, address _recipient) public {
+    function slashCommitter(address _executor, address _recipient) public override {
         // *** CHECKS ***
         if (block.timestamp >= epochEndTime || block.timestamp < epochEndTime - slashingDuration) {
             revert InvalidBlockTime();
@@ -556,14 +559,14 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         // *** PREVENT FROM SLASHING AGAIN ***
         commitData.revealed = true;
 
-        emit SlashCommitter(_executor, _recipient, currentEpoch, slashAmount);
+        emit CommitterSlashed(_executor, _recipient, currentEpoch, slashAmount);
     }
 
     /**
      * @notice Initiates a new epoch by setting the epochEndTime to the current block.timestamp + epochDuration.
      * @notice Cannot be called before last epoch is done.
      */
-    function initiateEpoch() public {
+    function initiateEpoch() public override {
         // *** CHECKS ***
         if (block.timestamp < epochEndTime) revert InvalidBlockTime();
 
@@ -635,11 +638,11 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Commits a hash of the executor's siganture of the current epoch.
+     * @notice Commits a hash of the executor's ERC-191 signature of the current epoch.
      * @notice Can only be called during commit phase.
-     * @param _commitment The commitment to be stored for the executor.
+     * @param _commitment A hash of an ERC-191 signature of the current epoch number.
      */
-    function commit(bytes32 _commitment) public {
+    function commit(bytes32 _commitment) public override {
         // *** CHECKS ***
         if (block.timestamp >= epochEndTime - epochDuration + commitPhaseDuration) {
             revert InvalidBlockTime();
@@ -653,12 +656,12 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Reveals the executors signature of the current epoch.
+     * @notice Reveals the executor's ERC-191 signature of the current epoch.
      * @notice Can only be called during reveal phase.
      * @notice Caller must have committed in the same epoch.
      * @param _signature The signature to be verified and used to update the seed.
      */
-    function reveal(bytes calldata _signature) public {
+    function reveal(bytes calldata _signature) public override {
         // *** CHECKS ***
         if (
             block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
@@ -686,7 +689,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
      * @notice Can only be called by the owner.
      * @param _registry The address of the job registry to add.
      */
-    function addJobRegistry(address _registry) public onlyOwner {
+    function addJobRegistry(address _registry) public override onlyOwner {
         jobRegistries.push(_registry);
         isJobRegistry[_registry] = true;
     }
@@ -695,9 +698,10 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     /**
     * @notice Registers the executor for specific modules
     * @notice The _modulesBitset should only contain bits for new modules to register. Otherwise the call will revert.
-    * @param _modulesBitset Bitset representing all modules to register for
+    * @param _modulesBitset Bitset representing all modules to register for.
+    * @return stakingAmount The amount of staking tokens transferred to the coordinator.
     */
-    function registerModules(uint256 _modulesBitset) external {
+    function registerModules(uint256 _modulesBitset) public override returns (uint256 stakingAmount) {
         // *** CHECKS ***
         Executor storage executor = executorInfo[msg.sender];
         if (!executor.initialized) revert NotInitializedExecutor();
@@ -718,7 +722,8 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         }
         unchecked {
             // sum of all user balances will never exceed uint256 max value
-            executor.balance += numberOfNewModules * stakingAmountPerModule;
+            stakingAmount = numberOfNewModules * stakingAmountPerModule;
+            executor.balance += stakingAmount;
         }
         executor.lastRegistrationTimestamp = block.timestamp;
 
@@ -733,7 +738,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     * @notice The executor has to wait for the minimum registration period to be over before deregistering modules
     * @param _modulesBitset Bitset representing all modules to deregister from
     */
-    function deregisterModules(uint256 _modulesBitset) external {
+    function deregisterModules(uint256 _modulesBitset) public override {
         // *** CHECKS ***
         Executor storage executor = executorInfo[msg.sender];
         if (!executor.initialized) revert NotInitializedExecutor();
@@ -756,7 +761,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
      * @notice The executor balance after withdrawal has to be at least the stakingAmountPerModule times the number of registered modules.
      * @param _amount The amount to withdraw from the executor's balance.
      */
-    function withdrawStakingBalance(uint256 _amount) public {
+    function withdrawStakingBalance(uint256 _amount) public override {
         // executor balance has to be above threshold
         Executor storage executor = executorInfo[msg.sender];
         if (!executor.initialized) revert NotInitializedExecutor();
@@ -773,11 +778,10 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
      * @notice Can only be called by the owner.
      * @return amount The amount of protocol balance withdrawn.
      */
-    function withdrawProtocolBalance() public onlyOwner returns (uint256) {
-        uint256 amount = protocolBalance;
+    function withdrawProtocolBalance() public override onlyOwner returns (uint256 amount) {
+        amount = protocolBalance;
         protocolBalance = 0;
         ERC20(stakingToken).safeTransfer(owner, amount);
-        return amount;
     }
 
     /**
@@ -900,7 +904,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Verifies the signature of the executor for the given epoch and chainId.
+     * @notice Verifies the ERC-191 signature of the executor for the given epoch and chainId.
      * @param _epochNum The epoch number to verify the signature for.
      * @param _chainId The chainId to verify the signature for.
      * @param _signature The signature to verify.

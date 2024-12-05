@@ -50,10 +50,17 @@ contract DummyJobRegistry is IJobRegistry {
     }
 
     function deleteJob(uint256 _index) external {}
+    
     function deactivateJob(uint256 _index) external {}
+
+    function activateJob(uint256 _index) external {}
+
     function revokeSponsorship(uint256 _index) external {}
+
     function addExecutionModule(IExecutionModule _module) external {}
+
     function addFeeModule(IFeeModule _module) external {}
+
     function updateFeeModule(
         FeeModuleInput calldata _feeModuleInput,
         address _sponsor,

@@ -159,6 +159,8 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
 
     /**
      * @notice Executes a job, calling onExecuteJob on the execution module, fee module and application.
+     * @notice The execution fee is taken from the sponsor. If the transfer fails and sponsorFallbackToOwner is true, the owner pays the fee.
+     * @notice May deactivate the job if application reverted and ignoreAppRevert is false or maxExecutions is reached.
      * @param _index Index of the job in the jobs array.
      * @param _feeRecipient Address who receives execution fee tokens.
      * @return executionFee The execution fee taken.
@@ -167,7 +169,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
      * @return feeModule The fee module of the job.
      * @return inZeroFeeWindow Whether the job was executed in the zero fee window.
      */
-    function execute(uint256 _index, address _feeRecipient) external override nonReentrant returns (uint256, address, uint8, uint8, bool) {
+    function execute(uint256 _index, address _feeRecipient) external override nonReentrant returns (uint256 executionFee, address executionFeeToken, uint8 executionModule, uint8 feeModule, bool inZeroFeeWindow) {
         // *** CHECKS ***
         if (msg.sender != address(coordinator)) revert Unauthorized();
         Job memory job = jobs[_index];
@@ -180,16 +182,16 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         // *** MODULE FETCHING ***
         // assumes jobs are created with modules that are correctly registered in coordinator
         (address executionModuleAddress,) = coordinator.modules(uint8(job.executionModule));
-        IExecutionModule executionModule = IExecutionModule(executionModuleAddress);
+        //IExecutionModule executionModuleContract = IExecutionModule(executionModuleAddress);
         (address feeModuleAddress,) = coordinator.modules(uint8(job.feeModule));
-        IFeeModule feeModule = IFeeModule(feeModuleAddress);
+        //IFeeModule feeModuleContract = IFeeModule(feeModuleAddress);
 
         // *** EXECUTION MODULE CALL ***
         // pass gas consumption to fee module
         uint256 startVariableGas = gasleft();
         // timestamp when the job was executable, used in fee module
         // execution module should revert if job is expired or not executable at the time of execution
-        uint256 executionTime = executionModule.onExecuteJob(_index, job.executionWindow);
+        uint256 executionTime = IExecutionModule(executionModuleAddress).onExecuteJob(_index, job.executionWindow);
         // it is applications reponsibility that this doesnt revert. Sponsor pays fee either way
         bool success;
         try job.application.onExecuteJob(_index, job.owner, job.executionCounter) {
@@ -212,8 +214,8 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
             totalGas = _EXECUTION_GAS_OVERHEAD + startVariableGas - gasleft();
         }
         // fee module monitors its own gas usage
-        (uint256 executionFee, address executionFeeToken, bool inZeroFeeWindow) =
-            feeModule.onExecuteJob(_index, job.executionWindow, job.zeroFeeWindow, executionTime, totalGas);
+        (executionFee, executionFeeToken, inZeroFeeWindow) =
+            IFeeModule(feeModuleAddress).onExecuteJob(_index, job.executionWindow, job.zeroFeeWindow, executionTime, totalGas);
 
         // *** FEE TRANSFER ***
         if(executionFee > 0) {
@@ -253,6 +255,17 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     }
 
     /**
+     * @notice Activates a job, setting the active flag to true.
+     * @param _index Index of the job in the jobs array.
+     */
+    function activateJob(uint256 _index) public override {
+        Job storage job = jobs[_index];
+        if (msg.sender != job.owner) revert Unauthorized();
+        job.active = true;
+        emit JobActivated(_index, job.owner, address(job.application));
+    }
+
+    /**
      * @notice Deletes the job from the jobs array and calls onDeleteJob on execution module and application.
      * @notice Deleted jobs are removed from the jobs array.
      * @notice Can only be called by the owner of the job.
@@ -270,18 +283,21 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
      */
     function revokeSponsorship(uint256 _index) public override {
         Job storage job = jobs[_index];
-
-        if(msg.sender == job.sponsor) {
+        address oldSponsor = job.sponsor;
+        address newSponsor = job.owner;
+        if(msg.sender == oldSponsor) {
             if(job.sponsorFallbackToOwner) {
                 job.sponsor = job.owner;
             } else {
                 job.sponsor = address(0);
+                newSponsor = address(0);
             }
         } else if (msg.sender == job.owner) {
             job.sponsor = job.owner;
         } else {
             revert Unauthorized();
         }
+        emit SponsorshipRevoked(_index, job.owner, newSponsor, oldSponsor);
     }
 
     /**
@@ -348,7 +364,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
      * @notice Gets the length of the job array.
      * @return length The length of the job array.
      */
-    function getJobsArrayLength() public view override returns (uint256) {
+    function getJobsArrayLength() public view override returns (uint256 length) {
         return jobs.length;
     }
 

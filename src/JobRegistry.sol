@@ -87,6 +87,9 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
             if(!publicERC6492Validator.isValidSignatureNowAllowSideEffects(_specification.owner, _hashTypedData(_specification.hash()), _ownerSignature)) revert InvalidSignature();
         }
 
+        // *** MAX EXECUTIONS CHECK ***
+        if (_specification.maxExecutions == 0) revert MaxExecutionsReached();
+
         // *** SETTING INDEX ***
         // attempts to reuse index of existing expired job if _index is existing. Otherwise creates new job at jobs.length.
         bool reuseIndex;
@@ -126,7 +129,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
             // executes application, reverts whole call if it fails
             _specification.application.onExecuteJob(index, msg.sender, 0);
             emit JobExecuted(index, msg.sender, address(_specification.application), true, 0, 0, address(0), false);
-            // can have initial execution and maxExecution = 1, then deactivate job immediately
+            // deactivate job immediately if maxExecutions is 1
             if (_specification.maxExecutions == 1) active = false;
         }
 
@@ -261,6 +264,8 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     function activateJob(uint256 _index) public override {
         Job storage job = jobs[_index];
         if (msg.sender != job.owner) revert Unauthorized();
+        // prevent reactivation if maxExecutions is reached
+        if (job.executionCounter >= job.maxExecutions) revert MaxExecutionsReached();
         job.active = true;
         emit JobActivated(_index, job.owner, address(job.application));
     }

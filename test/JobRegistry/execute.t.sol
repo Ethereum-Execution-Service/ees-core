@@ -113,17 +113,6 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
         assertEq(token0.balanceOf(executor), startBalanceExecutor + _executionFee, "executor balance");
     }
 
-
-    function test_NoMaxExecutionLimit() public {
-        // Should be able to execute twice when maxExecutions is set to 0
-        genericJobSpecification.maxExecutions = 0;
-        dummyExecutionModule.setInitialExecution(true);
-        vm.prank(from);
-        jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
-        vm.prank(address(coordinator));
-        jobRegistry.execute(0, from);
-    }
-
     function test_MaxExecutionPastLimit() public {
         // Should revert when trying to execute more than once when maxExecutions set to 1. Job is deactivated
         genericJobSpecification.maxExecutions = 1;

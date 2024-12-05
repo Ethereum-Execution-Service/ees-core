@@ -143,4 +143,7 @@ interface IJobRegistry {
 
     /// @notice Thrown when the signature is invalid.
     error InvalidSignature();
+
+    /// @notice Thrown when the maximum number of executions is reached.
+    error MaxExecutionsReached();
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import "./Base.t.sol";
 import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
@@ -8,12 +8,11 @@ import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
  * @notice Tests for the updateFeeModule function
  */
 contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
-
-  function test_UpdateFeeModuleWithNewSponsor() public {
-      // should be able to update fee module with new sponsorship
+    function test_UpdateFeeModuleWithNewSponsor() public {
+        // should be able to update fee module with new sponsorship
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -27,7 +26,7 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
             getFeeModuleInputSignature(feeModuleInput, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(from);
         jobRegistry.updateFeeModule(feeModuleInput, sponsor, sponsorSig);
-        (,,,,,, bytes1 feeModuleSet,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
+        (,,,,,, bytes1 feeModuleSet,,, address sponsorSet,,,,) = jobRegistry.jobs(index);
         assertEq(sponsorSet, sponsor, "sponsor mismatch");
         assertEq(uint8(feeModuleSet), uint8(0x01), "fee module mismatch");
     }
@@ -36,9 +35,9 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
         // should revert with ExpiredSignature when updating fee module with an expired signature
         createTime = bound(createTime, 1, block.timestamp);
         deadline = bound(deadline, 0, createTime - 1);
-        
+
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -59,7 +58,7 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
     function test_UpdateFeeModuleDataNoSponsor() public {
         // should be able to update fee module without sponsorship
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -80,7 +79,7 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
     function test_UpdateFeeModuleInExecutionMode() public {
         // should revert with JobInExecutionMode when updating fee module of a job that is in execution mode
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -100,7 +99,7 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
         // should revert with Unauthorized when updating fee module of a job from a caller that is not the owner of the job
         vm.assume(caller != from);
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -119,10 +118,11 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
         // sponsor should be able to update fee module if sponsorCanUpdateFeeModule is true
 
         genericJobSpecification.sponsorCanUpdateFeeModule = true;
-        bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        bytes memory sponsorSig = getJobSpecificationSponsorSignature(
+            genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR()
+        );
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig, "", UINT256_MAX);
 
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -143,10 +143,11 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
         // sponsor should be able to update fee module with a new sponsorship if sponsorCanUpdateFeeModule is true
 
         genericJobSpecification.sponsorCanUpdateFeeModule = true;
-        bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        bytes memory sponsorSig = getJobSpecificationSponsorSignature(
+            genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR()
+        );
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig, "", UINT256_MAX);
 
         IJobRegistry.FeeModuleInput memory feeModuleInput = IJobRegistry.FeeModuleInput({
             nonce: 1,
@@ -170,7 +171,7 @@ contract JobRegistryUpdateFeeModuleTest is JobRegistryBaseTest {
     function test_MigrateFeeModuleWithSponsor() public {
         // should be able to migrate fee module with sponsorship
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
         DummyFeeModule dummyFeeModule2 = new DummyFeeModule(defaultFeeToken, 1_000_000);
         vm.prank(treasury);
         coordinator.addFeeModule(dummyFeeModule2);

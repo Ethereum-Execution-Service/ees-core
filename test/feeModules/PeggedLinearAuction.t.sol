@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {Test} from "forge-std/src/Test.sol";
 import {GasSnapshot} from "forge-gas-snapshot/src/GasSnapshot.sol";
@@ -33,6 +33,7 @@ contract PeggedLinearAuctionTest is Test, GasSnapshot, TokenProvider {
     address address2 = address(0x2);
     JobRegistry jobRegistry;
     Coordinator coordinator;
+
     event ExecutionFee(uint256 executionFee, address executionFeeToken);
 
     function setUp() public {
@@ -41,7 +42,6 @@ contract PeggedLinearAuctionTest is Test, GasSnapshot, TokenProvider {
         defaultMinBps = 15000;
         defaultExecutionWindow = 1800;
         defaultStartTime = 1641070800;
-
 
         MockCoordinatorProvider coordinatorProvider = new MockCoordinatorProvider(address(0x3));
         coordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());

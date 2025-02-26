@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {Test} from "forge-std/src/Test.sol";
 import {GasSnapshot} from "forge-gas-snapshot/src/GasSnapshot.sol";
@@ -43,7 +43,7 @@ contract LinearAuctionTest is Test, GasSnapshot {
         jobRegistry = new MockJobRegistry(coordinator, publicERC6492Validator);
         vm.prank(address(0x3));
         coordinator.addJobRegistry(address(jobRegistry));
-        
+
         feeModule = new MockLinearAuction(coordinator);
 
         fromPrivateKey = 0x12341234;

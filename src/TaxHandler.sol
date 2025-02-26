@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {Owned} from "solmate/src/auth/Owned.sol";
 import {ModuleRegistry} from "./ModuleRegistry.sol";
@@ -27,12 +27,12 @@ contract TaxHandler is ModuleRegistry, ITaxHandler {
     // maximum reward per execution in tax token. Should be updated when executionTax or protocolPoolCutBps are updated
     uint256 internal maxRewardPerExecution;
 
-
-
     error TaxUpdateTooLarge();
     error UpdateOnCooldown();
 
-    constructor(address _owner, uint256 _executionTax, uint256 _zeroFeeExecutionTax, uint256 _protocolPoolCutBps) ModuleRegistry(_owner) {
+    constructor(address _owner, uint256 _executionTax, uint256 _zeroFeeExecutionTax, uint256 _protocolPoolCutBps)
+        ModuleRegistry(_owner)
+    {
         require(_protocolPoolCutBps < BPS_DENOMINATOR, "TaxHandler: protocol pool cut bps must be less than 100%");
         lastExecutionTaxUpdate = block.timestamp;
         executionTax = _executionTax;
@@ -45,7 +45,7 @@ contract TaxHandler is ModuleRegistry, ITaxHandler {
     /**
      * @notice Update the execution tax.
      * @notice Also updates maxRewardPerExecution accordingly.
-     * @dev Can update executionTax at most executionTaxUpdateBps basis points every executionTaxUpdateCooldown seconds. 
+     * @dev Can update executionTax at most executionTaxUpdateBps basis points every executionTaxUpdateCooldown seconds.
      * @param _executionTax The new execution tax.
      */
     function updateExecutionTax(uint256 _executionTax) public onlyOwner {
@@ -63,14 +63,18 @@ contract TaxHandler is ModuleRegistry, ITaxHandler {
 
     /**
      * @notice Update the zero fee execution tax.
-     * @dev Can update zeroFeeExecutionTax at most executionTaxUpdateBps basis points every zeroFeeExecutionTaxUpdateCooldown seconds. 
+     * @dev Can update zeroFeeExecutionTax at most executionTaxUpdateBps basis points every zeroFeeExecutionTaxUpdateCooldown seconds.
      * @param _zeroFeeExecutionTax The new zero fee execution tax.
      */
     function updateZeroFeeExecutionTax(uint256 _zeroFeeExecutionTax) public onlyOwner {
         // can change value at most X percent every Y time
-        if (block.timestamp < lastZeroFeeExecutionTaxUpdate + zeroFeeExecutionTaxUpdateCooldown) revert UpdateOnCooldown();
+        if (block.timestamp < lastZeroFeeExecutionTaxUpdate + zeroFeeExecutionTaxUpdateCooldown) {
+            revert UpdateOnCooldown();
+        }
 
-        uint256 diff = _zeroFeeExecutionTax > zeroFeeExecutionTax ? _zeroFeeExecutionTax - zeroFeeExecutionTax : zeroFeeExecutionTax - _zeroFeeExecutionTax;
+        uint256 diff = _zeroFeeExecutionTax > zeroFeeExecutionTax
+            ? _zeroFeeExecutionTax - zeroFeeExecutionTax
+            : zeroFeeExecutionTax - _zeroFeeExecutionTax;
         uint256 maxDiff = zeroFeeExecutionTax * executionTaxUpdateBps / 10_000;
         if (diff > maxDiff) revert TaxUpdateTooLarge();
 
@@ -81,14 +85,16 @@ contract TaxHandler is ModuleRegistry, ITaxHandler {
     /**
      * @notice Update the protocol pool cut bps.
      * @notice Also updates maxRewardPerExecution accordingly.
-     * @dev Can update protocolPoolCutBps at most protocolPoolCutUpdateBps basis points every protocolPoolCutUpdateCooldown seconds. 
+     * @dev Can update protocolPoolCutBps at most protocolPoolCutUpdateBps basis points every protocolPoolCutUpdateCooldown seconds.
      * @param _protocolPoolCutBps The new protocol pool cut bps.
      */
     function updateProtocolPoolCutBps(uint256 _protocolPoolCutBps) public onlyOwner {
         // can change value at most X percent every Y time
         if (block.timestamp < lastProtocolPoolCutUpdate + protocolPoolCutUpdateCooldown) revert UpdateOnCooldown();
 
-        uint256 diff = _protocolPoolCutBps > protocolPoolCutBps ? _protocolPoolCutBps - protocolPoolCutBps : protocolPoolCutBps - _protocolPoolCutBps;
+        uint256 diff = _protocolPoolCutBps > protocolPoolCutBps
+            ? _protocolPoolCutBps - protocolPoolCutBps
+            : protocolPoolCutBps - _protocolPoolCutBps;
         uint256 maxDiff = protocolPoolCutBps * protocolPoolCutUpdateBps / 10_000;
         if (diff > maxDiff) revert TaxUpdateTooLarge();
 
@@ -96,5 +102,4 @@ contract TaxHandler is ModuleRegistry, ITaxHandler {
         protocolPoolCutBps = _protocolPoolCutBps;
         maxRewardPerExecution = (executionTax * (BPS_DENOMINATOR - protocolPoolCutBps)) / BPS_DENOMINATOR;
     }
-
 }

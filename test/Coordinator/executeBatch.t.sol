@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import "./Base.t.sol";
 import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
@@ -8,33 +8,32 @@ import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
  * @notice Tests for the executeBatch function
  */
 contract CoordinatorExecuteBatchTest is CoordinatorBaseTest {
+    function test_ExecuteBatchInEpochOutsideRound(uint256 time) public {
+        // executing batch outside rounds should increase next epoch pool balance and take execution tax from executor
+        time = bound(
+            time,
+            defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration(),
+            defaultEpochEndTime - 1
+        );
 
-  function test_ExecuteBatchInEpochOutsideRound(uint256 time) public {
-    // executing batch outside rounds should increase next epoch pool balance and take execution tax from executor
-      time = bound(
-          time,
-          defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration(),
-          defaultEpochEndTime - 1
-      );
+        uint256 timeIntoRounds =
+            coordinator.getEpochDuration() - coordinator.getSelectionPhaseDuration() - (defaultEpochEndTime - time);
+        vm.assume(timeIntoRounds % coordinator.getTotalRoundDuration() >= roundDuration);
 
-      uint256 timeIntoRounds =
-          coordinator.getEpochDuration() - coordinator.getSelectionPhaseDuration() - (defaultEpochEndTime - time);
-      vm.assume(timeIntoRounds % coordinator.getTotalRoundDuration() >= roundDuration);
+        vm.prank(executor);
+        coordinator.stake(modulesToRegister);
+        uint256[] memory indices = new uint256[](1);
+        indices[0] = 0;
+        uint256[] memory gasLimits = new uint256[](1);
+        gasLimits[0] = 500_000;
 
-      vm.prank(executor);
-      coordinator.stake(modulesToRegister);
-      uint256[] memory indices = new uint256[](1);
-      indices[0] = 0;
-      uint256[] memory gasLimits = new uint256[](1);
-      gasLimits[0] = 500_000;
-
-      vm.warp(time);
-      vm.prank(executor);
-      (,, uint256 successfulExecutions) = coordinator.executeBatch(indices, gasLimits, executor, 0);
-      (uint256 balance,,,,,,,,,) = coordinator.executorInfo(executor);
-      assertEq(successfulExecutions, 1, "number of successful executions mismatch");
-      assertEq(balance, stakingAmountPerModule * 2 - executionTax, "executor balance mismatch");
-      assertEq(coordinator.getNextEpochPoolBalance(), executionTax, "next epoch pool balance mismatch");
+        vm.warp(time);
+        vm.prank(executor);
+        (,, uint256 successfulExecutions) = coordinator.executeBatch(indices, gasLimits, executor, 0);
+        (uint256 balance,,,,,,,,,) = coordinator.executorInfo(executor);
+        assertEq(successfulExecutions, 1, "number of successful executions mismatch");
+        assertEq(balance, stakingAmountPerModule * 2 - executionTax, "executor balance mismatch");
+        assertEq(coordinator.getNextEpochPoolBalance(), executionTax, "next epoch pool balance mismatch");
     }
 
     function test_InRoundModuleAlreadySupportedExecutor(bytes32 seed) public {
@@ -253,7 +252,6 @@ contract CoordinatorExecuteBatchTest is CoordinatorBaseTest {
         assertEq(coordinator.getNextEpochPoolBalance(), executionTax, "next epoch pool balance mismatch");
     }
 
-
     function test_OutsideRoundsNonExecutor(uint256 time) public {
         // non-staked executor should be able to execute batch outside rounds. Should increase next epoch pool balance and take execution tax from executor
         time = bound(
@@ -265,7 +263,6 @@ contract CoordinatorExecuteBatchTest is CoordinatorBaseTest {
         uint256 timeIntoRounds =
             coordinator.getEpochDuration() - coordinator.getSelectionPhaseDuration() - (defaultEpochEndTime - time);
         vm.assume(timeIntoRounds % coordinator.getTotalRoundDuration() >= roundDuration);
-
 
         uint256[] memory indices = new uint256[](1);
         indices[0] = 0;
@@ -284,7 +281,7 @@ contract CoordinatorExecuteBatchTest is CoordinatorBaseTest {
 
     function test_InsideRoundExecutorDesignatedDoesntSupportModules(bytes32 seed) public {
         // as a non-desingated executor should be able to execute jobs in rounds with modules not supported by designated executor, but should not check in
-        
+
         // first executor should be designated executor
         vm.assume(uint256(keccak256(abi.encodePacked(seed, uint8(1)))) % 2 == 0);
 
@@ -308,11 +305,15 @@ contract CoordinatorExecuteBatchTest is CoordinatorBaseTest {
         uint256[] memory gasLimits = new uint256[](1);
         gasLimits[0] = 500_000;
         // go to round 1
-        vm.warp(defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration() + coordinator.getRoundDuration() + coordinator.getRoundBuffer());
+        vm.warp(
+            defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration()
+                + coordinator.getRoundDuration() + coordinator.getRoundBuffer()
+        );
         vm.prank(secondExecutor);
         (,, uint256 successfulExecutions) = coordinator.executeBatch(indices, gasLimits, secondExecutor, 0);
         // check executorInfo is correct
-        (uint256 balance,,,,, uint8 lastCheckinRound, uint96 lastCheckinEpoch,,,) = coordinator.executorInfo(secondExecutor);
+        (uint256 balance,,,,, uint8 lastCheckinRound, uint96 lastCheckinEpoch,,,) =
+            coordinator.executorInfo(secondExecutor);
         // should not change lastCheckinRound and lastCheckinEpoch since second executor is not designated
         assertEq(lastCheckinRound, 0, "latest executed round mismatch");
         assertEq(lastCheckinEpoch, 0, "latest executed epoch mismatch");
@@ -334,7 +335,6 @@ contract CoordinatorExecuteBatchTest is CoordinatorBaseTest {
             coordinator.getEpochDuration() - coordinator.getSelectionPhaseDuration() - (defaultEpochEndTime - time);
         vm.assume(timeIntoRounds % coordinator.getTotalRoundDuration() < roundDuration);
 
-
         jobRegistry.setReturnExecutionModule(0);
         // module not supported by designated executor
         jobRegistry.setReturnFeeModule(2);
@@ -355,36 +355,35 @@ contract CoordinatorExecuteBatchTest is CoordinatorBaseTest {
         assertEq(coordinator.protocolBalance(), executionTax, "protocol balance mismatch");
     }
 
-
     function test_OutsideRoundZeroFeeWindowJobExecutor(uint256 time) public {
-    // executing job in zero fee window should tax with zeroFeeExecutionTax. Tax is split between protocol and next pool
-      time = bound(
-          time,
-          defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration(),
-          defaultEpochEndTime - 1
-      );
+        // executing job in zero fee window should tax with zeroFeeExecutionTax. Tax is split between protocol and next pool
+        time = bound(
+            time,
+            defaultEpochEndTime - coordinator.getEpochDuration() + coordinator.getSelectionPhaseDuration(),
+            defaultEpochEndTime - 1
+        );
 
-      uint256 timeIntoRounds =
-          coordinator.getEpochDuration() - coordinator.getSelectionPhaseDuration() - (defaultEpochEndTime - time);
-      vm.assume(timeIntoRounds % coordinator.getTotalRoundDuration() >= roundDuration);
+        uint256 timeIntoRounds =
+            coordinator.getEpochDuration() - coordinator.getSelectionPhaseDuration() - (defaultEpochEndTime - time);
+        vm.assume(timeIntoRounds % coordinator.getTotalRoundDuration() >= roundDuration);
 
-      vm.prank(executor);
-      coordinator.stake(modulesToRegister);
-      uint256[] memory indices = new uint256[](1);
-      indices[0] = 0;
-      uint256[] memory gasLimits = new uint256[](1);
-      gasLimits[0] = 500_000;
+        vm.prank(executor);
+        coordinator.stake(modulesToRegister);
+        uint256[] memory indices = new uint256[](1);
+        indices[0] = 0;
+        uint256[] memory gasLimits = new uint256[](1);
+        gasLimits[0] = 500_000;
 
-      jobRegistry.setJobsInZeroFeeWindow(true);
+        jobRegistry.setJobsInZeroFeeWindow(true);
 
-      vm.warp(time);
-      vm.prank(executor);
-      (,, uint256 successfulExecutions) = coordinator.executeBatch(indices, gasLimits, executor, 0);
-      (uint256 balance,,,,,,,,,) = coordinator.executorInfo(executor);
-      assertEq(successfulExecutions, 1, "number of successful executions mismatch");
-      assertEq(balance, stakingAmountPerModule * 2 - zeroFeeExecutionTax, "executor balance mismatch");
-      assertEq(coordinator.getNextEpochPoolBalance(), zeroFeeExecutionTax / 2, "next epoch pool balance mismatch");
-      assertEq(coordinator.protocolBalance(), zeroFeeExecutionTax / 2, "protocol balance mismatch");
+        vm.warp(time);
+        vm.prank(executor);
+        (,, uint256 successfulExecutions) = coordinator.executeBatch(indices, gasLimits, executor, 0);
+        (uint256 balance,,,,,,,,,) = coordinator.executorInfo(executor);
+        assertEq(successfulExecutions, 1, "number of successful executions mismatch");
+        assertEq(balance, stakingAmountPerModule * 2 - zeroFeeExecutionTax, "executor balance mismatch");
+        assertEq(coordinator.getNextEpochPoolBalance(), zeroFeeExecutionTax / 2, "next epoch pool balance mismatch");
+        assertEq(coordinator.protocolBalance(), zeroFeeExecutionTax / 2, "protocol balance mismatch");
     }
 
     function test_InsideRoundZeroFeeWindowJobExecutor(bytes32 seed) public {
@@ -410,7 +409,17 @@ contract CoordinatorExecuteBatchTest is CoordinatorBaseTest {
         vm.prank(secondExecutor);
         (,, uint256 successfulExecutions) = coordinator.executeBatch(indices, gasLimits, secondExecutor, 0);
 
-        (uint256 balance,,,,uint8 roundsCheckedInEpoch, uint8 lastCheckinRound, uint96 lastCheckinEpoch, uint96 executionsInRoundsInEpoch,,) = coordinator.executorInfo(secondExecutor);
+        (
+            uint256 balance,
+            ,
+            ,
+            ,
+            uint8 roundsCheckedInEpoch,
+            uint8 lastCheckinRound,
+            uint96 lastCheckinEpoch,
+            uint96 executionsInRoundsInEpoch,
+            ,
+        ) = coordinator.executorInfo(secondExecutor);
         assertEq(successfulExecutions, 1, "number of successful executions mismatch");
         assertEq(balance, stakingAmountPerModule * 2 - zeroFeeExecutionTax, "executor balance mismatch");
         assertEq(coordinator.getNextEpochPoolBalance(), zeroFeeExecutionTax / 2, "next epoch pool balance mismatch");
@@ -435,12 +444,11 @@ contract CoordinatorExecuteBatchTest is CoordinatorBaseTest {
         // set balance to just above threshold
         coordinator.setExecutorBalance(coordinator.getStakingBalanceThresholdPerModule() * 2 + 1, executor);
 
-
         vm.warp(time);
         vm.prank(executor);
         coordinator.executeBatch(indices, gasLimits, executor, 0);
 
-        (,bool active,,,,,,,,) = coordinator.executorInfo(executor);
+        (, bool active,,,,,,,,) = coordinator.executorInfo(executor);
         assertFalse(active, "executor should be deactivated");
     }
 
@@ -458,14 +466,11 @@ contract CoordinatorExecuteBatchTest is CoordinatorBaseTest {
         // set balance to just above threshold
         coordinator.setExecutorBalance(coordinator.getStakingBalanceThresholdPerModule() * 2 + 1, executor);
 
-
         vm.warp(time);
         vm.prank(executor);
         coordinator.executeBatch(indices, gasLimits, executor, 0);
 
-        (,bool active,,,,,,,,) = coordinator.executorInfo(executor);
+        (, bool active,,,,,,,,) = coordinator.executorInfo(executor);
         assertFalse(active, "executor should be deactivated");
     }
-
-
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {Vm} from "forge-std/src/Vm.sol";
 import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
@@ -85,7 +85,6 @@ contract JobSpecificationSignature {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, msgHash);
         return bytes.concat(r, s, bytes1(v));
     }
-
 
     /*
     function getCompactJobSpecificationSignature(

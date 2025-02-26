@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import "./Base.t.sol";
 import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
@@ -10,7 +10,6 @@ import {IModuleRegistry} from "../../src/interfaces/IModuleRegistry.sol";
  * @notice Tests for the deregisterModules function
  */
 contract CoordinatorDeregisterModulesTest is CoordinatorBaseTest {
-    
     function test_DeregisterModules() public {
         uint256 moduleToDeregister = 1 << 1;
 
@@ -21,7 +20,7 @@ contract CoordinatorDeregisterModulesTest is CoordinatorBaseTest {
         vm.prank(executor);
         coordinator.deregisterModules(moduleToDeregister);
 
-        (,,,,,,,,,uint256 registeredModules) = coordinator.executorInfo(executor);
+        (,,,,,,,,, uint256 registeredModules) = coordinator.executorInfo(executor);
 
         assertEq(registeredModules, (1 << 0) | (1 << 2), "modules mismatch");
     }
@@ -72,5 +71,4 @@ contract CoordinatorDeregisterModulesTest is CoordinatorBaseTest {
         vm.expectRevert(ICoordinator.NotInitializedExecutor.selector);
         coordinator.deregisterModules(moduleToDeregister);
     }
-
 }

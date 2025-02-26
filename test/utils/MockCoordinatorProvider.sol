@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {Coordinator} from "../../src/Coordinator.sol";
 import {ICoordinator} from "../../src/interfaces/ICoordinator.sol";
@@ -35,5 +35,4 @@ contract MockCoordinatorProvider is TokenProvider {
     function getMockCoordinator() external view returns (address) {
         return address(coordinator);
     }
-
 }

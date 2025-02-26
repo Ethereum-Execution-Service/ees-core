@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import "forge-std/src/console2.sol";
 import "forge-std/src/Script.sol";
@@ -86,7 +86,6 @@ contract DeployAll is Script {
 
         peggedLinearAuction = new PeggedLinearAuction(coordinator);
         console2.log("PeggedLinearAuction Deployed:", address(peggedLinearAuction));
-
 
         coordinator.addExecutionModule(regularTimeInterval);
         coordinator.addFeeModule(linearAuction);

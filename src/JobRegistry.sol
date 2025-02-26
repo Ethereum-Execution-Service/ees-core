@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {IJobRegistry} from "./interfaces/IJobRegistry.sol";
 import {IExecutionModule} from "./interfaces/IExecutionModule.sol";
@@ -17,17 +17,16 @@ import {PublicERC6492Validator} from "./PublicERC6492Validator.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 
 /**
-__/\\\\\\\\\\\\\\\__/\\\\\\\\\\\\\\\_____/\\\\\\\\\\\___        
- _\/\\\///////////__\/\\\///////////____/\\\/////////\\\_       
-  _\/\\\_____________\/\\\______________\//\\\______\///__      
-   _\/\\\\\\\\\\\_____\/\\\\\\\\\\\_______\////\\\_________     
-    _\/\\\///////______\/\\\///////___________\////\\\______    
-     _\/\\\_____________\/\\\_____________________\////\\\___   
-      _\/\\\_____________\/\\\______________/\\\______\//\\\__  
-       _\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\\_\///\\\\\\\\\\\/___ 
-        _\///////////////__\///////////////____\///////////_____
+ * __/\\\\\\\\\\\\\\\__/\\\\\\\\\\\\\\\_____/\\\\\\\\\\\___        
+ *  _\/\\\///////////__\/\\\///////////____/\\\/////////\\\_       
+ *   _\/\\\_____________\/\\\______________\//\\\______\///__      
+ *    _\/\\\\\\\\\\\_____\/\\\\\\\\\\\_______\////\\\_________     
+ *     _\/\\\///////______\/\\\///////___________\////\\\______    
+ *      _\/\\\_____________\/\\\_____________________\////\\\___   
+ *       _\/\\\_____________\/\\\______________/\\\______\//\\\__  
+ *        _\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\\_\///\\\\\\\\\\\/___ 
+ *         _\///////////////__\///////////////____\///////////_____
  */
-
 
 /// @author Victor Brevig
 /// @notice JobRegistry keeps track of all jobs in the EES. It is through this contract jobs are created, managed and deleted.
@@ -73,18 +72,28 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         bool hasSponsorship = _sponsor != address(0);
         bool callerIsOwner = msg.sender == _specification.owner;
         // signature expired, short circuit if no sponsorship or caller is owner
-        if((hasSponsorship || !callerIsOwner) && block.timestamp > _specification.deadline) revert SignatureExpired(_specification.deadline);
+        if ((hasSponsorship || !callerIsOwner) && block.timestamp > _specification.deadline) {
+            revert SignatureExpired(_specification.deadline);
+        }
         if (hasSponsorship) {
             // do not consume nonce if it is reusable, but still check and revert if it has already been used
             _useUnorderedNonce(_sponsor, _specification.nonce, !_specification.reusableNonce);
             // do not include owner in the hash - allows sponsor to sign for any owner
-            if(!publicERC6492Validator.isValidSignatureNowAllowSideEffects(_sponsor, _hashTypedData(_specification.hashNoOwner()), _sponsorSignature)) revert InvalidSignature();
+            if (
+                !publicERC6492Validator.isValidSignatureNowAllowSideEffects(
+                    _sponsor, _hashTypedData(_specification.hashNoOwner()), _sponsorSignature
+                )
+            ) revert InvalidSignature();
         }
-        if(!callerIsOwner) {
+        if (!callerIsOwner) {
             // always consume owner nonce and revert if it has already been used
             _useUnorderedNonce(_specification.owner, _specification.nonce, true);
             // include whole job specification in the hash
-            if(!publicERC6492Validator.isValidSignatureNowAllowSideEffects(_specification.owner, _hashTypedData(_specification.hash()), _ownerSignature)) revert InvalidSignature();
+            if (
+                !publicERC6492Validator.isValidSignatureNowAllowSideEffects(
+                    _specification.owner, _hashTypedData(_specification.hash()), _ownerSignature
+                )
+            ) revert InvalidSignature();
         }
 
         // *** MAX EXECUTIONS CHECK ***
@@ -93,12 +102,13 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         // *** SETTING INDEX ***
         // attempts to reuse index of existing expired job if _index is existing. Otherwise creates new job at jobs.length.
         bool reuseIndex;
-        if(_index < jobs.length) {
+        if (_index < jobs.length) {
             (address executionModuleExistingJob,) = coordinator.modules(uint8(jobs[_index].executionModule));
-            if(jobs[_index].owner == address(0)) {
+            if (jobs[_index].owner == address(0)) {
                 // existing job is already deleted - reuse it
                 reuseIndex = true;
-            } else if(IExecutionModule(executionModuleExistingJob).jobIsExpired(_index, jobs[_index].executionWindow)) {
+            } else if (IExecutionModule(executionModuleExistingJob).jobIsExpired(_index, jobs[_index].executionWindow))
+            {
                 // existing job is expired - reuse it but delete existing job first
                 _deleteJob(_index);
                 reuseIndex = true;
@@ -107,12 +117,13 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         index = reuseIndex ? _index : jobs.length;
 
         // *** MODULE FETCHING AND VALIDATION ***
-        (address executionModuleAddress, bool isExecutionModule) = coordinator.modules(uint8(_specification.executionModule));
+        (address executionModuleAddress, bool isExecutionModule) =
+            coordinator.modules(uint8(_specification.executionModule));
         IExecutionModule executionModule = IExecutionModule(executionModuleAddress);
         (address feeModuleAddress, bool isNotFeeModule) = coordinator.modules(uint8(_specification.feeModule));
         IFeeModule feeModule = IFeeModule(feeModuleAddress);
         // revert if intended execution module is not registered as execution module or fee module intended is not registered as a fee module
-        if(!isExecutionModule || isNotFeeModule) revert InvalidModule();
+        if (!isExecutionModule || isNotFeeModule) revert InvalidModule();
 
         // *** MODULE AND APPLICATION CALLS ***
         bool initialExecution =
@@ -120,7 +131,13 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         feeModule.onCreateJob(index, _specification.feeModuleInput);
 
         _specification.application.onCreateJob(
-            index, msg.sender, _specification.ignoreAppRevert, _specification.executionWindow, _specification.executionModule, _specification.executionModuleInput, _specification.applicationInput
+            index,
+            msg.sender,
+            _specification.ignoreAppRevert,
+            _specification.executionWindow,
+            _specification.executionModule,
+            _specification.executionModuleInput,
+            _specification.applicationInput
         );
         bool active = true;
 
@@ -172,7 +189,18 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
      * @return feeModule The fee module of the job.
      * @return inZeroFeeWindow Whether the job was executed in the zero fee window.
      */
-    function execute(uint256 _index, address _feeRecipient) external override nonReentrant returns (uint256 executionFee, address executionFeeToken, uint8 executionModule, uint8 feeModule, bool inZeroFeeWindow) {
+    function execute(uint256 _index, address _feeRecipient)
+        external
+        override
+        nonReentrant
+        returns (
+            uint256 executionFee,
+            address executionFeeToken,
+            uint8 executionModule,
+            uint8 feeModule,
+            bool inZeroFeeWindow
+        )
+    {
         // *** CHECKS ***
         if (msg.sender != address(coordinator)) revert Unauthorized();
         Job memory job = jobs[_index];
@@ -217,14 +245,15 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
             totalGas = _EXECUTION_GAS_OVERHEAD + startVariableGas - gasleft();
         }
         // fee module monitors its own gas usage
-        (executionFee, executionFeeToken, inZeroFeeWindow) =
-            IFeeModule(feeModuleAddress).onExecuteJob(_index, job.executionWindow, job.zeroFeeWindow, executionTime, totalGas);
+        (executionFee, executionFeeToken, inZeroFeeWindow) = IFeeModule(feeModuleAddress).onExecuteJob(
+            _index, job.executionWindow, job.zeroFeeWindow, executionTime, totalGas
+        );
 
         // *** FEE TRANSFER ***
-        if(executionFee > 0) {
+        if (executionFee > 0) {
             // try to transfer from sponsor first, if that fails and sponsorFallbackToOwner is true, transfer from owner and set sponsor to owner
-            if(!ERC20(executionFeeToken).safeTransferFromNoRevert(job.sponsor, _feeRecipient, executionFee)) {
-                if(job.sponsorFallbackToOwner) {
+            if (!ERC20(executionFeeToken).safeTransferFromNoRevert(job.sponsor, _feeRecipient, executionFee)) {
+                if (job.sponsorFallbackToOwner) {
                     ERC20(executionFeeToken).safeTransferFrom(job.owner, _feeRecipient, executionFee);
                     jobs[_index].sponsor = job.owner;
                 } else {
@@ -290,8 +319,8 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         Job storage job = jobs[_index];
         address oldSponsor = job.sponsor;
         address newSponsor = job.owner;
-        if(msg.sender == oldSponsor) {
-            if(job.sponsorFallbackToOwner) {
+        if (msg.sender == oldSponsor) {
+            if (job.sponsorFallbackToOwner) {
                 job.sponsor = job.owner;
             } else {
                 job.sponsor = address(0);
@@ -340,7 +369,11 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         if (newSponsorShip) {
             if (block.timestamp > _feeModuleInput.deadline) revert SignatureExpired(_feeModuleInput.deadline);
             _useUnorderedNonce(_sponsor, _feeModuleInput.nonce, !_feeModuleInput.reusableNonce);
-            if(!publicERC6492Validator.isValidSignatureNowAllowSideEffects(_sponsor, _hashTypedData(_feeModuleInput.hash()), _sponsorSignature)) revert InvalidSignature();
+            if (
+                !publicERC6492Validator.isValidSignatureNowAllowSideEffects(
+                    _sponsor, _hashTypedData(_feeModuleInput.hash()), _sponsorSignature
+                )
+            ) revert InvalidSignature();
             job.sponsor = _sponsor;
         } else if (!currentSponsorUpdating) {
             job.sponsor = job.owner;
@@ -356,7 +389,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         } else {
             // Migrate to new fee module
             (address newFeeModuleAddress, bool isNotFeeModule) = coordinator.modules(uint8(_feeModuleInput.feeModule));
-            if(isNotFeeModule) revert InvalidModule();
+            if (isNotFeeModule) revert InvalidModule();
             IFeeModule newFeeModule = IFeeModule(newFeeModuleAddress);
             currentFeeModule.onDeleteJob(_feeModuleInput.index);
             newFeeModule.onCreateJob(_feeModuleInput.index, _feeModuleInput.feeModuleInput);
@@ -400,7 +433,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         bitPos = uint8(_nonce);
     }
 
-        /**
+    /**
      * @notice Deletes the job from the jobs array and calls onDeleteJob on execution module and application.
      * @param _index The index of the job in the jobs array.
      */
@@ -411,7 +444,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         IExecutionModule executionModule = IExecutionModule(executionModuleAddress);
         (address feeModuleAddress,) = coordinator.modules(uint8(job.feeModule));
         IFeeModule feeModule = IFeeModule(feeModuleAddress);
-        
+
         delete jobs[_index];
 
         // these should never revert, the owner should always be able to delete a job
@@ -436,7 +469,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     function _useUnorderedNonce(address _from, uint256 _nonce, bool _consume) internal {
         (uint256 wordPos, uint256 bitPos) = bitmapPositions(_nonce);
         uint256 bit = 1 << bitPos;
-        
+
         if (_consume) {
             // check and update map
             uint256 flipped = nonceBitmap[_from][wordPos] ^= bit;

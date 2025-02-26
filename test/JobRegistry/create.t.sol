@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import "./Base.t.sol";
 import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
@@ -8,7 +8,6 @@ import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
  * @notice Tests for the createJob function
  */
 contract JobRegistryCreateTest is JobRegistryBaseTest {
-    
     function test_CreateJobWithoutSponsor() public {
         vm.prank(from);
         jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
@@ -16,10 +15,11 @@ contract JobRegistryCreateTest is JobRegistryBaseTest {
     }
 
     function test_CreateJobWithSponsor() public {
-        bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        bytes memory sponsorSig = getJobSpecificationSponsorSignature(
+            genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR()
+        );
         vm.prank(from);
-        jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig, "", UINT256_MAX);
     }
 
     function test_CreateJobWithSponsorExpiredSignature(uint256 createTime, uint256 deadline) public {
@@ -28,23 +28,25 @@ contract JobRegistryCreateTest is JobRegistryBaseTest {
         deadline = bound(deadline, 0, createTime - 1);
         genericJobSpecification.deadline = deadline;
 
-        bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        bytes memory sponsorSig = getJobSpecificationSponsorSignature(
+            genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR()
+        );
         vm.prank(from);
         vm.warp(createTime);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.SignatureExpired.selector, deadline));
-        jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig, "", UINT256_MAX);
     }
 
     function test_CreateJobWithSponsorReusingNonce() public {
         // Should revert with InvalidNonce if nonce is already used
-        bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        bytes memory sponsorSig = getJobSpecificationSponsorSignature(
+            genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR()
+        );
         vm.prank(from);
-        jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig, "", UINT256_MAX);
         vm.prank(from);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.InvalidNonce.selector));
-        jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig, "", UINT256_MAX);
     }
 
     function testFail_CreationWithInvalidModule(bytes1 executionModule, bytes1 feeModule) public {
@@ -54,20 +56,20 @@ contract JobRegistryCreateTest is JobRegistryBaseTest {
         genericJobSpecification.feeModule = feeModule;
 
         vm.prank(from);
-        jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
     }
 
     function test_CreateionReuseExpiredJobIndex(address caller) public {
         // Anyone should be able to create a new job with the same index as an expired job
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         dummyExecutionModule.expireJob();
 
         genericJobSpecification.nonce = 1;
         genericJobSpecification.owner = address2;
         vm.prank(address2);
-        uint256 index2 = jobRegistry.createJob(genericJobSpecification, address(0), "","", index);
+        uint256 index2 = jobRegistry.createJob(genericJobSpecification, address(0), "", "", index);
 
         (address owner,,,,,,,,,,,,,) = jobRegistry.jobs(index);
 
@@ -76,11 +78,10 @@ contract JobRegistryCreateTest is JobRegistryBaseTest {
         assertEq(jobRegistry.getJobsArrayLength(), 1, "jobs array length mismatch");
     }
 
-
     function test_CreateAndReuseDeletedJobIndex() public {
         // should be able to reuse and index of a deleted job
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         vm.prank(from);
         jobRegistry.deleteJob(index);
@@ -88,7 +89,7 @@ contract JobRegistryCreateTest is JobRegistryBaseTest {
         genericJobSpecification.nonce = 1;
         genericJobSpecification.owner = address2;
         vm.prank(address2);
-        uint256 index2 = jobRegistry.createJob(genericJobSpecification, address(0), "","", index);
+        uint256 index2 = jobRegistry.createJob(genericJobSpecification, address(0), "", "", index);
 
         (address owner,,,,,,,,,,,,,) = jobRegistry.jobs(index);
 
@@ -100,24 +101,24 @@ contract JobRegistryCreateTest is JobRegistryBaseTest {
     function test_ReuseJobIndexAlreadyTaken() public {
         // should revert when trying to reuse an index that is already taken
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         genericJobSpecification.nonce = 1;
         genericJobSpecification.owner = address2;
         vm.prank(address2);
-        uint256 setIndex = jobRegistry.createJob(genericJobSpecification, address(0), "","", index);
+        uint256 setIndex = jobRegistry.createJob(genericJobSpecification, address(0), "", "", index);
         assertEq(setIndex, 1, "index mismatch");
     }
 
     function test_CreateJobEndOfArray() public {
         // should be able to create a job at the end of the array
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         genericJobSpecification.nonce = 1;
         genericJobSpecification.owner = address2;
         vm.prank(address2);
-        uint256 index2 = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index2 = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         (address owner,,,,,,,,,,,,,) = jobRegistry.jobs(index);
         (address owner2,,,,,,,,,,,,,) = jobRegistry.jobs(index2);
@@ -132,14 +133,15 @@ contract JobRegistryCreateTest is JobRegistryBaseTest {
         // Should execute once when execution module returns true for initial execution
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
-        jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
         (,,,,,,,,,, uint48 executionCounter,,,) = jobRegistry.jobs(0);
         assertEq(executionCounter, 1, "execution counter mismatch");
     }
 
     function test_CreateJobWithOwnerSignature() public {
         // should be able to create a job with an owner signature
-        bytes memory ownerSig = getJobSpecificationOwnerSignature(genericJobSpecification, fromPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        bytes memory ownerSig =
+            getJobSpecificationOwnerSignature(genericJobSpecification, fromPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(address2);
         jobRegistry.createJob(genericJobSpecification, address(0), "", ownerSig, UINT256_MAX);
         (address owner,,,,,,,,,,,,,) = jobRegistry.jobs(0);
@@ -149,7 +151,8 @@ contract JobRegistryCreateTest is JobRegistryBaseTest {
     function test_CreateJobWithOwnerSignatureDeadlineExpired() public {
         // should revert with SignatureExpired if deadline is in the past
         genericJobSpecification.deadline = block.timestamp - 1;
-        bytes memory ownerSig = getJobSpecificationOwnerSignature(genericJobSpecification, fromPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        bytes memory ownerSig =
+            getJobSpecificationOwnerSignature(genericJobSpecification, fromPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
         vm.prank(address2);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.SignatureExpired.selector, block.timestamp - 1));
         jobRegistry.createJob(genericJobSpecification, address(0), "", ownerSig, UINT256_MAX);
@@ -171,7 +174,7 @@ contract JobRegistryCreateTest is JobRegistryBaseTest {
         genericJobSpecification.maxExecutions = 1;
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
-        jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
         (,,,,,,,,,, uint48 executionCounter,,,) = jobRegistry.jobs(0);
         assertEq(executionCounter, 1, "execution counter mismatch");
         (, bool active,,,,,,,,,,,,) = jobRegistry.jobs(0);
@@ -180,8 +183,9 @@ contract JobRegistryCreateTest is JobRegistryBaseTest {
 
     function test_UseSponsorSignatureAsOwnerSignature() public {
         // Should revert with InvalidSignature if sponsor signature is used as owner signature
-        bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        bytes memory sponsorSig = getJobSpecificationSponsorSignature(
+            genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR()
+        );
         vm.prank(address2);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.InvalidSignature.selector));
         jobRegistry.createJob(genericJobSpecification, address(0), "", sponsorSig, UINT256_MAX);

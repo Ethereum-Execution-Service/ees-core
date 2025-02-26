@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {IJobRegistry} from "../../../src/interfaces/IJobRegistry.sol";
 import {IExecutionModule} from "../../../src/interfaces/IExecutionModule.sol";
@@ -50,7 +50,7 @@ contract DummyJobRegistry is IJobRegistry {
     }
 
     function deleteJob(uint256 _index) external {}
-    
+
     function deactivateJob(uint256 _index) external {}
 
     function activateJob(uint256 _index) external {}

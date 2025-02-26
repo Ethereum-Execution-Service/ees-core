@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import "./Base.t.sol";
 import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
@@ -8,12 +8,11 @@ import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
  * @notice Tests for the executeJob function
  */
 contract JobRegistryExecuteTest is JobRegistryBaseTest {
-
-  function test_ExecuteDeletedJob() public {
+    function test_ExecuteDeletedJob() public {
         // should revert if the job is deleted
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
-        
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
+
         vm.prank(from);
         jobRegistry.deleteJob(index);
 
@@ -25,7 +24,7 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
     function test_ExecuteNotActiveJob() public {
         // should revert if the job is not active
         vm.startPrank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
         jobRegistry.deactivateJob(index);
         vm.stopPrank();
 
@@ -38,7 +37,7 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
         // should revert if the caller is not the coordinator contract
         vm.assume(caller != address(coordinator));
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.Unauthorized.selector));
@@ -49,12 +48,12 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
         // should inactivate a job it it reaches max executions
         genericJobSpecification.maxExecutions = 1;
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         vm.prank(address(coordinator));
         jobRegistry.execute(index, from);
 
-        (, bool active,,,,,,,,,uint48 executionCounter,,,) = jobRegistry.jobs(index);
+        (, bool active,,,,,,,,, uint48 executionCounter,,,) = jobRegistry.jobs(index);
 
         assertEq(active, false, "active mismatch");
         assertEq(executionCounter, 1, "execution counter mismatch");
@@ -64,14 +63,14 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
         // should inactivate a job it it reaches max executions
         genericJobSpecification.ignoreAppRevert = true;
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         dummyApplication.setRevertOnExecute(true);
 
         vm.prank(address(coordinator));
         jobRegistry.execute(index, from);
 
-        (, bool active,,,,,,,,,uint48 executionCounter,,,) = jobRegistry.jobs(index);
+        (, bool active,,,,,,,,, uint48 executionCounter,,,) = jobRegistry.jobs(index);
         assertEq(active, true, "active mismatch");
         assertEq(executionCounter, 0, "execution counter mismatch");
     }
@@ -82,7 +81,7 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
         _executionFee = bound(_executionFee, 0, startBalanceFrom);
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
 
         dummyFeeModule.setExecutionFee(_executionFee);
         vm.prank(address(coordinator));
@@ -98,11 +97,12 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
         uint256 startBalanceExecutor = token0.balanceOf(executor);
         _executionFee = bound(_executionFee, 0, startBalanceFrom);
 
-        bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        bytes memory sponsorSig = getJobSpecificationSponsorSignature(
+            genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR()
+        );
 
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig, "", UINT256_MAX);
 
         dummyFeeModule.setExecutionFee(_executionFee);
         vm.prank(address(coordinator));
@@ -118,7 +118,7 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
         genericJobSpecification.maxExecutions = 1;
         dummyExecutionModule.setInitialExecution(true);
         vm.prank(from);
-        jobRegistry.createJob(genericJobSpecification, address(0), "","", UINT256_MAX);
+        jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
         vm.prank(address(coordinator));
         vm.expectRevert(abi.encodeWithSelector(IJobRegistry.JobNotActive.selector));
         jobRegistry.execute(0, from);
@@ -131,10 +131,11 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
         uint256 startBalanceFrom = token0.balanceOf(from);
         dummyFeeModule.setExecutionFee(100);
 
-        bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        bytes memory sponsorSig = getJobSpecificationSponsorSignature(
+            genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR()
+        );
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig, "", UINT256_MAX);
 
         // drain sponsor balance
         vm.startPrank(sponsor);
@@ -144,7 +145,7 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
         vm.prank(address(coordinator));
         jobRegistry.execute(index, address2);
 
-        (,,,,,,,,,address sponsorSet,,,,) = jobRegistry.jobs(index);
+        (,,,,,,,,, address sponsorSet,,,,) = jobRegistry.jobs(index);
 
         assertEq(token0.balanceOf(sponsor), 0, "sponsor balance");
         assertEq(token0.balanceOf(from), startBalanceFrom - 100, "from balance");
@@ -158,10 +159,11 @@ contract JobRegistryExecuteTest is JobRegistryBaseTest {
 
         dummyFeeModule.setExecutionFee(100);
 
-        bytes memory sponsorSig =
-            getJobSpecificationSponsorSignature(genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR());
+        bytes memory sponsorSig = getJobSpecificationSponsorSignature(
+            genericJobSpecification, sponsorPrivateKey, jobRegistry.DOMAIN_SEPARATOR()
+        );
         vm.prank(from);
-        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig,"", UINT256_MAX);
+        uint256 index = jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig, "", UINT256_MAX);
 
         // drain sponsor balance
         vm.startPrank(sponsor);

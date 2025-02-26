@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import "./Base.t.sol";
 import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
@@ -34,7 +34,9 @@ contract CoordinatorSlashCommitterTest is CoordinatorBaseTest {
         assertEq(balance, stakingAmountPerModule * 2 - commitSlashingAmountPerModule * 2, "balance mismatch");
         assertTrue(active, "not active");
         assertTrue(revealed, "not revealed");
-        assertEq(endBalanceSlasher, startBalanceSlasher + (commitSlashingAmountPerModule * 2) / 2, "slasher balance mismatch");
+        assertEq(
+            endBalanceSlasher, startBalanceSlasher + (commitSlashingAmountPerModule * 2) / 2, "slasher balance mismatch"
+        );
     }
 
     function test_SlashCommitterNotExecutor(address slasher, uint256 time) public {
@@ -59,7 +61,9 @@ contract CoordinatorSlashCommitterTest is CoordinatorBaseTest {
         assertEq(balance, stakingAmountPerModule * 2 - commitSlashingAmountPerModule * 2, "balance mismatch");
         assertTrue(active, "not active");
         assertTrue(revealed, "not revealed");
-        assertEq(endBalanceSlasher, startBalanceSlasher + (commitSlashingAmountPerModule * 2) / 2, "slasher balance mismatch");
+        assertEq(
+            endBalanceSlasher, startBalanceSlasher + (commitSlashingAmountPerModule * 2) / 2, "slasher balance mismatch"
+        );
     }
 
     function test_SlashCommitterBeforeTime(uint256 time) public {

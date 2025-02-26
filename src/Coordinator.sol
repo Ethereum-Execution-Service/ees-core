@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
@@ -10,17 +10,16 @@ import {TaxHandler} from "./TaxHandler.sol";
 import {ModuleRegistry} from "./ModuleRegistry.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 
-
 /**
-__/\\\\\\\\\\\\\\\__/\\\\\\\\\\\\\\\_____/\\\\\\\\\\\___        
- _\/\\\///////////__\/\\\///////////____/\\\/////////\\\_       
-  _\/\\\_____________\/\\\______________\//\\\______\///__      
-   _\/\\\\\\\\\\\_____\/\\\\\\\\\\\_______\////\\\_________     
-    _\/\\\///////______\/\\\///////___________\////\\\______    
-     _\/\\\_____________\/\\\_____________________\////\\\___   
-      _\/\\\_____________\/\\\______________/\\\______\//\\\__  
-       _\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\\_\///\\\\\\\\\\\/___ 
-        _\///////////////__\///////////////____\///////////_____
+ * __/\\\\\\\\\\\\\\\__/\\\\\\\\\\\\\\\_____/\\\\\\\\\\\___        
+ *  _\/\\\///////////__\/\\\///////////____/\\\/////////\\\_       
+ *   _\/\\\_____________\/\\\______________\//\\\______\///__      
+ *    _\/\\\\\\\\\\\_____\/\\\\\\\\\\\_______\////\\\_________     
+ *     _\/\\\///////______\/\\\///////___________\////\\\______    
+ *      _\/\\\_____________\/\\\_____________________\////\\\___   
+ *       _\/\\\_____________\/\\\______________/\\\______\//\\\__  
+ *        _\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\\_\///\\\\\\\\\\\/___ 
+ *         _\///////////////__\///////////////____\///////////_____
  */
 
 /// @author Victor Brevig
@@ -30,7 +29,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
 
     address[] public jobRegistries;
     mapping(address => bool) public isJobRegistry;
-    
+
     bytes32 public seed;
     uint192 public epoch;
     uint256 public epochEndTime;
@@ -77,13 +76,16 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
 
     mapping(address => CommitData) public commitmentMap;
 
-    constructor(InitSpec memory _spec, address _treasury) TaxHandler(_treasury, _spec.executionTax, _spec.zeroFeeExecutionTax, _spec.protocolPoolCutBps) {
+    constructor(InitSpec memory _spec, address _treasury)
+        TaxHandler(_treasury, _spec.executionTax, _spec.zeroFeeExecutionTax, _spec.protocolPoolCutBps)
+    {
         require(
             _spec.stakingBalanceThresholdPerModule <= _spec.stakingAmountPerModule,
             "Staking: threshold must be less than or equal to staking amount"
         );
         require(
-            uint256(_spec.roundsPerEpoch) * uint256(_spec.roundDuration + _spec.roundBuffer) <= type(uint8).max * uint256(_spec.roundDuration + _spec.roundBuffer),
+            uint256(_spec.roundsPerEpoch) * uint256(_spec.roundDuration + _spec.roundBuffer)
+                <= type(uint8).max * uint256(_spec.roundDuration + _spec.roundBuffer),
             "Staking: rounds calculation may overflow"
         );
         totalRoundDuration = _spec.roundDuration + _spec.roundBuffer;
@@ -134,8 +136,10 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         uint8 round;
         uint256 designatedExecutorModules;
         address designatedExecutor;
-        if (block.timestamp < epochEndTime - slashingDuration && block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration)
-        {
+        if (
+            block.timestamp < epochEndTime - slashingDuration
+                && block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
+        ) {
             // in alternating open competition and designated rounds part of the epoch
             uint256 timeIntoRounds;
             unchecked {
@@ -177,8 +181,8 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
             let returnDataPtr := mload(0x40)
 
             // Update free memory pointer
-            mstore(0x40, add(returnDataPtr, 0xA0))  // advance by 160 bytes (5 * 32)
-            
+            mstore(0x40, add(returnDataPtr, 0xA0)) // advance by 160 bytes (5 * 32)
+
             let epochStartTime := sub(sload(epochEndTime.slot), epochDurationCache)
 
             for {} lt(i, indicesLength) {} {
@@ -188,15 +192,16 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
                 mstore(add(inputPtr, 0x04), index)
                 mstore(add(inputPtr, 0x24), _feeRecipient)
 
-                let success := call(
-                    gasLimit,        // gas
-                    jobRegistryCache,// address
-                    0,              // value
-                    inputPtr,       // input memory
-                    0x44,           // input size
-                    returnDataPtr,  // output memory
-                    0xC0            // output size (6 * 32 bytes)
-                )
+                let success :=
+                    call(
+                        gasLimit, // gas
+                        jobRegistryCache, // address
+                        0, // value
+                        inputPtr, // input memory
+                        0x44, // input size
+                        returnDataPtr, // output memory
+                        0xC0 // output size (6 * 32 bytes)
+                    )
 
                 if iszero(success) {
                     i := add(i, 1)
@@ -218,8 +223,8 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
                     // Verify the executor is registered for both modules
                     if inRound {
                         // Load the execution module and fee module from the last two 32-byte words
-                        let executionModuleId := and(mload(add(returnDataPtr, 0x40)), 0xFF)  // 3th word
-                        let feeModuleId := and(mload(add(returnDataPtr, 0x60)), 0xFF)        // 4th word
+                        let executionModuleId := and(mload(add(returnDataPtr, 0x40)), 0xFF) // 3th word
+                        let feeModuleId := and(mload(add(returnDataPtr, 0x60)), 0xFF) // 4th word
                         // Check if executor is registered for both modules
                         let requiredModules := or(shl(1, executionModuleId), shl(1, feeModuleId))
 
@@ -263,16 +268,15 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
                 // during designated rounds, tax goes to protocol balance.
                 // otherwise, tax goes to next epoch pool balance.
                 // increment executedJobsInRoundsOfEpoch only if we are in a round
-                if(inRound) {
+                if (inRound) {
                     executedJobsInRoundsOfEpoch += executionCount;
                     protocolBalance += standardTax;
-                }
-                else {
+                } else {
                     nextEpochPoolBalance += standardTax;
                 }
             }
         }
-        if(executionCountZeroFee > 0) {
+        if (executionCountZeroFee > 0) {
             // handle zero fee tax - update pool and protocol balances
             unchecked {
                 // totalTax is never greater than uint256 max value realistically
@@ -284,23 +288,22 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
                 protocolBalance += zeroFeeTax - halfZeroFeeTax;
             }
         }
-        
+
         // *** TAX TRANSFER ***
         unchecked {
             totalTax = standardTax + zeroFeeTax;
         }
-        if(totalTax > 0) {
-            if(executor.initialized) {
+        if (totalTax > 0) {
+            if (executor.initialized) {
                 // if executor is initialized, use internal balance
                 newBalance = (executorInfo[msg.sender].balance -= totalTax);
-            }
-            else {
+            } else {
                 ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), totalTax);
             }
         }
         // *** DESIGNATED EXECUTOR UPDATES ***
         if (inRound && designatedExecutor == msg.sender) {
-            if(!executor.active) revert NotActiveExecutor();
+            if (!executor.active) revert NotActiveExecutor();
 
             bool checkInEpoch = executor.lastCheckinEpoch != epoch;
             bool checkInRound = executor.lastCheckinRound != round;
@@ -320,10 +323,9 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
                     mstore(0x20, slot)
                     let executorSlot := keccak256(0x00, 0x40)
                     let currentValue := sload(add(executorSlot, 1))
-                    
+
                     // Preserve first 6 bytes (active, initialized, arrayIndex)
                     let preservedBits := and(currentValue, 0xFFFFFFFFFFFF)
-
 
                     // Get current roundsCheckedInEpoch (1 byte after first 6 bytes)
                     let currentRoundsChecked := and(shr(48, currentValue), 0xFF)
@@ -334,26 +336,21 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
                     let currentExecutions := shr(160, currentValue)
                     // Add new executions to it
                     let newExecutions := add(currentExecutions, executionCount)
-                    
+
                     // Pack values:
                     // [0-47]: preserved bits (active, initialized, arrayIndex) (6 bytes)
                     // [48-55]: roundsCheckedInEpoch (1 byte)
                     // [56-63]: lastCheckinRound (1 byte)
                     // [64-159]: lastCheckinEpoch (12 bytes)
                     // [160-255]: executionsInEpochCreatedBeforeEpoch (12 bytes)
-                    let packedValue := or(
-                        preservedBits,
+                    let packedValue :=
                         or(
-                            shl(48, newRoundsChecked),
+                            preservedBits,
                             or(
-                                shl(56, round),
-                                or(
-                                    shl(64, epochValue),
-                                    shl(160, newExecutions)
-                                )
+                                shl(48, newRoundsChecked),
+                                or(shl(56, round), or(shl(64, epochValue), shl(160, newExecutions)))
                             )
                         )
-                    )
                     sstore(add(executorSlot, 1), packedValue)
                 }
                 emit CheckIn(msg.sender, epoch, round);
@@ -364,13 +361,14 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         }
         // *** BALANCE THRESHOLD CHECK AND POTENTIAL DEACTIVATION ***
         // check if executor balance is below threshold and deactivate if true
-        if(executor.active && newBalance < stakingBalanceThresholdPerModule * _countModules(executor.registeredModules)) {
+        if (
+            executor.active && newBalance < stakingBalanceThresholdPerModule * _countModules(executor.registeredModules)
+        ) {
             (address deactivatedExecutor, address lastExecutor) = _deactivateExecutor(executor.arrayIndex);
             executorInfo[lastExecutor].arrayIndex = executor.arrayIndex;
             executorInfo[msg.sender].active = false;
             emit ExecutorDeactivated(deactivatedExecutor);
         }
-
 
         emit BatchExecution(_jobRegistryIndex, standardTax, zeroFeeTax, inRound);
         return (standardTax, zeroFeeTax, executionCount + executionCountZeroFee);
@@ -385,10 +383,8 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
      */
     function stake(uint256 _modulesBitset) public override returns (uint256 stakingAmount) {
         // *** CHECKS ***
-        if (
-            block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
-                && block.timestamp < epochEndTime
-        ) {
+        if (block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration && block.timestamp < epochEndTime)
+        {
             revert InvalidBlockTime();
         }
         if (executorInfo[msg.sender].initialized) revert AlreadyStaked();
@@ -397,8 +393,8 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         // only allow registration for existing modules
         uint256 validModules = _modulesBitset & _getValidModulesMask();
         uint256 numberOfModules = _countModules(validModules);
-        if(numberOfModules < 2) revert NumberOfRegisteredModulesBelowMinimum();
-        
+        if (numberOfModules < 2) revert NumberOfRegisteredModulesBelowMinimum();
+
         // *** STAKING ***
         stakingAmount = stakingAmountPerModule * numberOfModules;
         ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), stakingAmount);
@@ -427,10 +423,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
      */
     function unstake() public override {
         // *** CHECKS ***
-        if (
-            block.timestamp >= epochEndTime - epochDuration + commitPhaseDuration
-                && block.timestamp < epochEndTime
-        ) {
+        if (block.timestamp >= epochEndTime - epochDuration + commitPhaseDuration && block.timestamp < epochEndTime) {
             revert InvalidBlockTime();
         }
         Executor memory executor = executorInfo[msg.sender];
@@ -461,10 +454,8 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
      */
     function topup(uint256 _amount) public override {
         // *** CHECKS ***
-        if (
-            block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
-                && block.timestamp < epochEndTime
-        ) {
+        if (block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration && block.timestamp < epochEndTime)
+        {
             revert InvalidBlockTime();
         }
         Executor storage executor = executorInfo[msg.sender];
@@ -555,7 +546,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         Executor storage executor = executorInfo[_executor];
         uint256 slashAmount = commitSlashingAmountPerModule * _countModules(executor.registeredModules);
         _slash(slashAmount, executor, _recipient);
-        
+
         // *** PREVENT FROM SLASHING AGAIN ***
         commitData.revealed = true;
 
@@ -579,7 +570,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         // *** REWARD DISTRIBUTION ***
         uint256 totalDistributed;
         // distribute pool balance to designated excutors of epoch who executed jobs which were created before epoch started
-        if(executedJobsInRoundsOfEpoch > 0) {
+        if (executedJobsInRoundsOfEpoch > 0) {
             uint256 maxRewardTokensPerRound = remainingPoolBalance / roundsPerEpoch;
             uint256 numberOfReceivers = poolCutReceivers.length;
 
@@ -599,11 +590,9 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
                     uint256 executionRewards = maxRewardPerExecution * executor.executionsInRoundsInEpoch;
 
                     // take min of executionRewards and maxRewardTokens
-                    uint256 executorShare = executionRewards < maxRewardTokens ? 
-                        executionRewards : 
-                        maxRewardTokens;
+                    uint256 executorShare = executionRewards < maxRewardTokens ? executionRewards : maxRewardTokens;
 
-                    if(executorShare > 0) {
+                    if (executorShare > 0) {
                         // skip if executorShare is 0
                         executor.balance += executorShare;
                         totalDistributed += executorShare;
@@ -651,7 +640,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
 
         // *** COMMITMENT STORAGE ***
         commitmentMap[msg.sender] = CommitData({commitment: _commitment, epoch: epoch, revealed: false});
-        
+
         emit Commitment(msg.sender, epoch);
     }
 
@@ -694,13 +683,12 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         isJobRegistry[_registry] = true;
     }
 
-
     /**
-    * @notice Registers the executor for specific modules
-    * @notice The _modulesBitset should only contain bits for new modules to register. Otherwise the call will revert.
-    * @param _modulesBitset Bitset representing all modules to register for.
-    * @return stakingAmount The amount of staking tokens transferred to the coordinator.
-    */
+     * @notice Registers the executor for specific modules
+     * @notice The _modulesBitset should only contain bits for new modules to register. Otherwise the call will revert.
+     * @param _modulesBitset Bitset representing all modules to register for.
+     * @return stakingAmount The amount of staking tokens transferred to the coordinator.
+     */
     function registerModules(uint256 _modulesBitset) public override returns (uint256 stakingAmount) {
         // *** CHECKS ***
         Executor storage executor = executorInfo[msg.sender];
@@ -709,15 +697,14 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
 
         // only allow registration for existing modules
         uint256 validModules = _modulesBitset & _getValidModulesMask();
-        
+
         // *** TRANSFER STAKE ***
         // executor has to stake for each registered module
         // if the executor balance is already below thereshold, this will not be enough to activate it
         uint256 numberOfNewModules = _countModules(validModules);
         if (numberOfNewModules > 0) {
             ERC20(stakingToken).safeTransferFrom(msg.sender, address(this), numberOfNewModules * stakingAmountPerModule);
-        }
-        else {
+        } else {
             revert NoModulesToRegister();
         }
         unchecked {
@@ -729,15 +716,15 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
 
         // *** MODULE REGISTRATION ***
         _registerModule(executor, validModules);
-        
+
         emit ModulesRegistered(msg.sender, executor.registeredModules);
     }
 
     /**
-    * @notice Deregisters the executor from specific modules
-    * @notice The executor has to wait for the minimum registration period to be over before deregistering modules
-    * @param _modulesBitset Bitset representing all modules to deregister from
-    */
+     * @notice Deregisters the executor from specific modules
+     * @notice The executor has to wait for the minimum registration period to be over before deregistering modules
+     * @param _modulesBitset Bitset representing all modules to deregister from
+     */
     function deregisterModules(uint256 _modulesBitset) public override {
         // *** CHECKS ***
         Executor storage executor = executorInfo[msg.sender];
@@ -748,11 +735,11 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
                 revert MinimumRegistrationPeriodNotOver();
             }
         }
-        
+
         // *** DEREGISTRATION ***
         _deregisterModule(executor, _modulesBitset);
-        if(_countModules(executor.registeredModules) < 2) revert NumberOfRegisteredModulesBelowMinimum();
-        
+        if (_countModules(executor.registeredModules) < 2) revert NumberOfRegisteredModulesBelowMinimum();
+
         emit ModulesDeregistered(msg.sender, executor.registeredModules);
     }
 
@@ -801,24 +788,25 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-    * @notice Counts number of modules registered (number of 1s in bitset)
-    * @param _modulesBitset The bitset to count
-    * @return count The number of modules registered
-    */
+     * @notice Counts number of modules registered (number of 1s in bitset)
+     * @param _modulesBitset The bitset to count
+     * @return count The number of modules registered
+     */
     function _countModules(uint256 _modulesBitset) private pure returns (uint256) {
         uint256 x = _modulesBitset;
         x = x - ((x >> 1) & 0x5555555555555555555555555555555555555555555555555555555555555555);
-        x = (x & 0x3333333333333333333333333333333333333333333333333333333333333333) + ((x >> 2) & 0x3333333333333333333333333333333333333333333333333333333333333333);
+        x = (x & 0x3333333333333333333333333333333333333333333333333333333333333333)
+            + ((x >> 2) & 0x3333333333333333333333333333333333333333333333333333333333333333);
         x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f;
         return (x * 0x0101010101010101010101010101010101010101010101010101010101010101) >> 248;
     }
 
     /**
-    * @notice Checks if two module bitsets have any modules in common
-    * @param _modulesA First module bitset
-    * @param _modulesB Second module bitset
-    * @return true if the bitsets share at least one active module
-    */
+     * @notice Checks if two module bitsets have any modules in common
+     * @param _modulesA First module bitset
+     * @param _modulesB Second module bitset
+     * @return true if the bitsets share at least one active module
+     */
     function _hasCommonModules(uint256 _modulesA, uint256 _modulesB) private pure returns (bool) {
         return (_modulesA & _modulesB) != 0;
     }
@@ -866,7 +854,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
             newNumberOfActiveExecutors = --numberOfActiveExecutors;
         }
         address lastExecutor = activeExecutors[newNumberOfActiveExecutors];
-	    address deactivatedExecutor = activeExecutors[_index];
+        address deactivatedExecutor = activeExecutors[_index];
         activeExecutors[_index] = lastExecutor;
         delete activeExecutors[newNumberOfActiveExecutors];
         return (deactivatedExecutor, lastExecutor);
@@ -882,9 +870,12 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
      */
     function _slash(uint256 _amount, Executor storage _executor, address _recipient) private {
         // *** BALANCE THRESHOLD CHECK AND POTENTIAL DEACTIVATION ***
-        if ((_executor.balance -= _amount) < stakingBalanceThresholdPerModule * _countModules(_executor.registeredModules)) {
+        if (
+            (_executor.balance -= _amount)
+                < stakingBalanceThresholdPerModule * _countModules(_executor.registeredModules)
+        ) {
             // index in activeStakers array
-            (address deactivatedExecutor,address lastExecutor) = _deactivateExecutor(_executor.arrayIndex);
+            (address deactivatedExecutor, address lastExecutor) = _deactivateExecutor(_executor.arrayIndex);
             executorInfo[lastExecutor].arrayIndex = _executor.arrayIndex;
             _executor.active = false;
             emit ExecutorDeactivated(deactivatedExecutor);
@@ -893,14 +884,14 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         unchecked {
             // no division by zero. Total token balances will not exceed uint256 max value
             uint256 rewardAmount = _amount / 2;
-            if(executorInfo[_recipient].initialized) {
+            if (executorInfo[_recipient].initialized) {
                 executorInfo[_recipient].balance += rewardAmount;
             } else {
                 // if recipient is not an initialized executor, do normal ERC20 transfer
                 ERC20(stakingToken).safeTransfer(_recipient, rewardAmount);
             }
             protocolBalance += _amount - rewardAmount;
-        } 
+        }
     }
 
     /**

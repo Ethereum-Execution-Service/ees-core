@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import "./Base.t.sol";
 import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
@@ -37,7 +37,11 @@ contract CoordinatorSlashInactiveTest is CoordinatorBaseTest {
         (uint256 balance, bool active, bool initialized, uint32 arrayIndex,,,,,,) = coordinator.executorInfo(executor);
         assertEq(balance, stakingAmountPerModule * 2 - inactiveSlashingAmountPerModule * 2, "balance mismatch");
         assertTrue(active, "not active");
-        assertEq(endBalanceSlasher, startBalanceSlasher + (inactiveSlashingAmountPerModule * 2) / 2, "slasher balance mismatch");
+        assertEq(
+            endBalanceSlasher,
+            startBalanceSlasher + (inactiveSlashingAmountPerModule * 2) / 2,
+            "slasher balance mismatch"
+        );
     }
 
     function test_InactiveSlashingNotExecutor(address slasher, uint256 time, bytes32 seed) public {
@@ -48,7 +52,6 @@ contract CoordinatorSlashInactiveTest is CoordinatorBaseTest {
 
         vm.prank(executor);
         coordinator.stake(modulesToRegister);
-
 
         uint256 startBalanceSlasher = token0.balanceOf(slasher);
 
@@ -66,7 +69,11 @@ contract CoordinatorSlashInactiveTest is CoordinatorBaseTest {
         (uint256 balance, bool active, bool initialized, uint32 arrayIndex,,,,,,) = coordinator.executorInfo(executor);
         assertEq(balance, stakingAmountPerModule * 2 - inactiveSlashingAmountPerModule * 2, "balance mismatch");
         assertTrue(active, "not active");
-        assertEq(endBalanceSlasher, startBalanceSlasher + (inactiveSlashingAmountPerModule * 2) / 2, "slasher balance mismatch");
+        assertEq(
+            endBalanceSlasher,
+            startBalanceSlasher + (inactiveSlashingAmountPerModule * 2) / 2,
+            "slasher balance mismatch"
+        );
     }
 
     function test_SlashingRoundExecuted(address slasher, uint40 epoch, bytes32 seed) public {
@@ -146,9 +153,15 @@ contract CoordinatorSlashInactiveTest is CoordinatorBaseTest {
         coordinator.slashInactiveExecutor(executor, 0, slasher);
         (uint256 endBalanceSlasher,,,,,,,,,) = coordinator.executorInfo(slasher);
         (uint256 balance, bool active, bool initialized, uint32 arrayIndex,,,,,,) = coordinator.executorInfo(executor);
-        assertEq(balance, stakingBalanceThresholdPerModule * 2 + 1 - inactiveSlashingAmountPerModule * 2, "balance mismatch");
+        assertEq(
+            balance, stakingBalanceThresholdPerModule * 2 + 1 - inactiveSlashingAmountPerModule * 2, "balance mismatch"
+        );
         assertFalse(active, "active");
-        assertEq(endBalanceSlasher, startBalanceSlasher + (inactiveSlashingAmountPerModule * 2) / 2, "slasher balance mismatch");
+        assertEq(
+            endBalanceSlasher,
+            startBalanceSlasher + (inactiveSlashingAmountPerModule * 2) / 2,
+            "slasher balance mismatch"
+        );
         assertEq(coordinator.getNumberOfActiveExecutors(), 1, "number of active executors mismatch");
     }
 

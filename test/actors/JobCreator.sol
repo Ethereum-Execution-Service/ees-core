@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {Test} from "forge-std/src/Test.sol";
 import {MockJobRegistry} from "../mocks/MockJobRegistry.sol";
@@ -15,13 +15,7 @@ contract JobCreator is Test {
         token = _token;
     }
 
-    function createJobNewIndex(uint256 _index) public {
-    }
+    function createJobNewIndex(uint256 _index) public {}
 
-    function createJobExistingIndex(uint256 _index) public {
-    }
-
-
-    
-
+    function createJobExistingIndex(uint256 _index) public {}
 }

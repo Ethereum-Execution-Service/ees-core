@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {Test} from "forge-std/src/Test.sol";
 import {MockJobRegistry} from "../mocks/MockJobRegistry.sol";
@@ -127,7 +127,7 @@ contract NonceBitmapTest is Test {
         vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), nonce, true);
     }
-    
+
     function test_InvalidateReusableNonce(uint256 nonce) public {
         jobRegistry.useUnorderedNonce(address(this), nonce, false);
         uint256 wordPos = nonce / 256;
@@ -136,5 +136,4 @@ contract NonceBitmapTest is Test {
         vm.expectRevert(IJobRegistry.InvalidNonce.selector);
         jobRegistry.useUnorderedNonce(address(this), nonce, true);
     }
-    
 }

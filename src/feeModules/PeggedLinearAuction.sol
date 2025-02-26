@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {IExecutionModule} from "../interfaces/IExecutionModule.sol";
 import {IPeggedLinearAuction} from "../interfaces/feeModules/IPeggedLinearAuction.sol";
@@ -39,18 +39,22 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
         uint24 _zeroFeeWindow,
         uint256 _executionTime,
         uint256 _variableGasConsumption
-    ) external override onlyJobRegistry returns (uint256 executionFee, address executionFeeToken, bool inZeroFeeWindow) {
+    )
+        external
+        override
+        onlyJobRegistry
+        returns (uint256 executionFee, address executionFeeToken, bool inZeroFeeWindow)
+    {
         Params memory job = params[_index];
         executionFeeToken = job.executionFeeToken;
 
-
-        if(block.timestamp - _executionTime < _zeroFeeWindow) {
+        if (block.timestamp - _executionTime < _zeroFeeWindow) {
             executionFee = 0;
             inZeroFeeWindow = true;
         } else {
             // else calculate fee as a linear function between minOverheadBps and maxOverheadBps of base fee plus tax over _executionWindow, starting from _zeroFeeWindow
             (address taxToken, uint256 executionTax, uint256 protocolPoolCutBps) = coordinator.getTaxConfig();
-        
+
             // get tak token decimals
             uint8 taxTokenDecimals = ERC20(taxToken).decimals();
 
@@ -70,7 +74,7 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
 
             // we have to scale price from per ETH to per wei basis, so div by 10**18
             // number of tokens to pay for base fee in fee token decimals
-            uint256 totalFeeBase = (priceInETH * baseFee * totalGasConsumption) / 10**18;
+            uint256 totalFeeBase = (priceInETH * baseFee * totalGasConsumption) / 10 ** 18;
 
             uint256 feeDiff;
             uint256 windowDiff;

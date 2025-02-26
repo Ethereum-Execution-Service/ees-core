@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {RegularTimeInterval} from "../../src/executionModules/RegularTimeInterval.sol";
 import {Coordinator} from "../../src/Coordinator.sol";

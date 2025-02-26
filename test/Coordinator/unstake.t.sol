@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import "./Base.t.sol";
 import {IJobRegistry} from "../../src/interfaces/IJobRegistry.sol";
@@ -108,9 +108,7 @@ contract CoordinatorUnstakeTest is CoordinatorBaseTest {
 
     function test_UnstakeInvalidBlockTime(uint256 time) public {
         time = bound(
-            time,
-            defaultEpochEndTime - coordinator.getEpochDuration() + commitPhaseDuration,
-            defaultEpochEndTime - 1
+            time, defaultEpochEndTime - coordinator.getEpochDuration() + commitPhaseDuration, defaultEpochEndTime - 1
         );
         vm.prank(executor);
         coordinator.stake(modulesToRegister);

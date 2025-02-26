@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {Test} from "forge-std/src/Test.sol";
 import {TokenProvider} from "../utils/TokenProvider.sol";
@@ -25,14 +25,13 @@ contract RegularTimeIntervalTest is Test, TokenProvider, JobSpecificationSignatu
 
     address from;
     uint256 fromPrivateKey;
-    
+
     address address0 = address(0x0);
     address address2 = address(0x2);
 
     function setUp() public {
         defaultExecutionWindow = 1800;
         defaultStartTime = 1641070800;
-
 
         coordinatorProvider = new MockCoordinatorProvider(address(0x3));
         coordinator = MockCoordinator(coordinatorProvider.getMockCoordinator());

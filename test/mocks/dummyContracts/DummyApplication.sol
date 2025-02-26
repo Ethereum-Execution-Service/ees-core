@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {IApplication} from "../../../src/interfaces/IApplication.sol";
 import {JobRegistry} from "../../../src/JobRegistry.sol";
@@ -18,10 +18,15 @@ contract DummyApplication is IApplication {
         revertOnDelete = false;
     }
 
-    function onCreateJob(uint256 _index, address _owner, bool _ignoreAppRevert, uint24 _executionWindow, bytes1 _executionModule, bytes calldata _executionModuleInput, bytes calldata _applicationInput)
-        external
-        override
-    {}
+    function onCreateJob(
+        uint256 _index,
+        address _owner,
+        bool _ignoreAppRevert,
+        uint24 _executionWindow,
+        bytes1 _executionModule,
+        bytes calldata _executionModuleInput,
+        bytes calldata _applicationInput
+    ) external override {}
 
     function onDeleteJob(uint256 _index, address _owner) external override {
         if (revertOnDelete) {

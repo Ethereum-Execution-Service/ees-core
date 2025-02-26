@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.27;
+pragma solidity 0.8.26;
 
 import {Test} from "forge-std/src/Test.sol";
 import {JobRegistry} from "../../src/JobRegistry.sol";
@@ -7,6 +7,7 @@ import {MockCoordinatorProvider} from "../utils/MockCoordinatorProvider.sol";
 import {MockCoordinator} from "../mocks/MockCoordinator.sol";
 import {PublicERC6492Validator} from "../../src/PublicERC6492Validator.sol";
 // forge test --match-contract EIP712
+
 contract EIP712Test is Test {
     bytes32 private constant TYPE_HASH =
         keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)");

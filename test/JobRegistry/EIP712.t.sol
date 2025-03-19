@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {Test} from "forge-std/src/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {JobRegistry} from "../../src/JobRegistry.sol";
 import {MockCoordinatorProvider} from "../utils/MockCoordinatorProvider.sol";
 import {MockCoordinator} from "../mocks/MockCoordinator.sol";

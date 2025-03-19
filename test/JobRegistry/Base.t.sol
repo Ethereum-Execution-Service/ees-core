@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {Test} from "forge-std/src/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {TokenProvider} from "../utils/TokenProvider.sol";
 import {GasSnapshot} from "forge-gas-snapshot/src/GasSnapshot.sol";
 import {JobSpecificationSignature} from "../utils/JobSpecificationSignature.sol";

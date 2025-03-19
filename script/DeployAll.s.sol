@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.26;
 
-import "forge-std/src/console2.sol";
-import "forge-std/src/Script.sol";
+import "forge-std/console2.sol";
+import "forge-std/Script.sol";
 import {JobRegistry} from "../src/JobRegistry.sol";
 import {RegularTimeInterval} from "../src/executionModules/RegularTimeInterval.sol";
 import {LinearAuction} from "../src/feeModules/LinearAuction.sol";

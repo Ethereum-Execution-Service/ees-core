@@ -10,25 +10,24 @@ import {FeeModuleInputHash} from "./libraries/FeeModuleInputHash.sol";
 import {EIP712} from "./EIP712.sol";
 import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
-import {Owned} from "solmate/src/auth/Owned.sol";
 import {Coordinator} from "./Coordinator.sol";
 import {SafeTransferFromNoRevert} from "./libraries/SafeTransferFromNoRevert.sol";
 import {PublicERC6492Validator} from "./PublicERC6492Validator.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 
 /**
- * __/\\\\\\\\\\\\\\\__/\\\\\\\\\\\\\\\_____/\\\\\\\\\\\___        
- *  _\/\\\///////////__\/\\\///////////____/\\\/////////\\\_       
- *   _\/\\\_____________\/\\\______________\//\\\______\///__      
- *    _\/\\\\\\\\\\\_____\/\\\\\\\\\\\_______\////\\\_________     
- *     _\/\\\///////______\/\\\///////___________\////\\\______    
- *      _\/\\\_____________\/\\\_____________________\////\\\___   
- *       _\/\\\_____________\/\\\______________/\\\______\//\\\__  
- *        _\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\\_\///\\\\\\\\\\\/___ 
+ * __/\\\\\\\\\\\\\\\__/\\\\\\\\\\\\\\\_____/\\\\\\\\\\\___
+ *  _\/\\\///////////__\/\\\///////////____/\\\/////////\\\_
+ *   _\/\\\_____________\/\\\______________\//\\\______\///__
+ *    _\/\\\\\\\\\\\_____\/\\\\\\\\\\\_______\////\\\_________
+ *     _\/\\\///////______\/\\\///////___________\////\\\______
+ *      _\/\\\_____________\/\\\_____________________\////\\\___
+ *       _\/\\\_____________\/\\\______________/\\\______\//\\\__
+ *        _\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\\_\///\\\\\\\\\\\/___
  *         _\///////////////__\///////////////____\///////////_____
  */
 
-/// @author Victor Brevig
+/// @author 0xst4ck
 /// @notice JobRegistry keeps track of all jobs in the EES. It is through this contract jobs are created, managed and deleted.
 contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     using SafeTransferLib for ERC20;
@@ -43,7 +42,7 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     Coordinator internal immutable coordinator;
 
     // covering constant gas usage of execute which is not already measured in the function
-    uint256 private constant _EXECUTION_GAS_OVERHEAD = 200000;
+    uint256 private constant _EXECUTION_GAS_OVERHEAD = 200_000;
 
     // for single use nonces
     mapping(address => mapping(uint256 => uint256)) public nonceBitmap;

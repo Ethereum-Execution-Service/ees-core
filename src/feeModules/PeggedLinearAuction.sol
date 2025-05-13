@@ -7,7 +7,7 @@ import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
 import {Coordinator} from "../Coordinator.sol";
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 
-/// @author Victor Brevig
+/// @author 0xst4ck
 contract PeggedLinearAuction is IPeggedLinearAuction {
     Coordinator public immutable coordinator;
     mapping(uint256 => Params) public params;

@@ -11,18 +11,18 @@ import {ModuleRegistry} from "./ModuleRegistry.sol";
 import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
 
 /**
- * __/\\\\\\\\\\\\\\\__/\\\\\\\\\\\\\\\_____/\\\\\\\\\\\___        
- *  _\/\\\///////////__\/\\\///////////____/\\\/////////\\\_       
- *   _\/\\\_____________\/\\\______________\//\\\______\///__      
- *    _\/\\\\\\\\\\\_____\/\\\\\\\\\\\_______\////\\\_________     
- *     _\/\\\///////______\/\\\///////___________\////\\\______    
- *      _\/\\\_____________\/\\\_____________________\////\\\___   
- *       _\/\\\_____________\/\\\______________/\\\______\//\\\__  
- *        _\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\\_\///\\\\\\\\\\\/___ 
+ * __/\\\\\\\\\\\\\\\__/\\\\\\\\\\\\\\\_____/\\\\\\\\\\\___
+ *  _\/\\\///////////__\/\\\///////////____/\\\/////////\\\_
+ *   _\/\\\_____________\/\\\______________\//\\\______\///__
+ *    _\/\\\\\\\\\\\_____\/\\\\\\\\\\\_______\////\\\_________
+ *     _\/\\\///////______\/\\\///////___________\////\\\______
+ *      _\/\\\_____________\/\\\_____________________\////\\\___
+ *       _\/\\\_____________\/\\\______________/\\\______\//\\\__
+ *        _\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\\_\///\\\\\\\\\\\/___
  *         _\///////////////__\///////////////____\///////////_____
  */
 
-/// @author Victor Brevig
+/// @author 0xst4ck
 /// @notice Coordinator is responsible for coordination of executors including job execution, staking and slashing.
 contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     using SafeTransferLib for ERC20;
@@ -76,8 +76,8 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
 
     mapping(address => CommitData) public commitmentMap;
 
-    constructor(InitSpec memory _spec, address _treasury)
-        TaxHandler(_treasury, _spec.executionTax, _spec.zeroFeeExecutionTax, _spec.protocolPoolCutBps)
+    constructor(InitSpec memory _spec, address _owner)
+        TaxHandler(_owner, _spec.executionTax, _spec.zeroFeeExecutionTax, _spec.protocolPoolCutBps)
     {
         require(
             _spec.stakingBalanceThresholdPerModule <= _spec.stakingAmountPerModule,
@@ -763,12 +763,13 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     /**
      * @notice Withdraws the protocol balance to the owner.
      * @notice Can only be called by the owner.
+     * @param _recipient The recipient of the protocol balance.
      * @return amount The amount of protocol balance withdrawn.
      */
-    function withdrawProtocolBalance() public override onlyOwner returns (uint256 amount) {
+    function withdrawProtocolBalance(address _recipient) public override onlyOwner returns (uint256 amount) {
         amount = protocolBalance;
         protocolBalance = 0;
-        ERC20(stakingToken).safeTransfer(owner, amount);
+        ERC20(stakingToken).safeTransfer(_recipient, amount);
     }
 
     /**

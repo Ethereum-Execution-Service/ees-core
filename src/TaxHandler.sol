@@ -5,7 +5,7 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {ModuleRegistry} from "./ModuleRegistry.sol";
 import {ITaxHandler} from "./interfaces/ITaxHandler.sol";
 
-/// @author Victor Brevig
+/// @author 0xst4ck
 /// @notice TaxHandler is responsible for handling tax updates for EES.
 contract TaxHandler is ModuleRegistry, ITaxHandler {
     uint256 internal lastExecutionTaxUpdate;
@@ -22,7 +22,7 @@ contract TaxHandler is ModuleRegistry, ITaxHandler {
     uint256 internal executionTax; // in units of tax token
     uint256 internal zeroFeeExecutionTax; // in units of tax token
     uint256 internal protocolPoolCutBps; // in basis points (e.g. 1000 = 10%)
-    uint256 internal constant BPS_DENOMINATOR = 10000; // 100% in basis points
+    uint256 internal constant BPS_DENOMINATOR = 10_000; // 100% in basis points
 
     // maximum reward per execution in tax token. Should be updated when executionTax or protocolPoolCutBps are updated
     uint256 internal maxRewardPerExecution;
@@ -53,7 +53,7 @@ contract TaxHandler is ModuleRegistry, ITaxHandler {
         if (block.timestamp < lastExecutionTaxUpdate + executionTaxUpdateCooldown) revert UpdateOnCooldown();
 
         uint256 diff = _executionTax > executionTax ? _executionTax - executionTax : executionTax - _executionTax;
-        uint256 maxDiff = executionTax * executionTaxUpdateBps / 10_000;
+        uint256 maxDiff = executionTax * executionTaxUpdateBps / BPS_DENOMINATOR;
         if (diff > maxDiff) revert TaxUpdateTooLarge();
 
         lastExecutionTaxUpdate = block.timestamp;
@@ -75,7 +75,7 @@ contract TaxHandler is ModuleRegistry, ITaxHandler {
         uint256 diff = _zeroFeeExecutionTax > zeroFeeExecutionTax
             ? _zeroFeeExecutionTax - zeroFeeExecutionTax
             : zeroFeeExecutionTax - _zeroFeeExecutionTax;
-        uint256 maxDiff = zeroFeeExecutionTax * executionTaxUpdateBps / 10_000;
+        uint256 maxDiff = zeroFeeExecutionTax * executionTaxUpdateBps / BPS_DENOMINATOR;
         if (diff > maxDiff) revert TaxUpdateTooLarge();
 
         lastZeroFeeExecutionTaxUpdate = block.timestamp;
@@ -95,7 +95,7 @@ contract TaxHandler is ModuleRegistry, ITaxHandler {
         uint256 diff = _protocolPoolCutBps > protocolPoolCutBps
             ? _protocolPoolCutBps - protocolPoolCutBps
             : protocolPoolCutBps - _protocolPoolCutBps;
-        uint256 maxDiff = protocolPoolCutBps * protocolPoolCutUpdateBps / 10_000;
+        uint256 maxDiff = protocolPoolCutBps * protocolPoolCutUpdateBps / BPS_DENOMINATOR;
         if (diff > maxDiff) revert TaxUpdateTooLarge();
 
         lastProtocolPoolCutUpdate = block.timestamp;

@@ -225,7 +225,7 @@ contract CoordinatorHandler is Test, TokenProvider {
 
     function withdrawProtocolBalance() public {
         vm.prank(address(0x5));
-        totalProtocolWithdrawalAmount += coordinator.withdrawProtocolBalance();
+        totalProtocolWithdrawalAmount += coordinator.withdrawProtocolBalance(address(0x5));
     }
 
     function getProtocolBalance() public view returns (uint256) {

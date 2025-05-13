@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {IRegularTimeInterval} from "../interfaces/executionModules/IRegularTimeInterval.sol";
 import {Coordinator} from "../Coordinator.sol";
 
-/// @author Victor Brevig
+/// @author 0xst4ck
 contract RegularTimeInterval is IRegularTimeInterval {
     Coordinator public immutable coordinator;
     mapping(uint256 => Params) public params;

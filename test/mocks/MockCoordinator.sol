@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {Coordinator} from "../../src/Coordinator.sol";
 
-/// @author Victor Brevig
+/// @author 0xst4ck
 contract MockCoordinator is Coordinator {
     constructor(InitSpec memory _spec, address _treasury) Coordinator(_spec, _treasury) {}
 

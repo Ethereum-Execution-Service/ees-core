@@ -58,7 +58,7 @@ interface ICoordinator {
     function commit(bytes32 _commitment) external;
     function reveal(bytes calldata _signature) external;
     function withdrawStakingBalance(uint256 _amount) external;
-    function withdrawProtocolBalance() external returns (uint256 amount);
+    function withdrawProtocolBalance(address _recipient) external returns (uint256 amount);
     function registerModules(uint256 _modulesBitset) external returns (uint256 stakingAmount);
     function deregisterModules(uint256 _modulesBitset) external;
     function addJobRegistry(address _registry) external;

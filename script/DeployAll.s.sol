@@ -12,32 +12,30 @@ import {ICoordinator} from "../src/interfaces/ICoordinator.sol";
 import {PublicERC6492Validator} from "../src/PublicERC6492Validator.sol";
 
 contract DeployAll is Script {
-    address treasury;
     uint16 treasuryBasisPoints;
     uint8 protocolFeeRatio;
     // owner is deployer
-    address owner;
+    address owner = 0xCE02d0981c1D4dCA9331178F322506C06E394bb0;
 
     ICoordinator.InitSpec initSpec;
 
     function setUp() public {
         // set to treasury
-        treasury = 0x303cAE9641B868722194Bd9517eaC5ca2ad6e71a;
         treasuryBasisPoints = 2000;
 
         initSpec = ICoordinator.InitSpec({
             // Base sepolia USDC copy
             stakingToken: 0x7139F4601480d20d43Fa77780B67D295805aD31a,
-            // 500 USDC - 500000000
-            stakingAmountPerModule: 500000000,
-            // 30 seconds, should probably be something like 30 days in prod
-            minimumRegistrationPeriod: 30 seconds,
-            // 300 USDC - 300000000
-            stakingBalanceThresholdPerModule: 300000000,
-            // 200 USDC - 200000000
-            inactiveSlashingAmountPerModule: 200000000,
             // 100 USDC - 100000000
-            commitSlashingAmountPerModule: 100000000,
+            stakingAmountPerModule: 100000000,
+            // 30 days
+            minimumRegistrationPeriod: 30 days,
+            // 30 USDC - 30000000
+            stakingBalanceThresholdPerModule: 30000000,
+            // 20 USDC - 20000000
+            inactiveSlashingAmountPerModule: 20000000,
+            // 10 USDC - 10000000
+            commitSlashingAmountPerModule: 10000000,
             roundDuration: 20,
             roundsPerEpoch: 5,
             roundBuffer: 15,
@@ -67,7 +65,7 @@ contract DeployAll is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        coordinator = new Coordinator(initSpec, treasury);
+        coordinator = new Coordinator(initSpec, owner);
         console2.log("Coordinator Deployed:", address(coordinator));
 
         publicERC6492Validator = new PublicERC6492Validator();
@@ -84,12 +82,14 @@ contract DeployAll is Script {
         linearAuction = new LinearAuction(coordinator);
         console2.log("LinearAuction Deployed:", address(linearAuction));
 
+        /*
         peggedLinearAuction = new PeggedLinearAuction(coordinator);
         console2.log("PeggedLinearAuction Deployed:", address(peggedLinearAuction));
+        */
 
         coordinator.addExecutionModule(regularTimeInterval);
         coordinator.addFeeModule(linearAuction);
-        coordinator.addFeeModule(peggedLinearAuction);
+        //coordinator.addFeeModule(peggedLinearAuction);
 
         vm.stopBroadcast();
     }

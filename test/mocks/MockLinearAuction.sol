@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {LinearAuction} from "../../src/feeModules/LinearAuction.sol";
 import {Coordinator} from "../../src/Coordinator.sol";
 
-/// @author Victor Brevig
+/// @author 0xst4ck
 contract MockLinearAuction is LinearAuction {
     constructor(Coordinator _coordinator) LinearAuction(_coordinator) {}
 

@@ -5,9 +5,9 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {IExecutionModule} from "./interfaces/IExecutionModule.sol";
 import {IFeeModule} from "./interfaces/IFeeModule.sol";
 import {IModuleRegistry} from "./interfaces/IModuleRegistry.sol";
-/// @author Victor Brevig
-/// @notice ModuleRegistry is responsible for handling module registration and managementfor EES.
 
+/// @author 0xst4ck
+/// @notice ModuleRegistry is responsible for handling module registration and managementfor EES.
 contract ModuleRegistry is Owned, IModuleRegistry {
     constructor(address _owner) Owned(_owner) {}
 

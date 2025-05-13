@@ -5,7 +5,7 @@ import {IExecutionModule} from "../interfaces/IExecutionModule.sol";
 import {ILinearAuction} from "../interfaces/feeModules/ILinearAuction.sol";
 import {Coordinator} from "../Coordinator.sol";
 
-/// @author Victor Brevig
+/// @author 0xst4ck
 contract LinearAuction is ILinearAuction {
     Coordinator public immutable coordinator;
     mapping(uint256 => Params) public params;

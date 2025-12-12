@@ -86,7 +86,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     uint8 internal immutable roundBuffer;
 
     /// @notice Total duration of an epoch in seconds
-    uint8 internal immutable epochDuration;
+    uint16 internal immutable epochDuration;
 
     /// @notice Duration of commit phase in seconds
     uint8 internal immutable commitPhaseDuration;
@@ -163,7 +163,8 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         roundBuffer = _spec.roundBuffer;
         slashingDuration = _spec.slashingDuration;
         selectionPhaseDuration = _spec.commitPhaseDuration + _spec.revealPhaseDuration;
-        epochDuration = selectionPhaseDuration + totalRoundDuration * roundsPerEpoch + slashingDuration;
+        epochDuration = uint16(selectionPhaseDuration) + uint16(totalRoundDuration) * uint16(roundsPerEpoch)
+            + uint16(slashingDuration);
         commitPhaseDuration = _spec.commitPhaseDuration;
         revealPhaseDuration = _spec.revealPhaseDuration;
         epochEndTime = block.timestamp;
@@ -225,7 +226,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
         // *** JOB REGISTRY EXECUTION CALLS ***
         address jobRegistryCache = jobRegistries[_jobRegistryIndex];
         uint256 indicesLength = _indices.length;
-        uint8 epochDurationCache = epochDuration;
+        uint16 epochDurationCache = epochDuration;
         uint96 executionCount;
         uint96 executionCountZeroFee;
         assembly {

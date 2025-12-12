@@ -5,7 +5,6 @@ import {JobRegistry} from "../../src/JobRegistry.sol";
 import {Coordinator} from "../../src/Coordinator.sol";
 import {PublicERC6492Validator} from "../../src/PublicERC6492Validator.sol";
 
-/// @author 0xst4ck
 contract MockJobRegistry is JobRegistry {
     constructor(Coordinator _coordinator, PublicERC6492Validator _publicERC6492Validator)
         JobRegistry(_coordinator, _publicERC6492Validator)

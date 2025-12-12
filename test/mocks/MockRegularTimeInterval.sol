@@ -4,7 +4,6 @@ pragma solidity 0.8.26;
 import {RegularTimeInterval} from "../../src/executionModules/RegularTimeInterval.sol";
 import {Coordinator} from "../../src/Coordinator.sol";
 
-/// @author 0xst4ck
 contract MockRegularTimeInterval is RegularTimeInterval {
     constructor(Coordinator _coordinator) RegularTimeInterval(_coordinator) {}
 

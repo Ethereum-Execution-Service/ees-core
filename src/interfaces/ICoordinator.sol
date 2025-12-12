@@ -96,4 +96,5 @@ interface ICoordinator {
     error ExecutorNotRegisteredForModules();
     error JobRegistryNotSet();
     error DesignatedExecutorSupportsModules();
+    error NoActiveExecutors();
 }

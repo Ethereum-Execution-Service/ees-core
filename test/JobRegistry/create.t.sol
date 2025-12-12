@@ -49,13 +49,23 @@ contract JobRegistryCreateTest is JobRegistryBaseTest {
         jobRegistry.createJob(genericJobSpecification, sponsor, sponsorSig, "", UINT256_MAX);
     }
 
-    function testFail_CreationWithInvalidModule(bytes1 executionModule, bytes1 feeModule) public {
-        vm.assume(executionModule != 0x00);
-        vm.assume(feeModule != 0x01);
-        genericJobSpecification.executionModule = executionModule;
-        genericJobSpecification.feeModule = feeModule;
+    function test_RevertWhen_CreationWithInvalidModule() public {
+        // Test case 1: Using fee module (0x01) as execution module
+        genericJobSpecification.executionModule = 0x01;
+        genericJobSpecification.feeModule = 0x01;
 
         vm.prank(from);
+        vm.expectRevert(IJobRegistry.InvalidModule.selector);
+        jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
+    }
+
+    function test_RevertWhen_CreationWithInvalidModule_ExecutionModuleAsFeeModule() public {
+        // Test case 2: Using execution module (0x00) as fee module
+        genericJobSpecification.executionModule = 0x00;
+        genericJobSpecification.feeModule = 0x00;
+
+        vm.prank(from);
+        vm.expectRevert(IJobRegistry.InvalidModule.selector);
         jobRegistry.createJob(genericJobSpecification, address(0), "", "", UINT256_MAX);
     }
 

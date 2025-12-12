@@ -22,7 +22,6 @@ import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
  *         _\///////////////__\///////////////____\///////////_____
  */
 
-/// @author 0xst4ck
 /// @notice Coordinator is responsible for coordination of executors including job execution, staking and slashing.
 contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     using SafeTransferLib for ERC20;
@@ -146,7 +145,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
                 // safe given that 1) epochEndTime > block.timestamp and 2) block.timestamp >= epochEndTime - epochDuration + selectionPhaseDuration
                 timeIntoRounds = epochDuration - selectionPhaseDuration - (epochEndTime - block.timestamp);
                 // totalRoundDuration is > 0 becasue of constructor check on totalRoundDuration
-                inRound = timeIntoRounds % totalRoundDuration < roundDuration;
+                inRound = timeIntoRounds % totalRoundDuration < roundDuration && numberOfActiveExecutors > 0;
             }
 
             if (inRound) {
@@ -493,6 +492,7 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
             revert InvalidBlockTime();
         }
         if (_round >= roundsPerEpoch) revert RoundExceedingTotal();
+        if (numberOfActiveExecutors == 0) revert NoActiveExecutors();
         uint192 currentEpoch = epoch;
         // check if the executor did execute this epoch
         Executor storage executor = executorInfo[_executor];

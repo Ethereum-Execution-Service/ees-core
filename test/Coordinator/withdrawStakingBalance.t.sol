@@ -37,15 +37,18 @@ contract CoordinatorWithdrawStakingBalanceTest is CoordinatorBaseTest {
         assertEq(token0.balanceOf(executor), startBalance + withdrawalAmount, "executor token balance mismatch");
     }
 
-    function testFail_BalanceBelowThresholdAfterWithdrawal(uint256 withdrawalAmount) public {
+    function test_RevertWhen_BalanceBelowThresholdAfterWithdrawal(uint256 withdrawalAmount) public {
         // should revert if balance after withdrawal is below threshold
-        // can either revert with FinalBalanceBelowMinimum or panic from underflow
-        withdrawalAmount = uint256(bound(withdrawalAmount, 1, withdrawalAmount));
-
         vm.prank(executor);
         coordinator.stake(modulesToRegister);
 
+        // Set withdrawal amount to be more than what would leave balance above threshold
+        uint256 threshold = stakingAmountPerModule * 2; // 2 modules registered
+        uint256 currentBalance = stakingAmountPerModule * 2; // initial staking balance
+        withdrawalAmount = bound(withdrawalAmount, currentBalance - threshold + 1, currentBalance);
+
         vm.prank(executor);
+        vm.expectRevert(ICoordinator.FinalBalanceBelowMinimum.selector);
         coordinator.withdrawStakingBalance(withdrawalAmount);
     }
 

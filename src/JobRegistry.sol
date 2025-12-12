@@ -27,7 +27,6 @@ import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
  *         _\///////////////__\///////////////____\///////////_____
  */
 
-/// @author 0xst4ck
 /// @notice JobRegistry keeps track of all jobs in the EES. It is through this contract jobs are created, managed and deleted.
 contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     using SafeTransferLib for ERC20;
@@ -78,21 +77,17 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
             // do not consume nonce if it is reusable, but still check and revert if it has already been used
             _useUnorderedNonce(_sponsor, _specification.nonce, !_specification.reusableNonce);
             // do not include owner in the hash - allows sponsor to sign for any owner
-            if (
-                !publicERC6492Validator.isValidSignatureNowAllowSideEffects(
+            if (!publicERC6492Validator.isValidSignatureNowAllowSideEffects(
                     _sponsor, _hashTypedData(_specification.hashNoOwner()), _sponsorSignature
-                )
-            ) revert InvalidSignature();
+                )) revert InvalidSignature();
         }
         if (!callerIsOwner) {
             // always consume owner nonce and revert if it has already been used
             _useUnorderedNonce(_specification.owner, _specification.nonce, true);
             // include whole job specification in the hash
-            if (
-                !publicERC6492Validator.isValidSignatureNowAllowSideEffects(
+            if (!publicERC6492Validator.isValidSignatureNowAllowSideEffects(
                     _specification.owner, _hashTypedData(_specification.hash()), _ownerSignature
-                )
-            ) revert InvalidSignature();
+                )) revert InvalidSignature();
         }
 
         // *** MAX EXECUTIONS CHECK ***
@@ -129,15 +124,16 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
             executionModule.onCreateJob(index, _specification.executionModuleInput, _specification.executionWindow);
         feeModule.onCreateJob(index, _specification.feeModuleInput);
 
-        _specification.application.onCreateJob(
-            index,
-            msg.sender,
-            _specification.ignoreAppRevert,
-            _specification.executionWindow,
-            _specification.executionModule,
-            _specification.executionModuleInput,
-            _specification.applicationInput
-        );
+        _specification.application
+            .onCreateJob(
+                index,
+                msg.sender,
+                _specification.ignoreAppRevert,
+                _specification.executionWindow,
+                _specification.executionModule,
+                _specification.executionModuleInput,
+                _specification.applicationInput
+            );
         bool active = true;
 
         // *** HANDLING INITIAL EXECUTION ***
@@ -244,9 +240,8 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
             totalGas = _EXECUTION_GAS_OVERHEAD + startVariableGas - gasleft();
         }
         // fee module monitors its own gas usage
-        (executionFee, executionFeeToken, inZeroFeeWindow) = IFeeModule(feeModuleAddress).onExecuteJob(
-            _index, job.executionWindow, job.zeroFeeWindow, executionTime, totalGas
-        );
+        (executionFee, executionFeeToken, inZeroFeeWindow) = IFeeModule(feeModuleAddress)
+            .onExecuteJob(_index, job.executionWindow, job.zeroFeeWindow, executionTime, totalGas);
 
         // *** FEE TRANSFER ***
         if (executionFee > 0) {
@@ -368,11 +363,9 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
         if (newSponsorShip) {
             if (block.timestamp > _feeModuleInput.deadline) revert SignatureExpired(_feeModuleInput.deadline);
             _useUnorderedNonce(_sponsor, _feeModuleInput.nonce, !_feeModuleInput.reusableNonce);
-            if (
-                !publicERC6492Validator.isValidSignatureNowAllowSideEffects(
+            if (!publicERC6492Validator.isValidSignatureNowAllowSideEffects(
                     _sponsor, _hashTypedData(_feeModuleInput.hash()), _sponsorSignature
-                )
-            ) revert InvalidSignature();
+                )) revert InvalidSignature();
             job.sponsor = _sponsor;
         } else if (!currentSponsorUpdating) {
             job.sponsor = job.owner;

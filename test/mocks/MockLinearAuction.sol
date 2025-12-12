@@ -4,7 +4,6 @@ pragma solidity 0.8.26;
 import {LinearAuction} from "../../src/feeModules/LinearAuction.sol";
 import {Coordinator} from "../../src/Coordinator.sol";
 
-/// @author 0xst4ck
 contract MockLinearAuction is LinearAuction {
     constructor(Coordinator _coordinator) LinearAuction(_coordinator) {}
 
@@ -16,9 +15,7 @@ contract MockLinearAuction is LinearAuction {
         uint256 _maxExecutionFee
     ) public {
         params[_index] = Params({
-            executionFeeToken: _executionFeeToken,
-            minExecutionFee: _minExecutionFee,
-            maxExecutionFee: _maxExecutionFee
+            executionFeeToken: _executionFeeToken, minExecutionFee: _minExecutionFee, maxExecutionFee: _maxExecutionFee
         });
     }
 }

@@ -5,7 +5,6 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {ModuleRegistry} from "./ModuleRegistry.sol";
 import {ITaxHandler} from "./interfaces/ITaxHandler.sol";
 
-/// @author 0xst4ck
 /// @notice TaxHandler is responsible for handling tax updates for EES.
 contract TaxHandler is ModuleRegistry, ITaxHandler {
     uint256 internal lastExecutionTaxUpdate;

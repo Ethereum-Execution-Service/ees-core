@@ -5,7 +5,6 @@ import {PeggedLinearAuction} from "../../src/feeModules/PeggedLinearAuction.sol"
 import {IPriceOracle} from "../../src/interfaces/IPriceOracle.sol";
 import {Coordinator} from "../../src/Coordinator.sol";
 
-/// @author 0xst4ck
 contract MockPeggedLinearAuction is PeggedLinearAuction {
     constructor(Coordinator _coordinator) PeggedLinearAuction(_coordinator) {}
 

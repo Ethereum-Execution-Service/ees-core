@@ -2,7 +2,6 @@
 pragma solidity >=0.5.0;
 
 /// @title Interface for the PriceOracle contract.
-/// @author 0xst4ck
 interface IPriceOracle {
     /**
      * @notice Get the token/ETH price in wei.

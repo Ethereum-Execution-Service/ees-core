@@ -5,30 +5,64 @@ import {Owned} from "solmate/src/auth/Owned.sol";
 import {ModuleRegistry} from "./ModuleRegistry.sol";
 import {ITaxHandler} from "./interfaces/ITaxHandler.sol";
 
-/// @notice TaxHandler is responsible for handling tax updates for EES.
+/**
+ * @title TaxHandler
+ * @notice Manages tax configuration and updates with rate limiting and cooldown periods
+ * @dev Inherits from ModuleRegistry and Owned. Implements gradual tax updates with cooldowns
+ *      to prevent sudden changes. All tax updates are limited to 10% per 7 days.
+ */
 contract TaxHandler is ModuleRegistry, ITaxHandler {
+    /// @notice Timestamp of the last execution tax update
     uint256 internal lastExecutionTaxUpdate;
+
+    /// @notice Timestamp of the last zero fee execution tax update
     uint256 internal lastZeroFeeExecutionTaxUpdate;
+
+    /// @notice Timestamp of the last protocol pool cut update
     uint256 internal lastProtocolPoolCutUpdate;
+
+    /// @notice Cooldown period for execution tax updates (7 days)
     uint24 internal constant executionTaxUpdateCooldown = 7 days;
+
+    /// @notice Cooldown period for zero fee execution tax updates (7 days)
     uint24 internal constant zeroFeeExecutionTaxUpdateCooldown = 7 days;
+
+    /// @notice Cooldown period for protocol pool cut updates (7 days)
     uint24 internal constant protocolPoolCutUpdateCooldown = 7 days;
-    // 10%
+
+    /// @notice Maximum percentage change for execution tax updates (10% in basis points)
     uint16 internal constant executionTaxUpdateBps = 1_000;
-    // 10%
+
+    /// @notice Maximum percentage change for protocol pool cut updates (10% in basis points)
     uint16 internal constant protocolPoolCutUpdateBps = 1_000;
 
-    uint256 internal executionTax; // in units of tax token
-    uint256 internal zeroFeeExecutionTax; // in units of tax token
-    uint256 internal protocolPoolCutBps; // in basis points (e.g. 1000 = 10%)
-    uint256 internal constant BPS_DENOMINATOR = 10_000; // 100% in basis points
+    /// @notice Execution tax amount in staking token units
+    uint256 internal executionTax;
 
-    // maximum reward per execution in tax token. Should be updated when executionTax or protocolPoolCutBps are updated
+    /// @notice Zero fee execution tax amount in staking token units
+    uint256 internal zeroFeeExecutionTax;
+
+    /// @notice Protocol pool cut in basis points (e.g., 1000 = 10%)
+    uint256 internal protocolPoolCutBps;
+
+    /// @notice Basis points denominator (10,000 = 100%)
+    uint256 internal constant BPS_DENOMINATOR = 10_000;
+
+    /// @notice Maximum reward per execution in staking token units
+    /// @dev Calculated as executionTax * (BPS_DENOMINATOR - protocolPoolCutBps) / BPS_DENOMINATOR
     uint256 internal maxRewardPerExecution;
 
     error TaxUpdateTooLarge();
     error UpdateOnCooldown();
 
+    /**
+     * @notice Initializes the TaxHandler contract with initial tax configuration
+     * @dev Sets initial tax values and calculates maxRewardPerExecution. Protocol pool cut must be less than 100%.
+     * @param _owner Address that will own the contract (can update taxes)
+     * @param _executionTax Initial execution tax amount
+     * @param _zeroFeeExecutionTax Initial zero fee execution tax amount
+     * @param _protocolPoolCutBps Initial protocol pool cut in basis points (must be < 10,000)
+     */
     constructor(address _owner, uint256 _executionTax, uint256 _zeroFeeExecutionTax, uint256 _protocolPoolCutBps)
         ModuleRegistry(_owner)
     {
@@ -42,10 +76,12 @@ contract TaxHandler is ModuleRegistry, ITaxHandler {
     }
 
     /**
-     * @notice Update the execution tax.
-     * @notice Also updates maxRewardPerExecution accordingly.
-     * @dev Can update executionTax at most executionTaxUpdateBps basis points every executionTaxUpdateCooldown seconds.
-     * @param _executionTax The new execution tax.
+     * @notice Updates the execution tax with rate limiting
+     * @dev Can only be called by owner. Updates are limited to 10% change per 7 days.
+     *      Automatically recalculates maxRewardPerExecution after update.
+     * @param _executionTax New execution tax amount in staking token units
+     * @custom:reverts UpdateOnCooldown if called before cooldown period has elapsed
+     * @custom:reverts TaxUpdateTooLarge if change exceeds 10% of current value
      */
     function updateExecutionTax(uint256 _executionTax) public onlyOwner {
         // can change value at most X percent every Y time
@@ -61,9 +97,11 @@ contract TaxHandler is ModuleRegistry, ITaxHandler {
     }
 
     /**
-     * @notice Update the zero fee execution tax.
-     * @dev Can update zeroFeeExecutionTax at most executionTaxUpdateBps basis points every zeroFeeExecutionTaxUpdateCooldown seconds.
-     * @param _zeroFeeExecutionTax The new zero fee execution tax.
+     * @notice Updates the zero fee execution tax with rate limiting
+     * @dev Can only be called by owner. Updates are limited to 10% change per 7 days.
+     * @param _zeroFeeExecutionTax New zero fee execution tax amount in staking token units
+     * @custom:reverts UpdateOnCooldown if called before cooldown period has elapsed
+     * @custom:reverts TaxUpdateTooLarge if change exceeds 10% of current value
      */
     function updateZeroFeeExecutionTax(uint256 _zeroFeeExecutionTax) public onlyOwner {
         // can change value at most X percent every Y time
@@ -82,10 +120,12 @@ contract TaxHandler is ModuleRegistry, ITaxHandler {
     }
 
     /**
-     * @notice Update the protocol pool cut bps.
-     * @notice Also updates maxRewardPerExecution accordingly.
-     * @dev Can update protocolPoolCutBps at most protocolPoolCutUpdateBps basis points every protocolPoolCutUpdateCooldown seconds.
-     * @param _protocolPoolCutBps The new protocol pool cut bps.
+     * @notice Updates the protocol pool cut with rate limiting
+     * @dev Can only be called by owner. Updates are limited to 10% change per 7 days.
+     *      Automatically recalculates maxRewardPerExecution after update.
+     * @param _protocolPoolCutBps New protocol pool cut in basis points (e.g., 1000 = 10%)
+     * @custom:reverts UpdateOnCooldown if called before cooldown period has elapsed
+     * @custom:reverts TaxUpdateTooLarge if change exceeds 10% of current value
      */
     function updateProtocolPoolCutBps(uint256 _protocolPoolCutBps) public onlyOwner {
         // can change value at most X percent every Y time

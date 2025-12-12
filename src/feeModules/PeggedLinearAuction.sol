@@ -7,30 +7,57 @@ import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
 import {Coordinator} from "../Coordinator.sol";
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
 
+/**
+ * @title PeggedLinearAuction
+ * @notice Fee module that implements a linear auction pricing model pegged to base fee and execution tax
+ * @dev The execution fee is calculated based on block.basefee and execution tax, scaled by a linear
+ *      overhead multiplier that increases from minOverheadBps to maxOverheadBps over the execution window.
+ *      During the zero fee window, execution is free. Uses a price oracle to convert between tokens.
+ */
 contract PeggedLinearAuction is IPeggedLinearAuction {
+    /// @notice The Coordinator contract that manages this fee module
     Coordinator public immutable coordinator;
+
+    /// @notice Mapping from job index to fee parameters (token, oracle, overhead bounds, oracle data)
     mapping(uint256 => Params) public params;
 
+    /// @notice Gas overhead constant used in fee calculations (100,000 gas)
     uint256 private constant _GAS_OVERHEAD = 100_000;
+
+    /// @notice Basis points denominator (10,000 = 100%)
     uint256 private constant _BASE_BPS = 10_000;
 
+    /**
+     * @notice Initializes the PeggedLinearAuction fee module
+     * @param _coordinator The Coordinator contract address
+     */
     constructor(Coordinator _coordinator) {
         coordinator = _coordinator;
     }
 
+    /**
+     * @notice Ensures only registered JobRegistry contracts can call module functions
+     * @dev Reverts if msg.sender is not a registered JobRegistry in the Coordinator
+     */
     modifier onlyJobRegistry() {
         if (!coordinator.isJobRegistry(msg.sender)) revert NotJobRegistry();
         _;
     }
 
     /**
-     * @notice Computes execution fee as the block.basefee scaled by an overhead determined by linear function between minOverheadBps and maxOverheadBps depending on time in execution window.
-     * @param _index The index of the job in the jobs array in JobRegistry contract.
-     * @param _executionWindow The amount of time the job can be executed within.
-     * @param _executionTime The time the job can be executed from.
-     * @param _variableGasConsumption The gas consumption of the job execution.
-     * @return executionFee The computed execution fee.
-     * @return executionFeeToken The token address of the execution fee.
+     * @notice Computes the execution fee based on base fee, execution tax, and linear overhead
+     * @dev During the zero fee window, returns 0. After the zero fee window, calculates fee as:
+     *      executionFee = totalTax + (baseFeeCost * overheadBps / 10000)
+     *      where overheadBps increases linearly from minOverheadBps to maxOverheadBps over the execution window.
+     *      Uses price oracle to convert between tax token and execution fee token.
+     * @param _index The index of the job in the jobs array in JobRegistry contract
+     * @param _executionWindow The total execution window duration (in seconds)
+     * @param _zeroFeeWindow The duration of the zero fee period at the start (in seconds)
+     * @param _executionTime The timestamp from which execution is allowed
+     * @param _variableGasConsumption The gas consumption of the job execution (used in fee calculation)
+     * @return executionFee The computed execution fee in the fee token
+     * @return executionFeeToken The token address for the execution fee
+     * @return inZeroFeeWindow True if execution is within the zero fee window
      */
     function onExecuteJob(
         uint256 _index,
@@ -94,10 +121,13 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
     }
 
     /**
-     * @notice Stores the parameters for a job in the params mapping.
-     * @notice Reverts if minOverheadBps is greater than maxOverheadBps.
-     * @param _index The index of the job in the jobs array in JobRegistry contract.
-     * @param _inputs The encoded parameters for the job.
+     * @notice Stores the fee parameters for a job when it is created
+     * @dev Decodes the input bytes to extract executionFeeToken, priceOracle, minOverheadBps,
+     *      maxOverheadBps, and oracleData. Validates that minOverheadBps <= maxOverheadBps.
+     * @param _index The index of the job in the jobs array in JobRegistry contract
+     * @param _inputs ABI-encoded parameters: (address executionFeeToken, IPriceOracle priceOracle,
+     *                uint48 minOverheadBps, uint48 maxOverheadBps, bytes oracleData)
+     * @custom:reverts MinExecutionFeeGreaterThanMax if minOverheadBps > maxOverheadBps
      */
     function onCreateJob(uint256 _index, bytes calldata _inputs) external override onlyJobRegistry {
         address executionFeeToken;
@@ -120,18 +150,20 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
     }
 
     /**
-     * @notice Deletes the parameters for a job in the params mapping.
-     * @param _index The index of the job in the jobs array in JobRegistry contract.
+     * @notice Deletes the fee parameters for a job when it is deleted
+     * @param _index The index of the job in the jobs array in JobRegistry contract
      */
     function onDeleteJob(uint256 _index) external onlyJobRegistry {
         delete params[_index];
     }
 
     /**
-     * @notice Updates the parameters for a job in the params mapping.
-     * @notice Reverts if minOverheadBps is greater than maxOverheadBps.
-     * @param _index The index of the job in the jobs array in JobRegistry contract.
-     * @param _inputs The encoded parameters for the job.
+     * @notice Updates the fee parameters for an existing job
+     * @dev Decodes the input bytes and updates the stored parameters. Validates that minOverheadBps <= maxOverheadBps.
+     * @param _index The index of the job in the jobs array in JobRegistry contract
+     * @param _inputs ABI-encoded parameters: (address executionFeeToken, IPriceOracle priceOracle,
+     *                uint48 minOverheadBps, uint48 maxOverheadBps, bytes oracleData)
+     * @custom:reverts MinExecutionFeeGreaterThanMax if minOverheadBps > maxOverheadBps
      */
     function onUpdateData(uint256 _index, bytes calldata _inputs) external override onlyJobRegistry {
         address executionFeeToken;
@@ -153,9 +185,9 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
     }
 
     /**
-     * @notice Returns the encoded parameters for a job.
-     * @param _index The index of the job in the jobs array in JobRegistry contract.
-     * @return encodedData The encoded parameters for the job.
+     * @notice Returns the encoded parameters for a job
+     * @param _index The index of the job in the jobs array in JobRegistry contract
+     * @return encodedData ABI-encoded parameters: (executionFeeToken, priceOracle, minOverheadBps, maxOverheadBps, oracleData)
      */
     function getEncodedData(uint256 _index) public view override returns (bytes memory) {
         Params memory param = params[_index];
@@ -165,8 +197,8 @@ contract PeggedLinearAuction is IPeggedLinearAuction {
     }
 
     /**
-     * @notice Returns the gas overhead of calling onExecuteJob.
-     * @return gasOverhead The gas overhead of calling onExecuteJob.
+     * @notice Returns the gas overhead constant used in fee calculations
+     * @return gasOverhead The gas overhead value (100,000 gas)
      */
     function getGasOverhead() external pure override returns (uint256) {
         return _GAS_OVERHEAD;

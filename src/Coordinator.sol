@@ -20,61 +20,117 @@ import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
  *       _\/\\\_____________\/\\\______________/\\\______\//\\\__
  *        _\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\\_\///\\\\\\\\\\\/___
  *         _\///////////////__\///////////////____\///////////_____
+ *
+ * @title Coordinator
+ * @notice Coordinates executors for job execution, manages staking, slashing, and epoch-based reward distribution
+ * @dev Inherits from TaxHandler for tax management and ReentrancyGuard for reentrancy protection.
+ *      Manages executor lifecycle, commit-reveal scheme for randomness, and designated executor selection.
  */
-
-/// @notice Coordinator is responsible for coordination of executors including job execution, staking and slashing.
 contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     using SafeTransferLib for ERC20;
 
+    /// @notice Array of registered job registry addresses
     address[] public jobRegistries;
+
+    /// @notice Mapping to check if an address is a registered job registry
     mapping(address => bool) public isJobRegistry;
 
+    /// @notice Current seed used for designated executor selection
+    /// @dev Updated during reveal phase via commit-reveal scheme
     bytes32 public seed;
+
+    /// @notice Current epoch number
     uint192 public epoch;
+
+    /// @notice Timestamp when the current epoch ends
     uint256 public epochEndTime;
+
+    /// @notice Number of currently active executors eligible for designation
     uint32 public numberOfActiveExecutors;
 
+    /// @notice ERC20 token used for staking
     address internal immutable stakingToken;
+
+    /// @notice Amount of tokens required to stake per module when registering
     uint256 internal immutable stakingAmountPerModule;
+
+    /// @notice Minimum time period an executor must remain registered before unstaking
     uint256 internal immutable minimumRegistrationPeriod;
-    // minimum amount of staking balance required to be eligible to execute
+
+    /// @notice Minimum staking balance per module required to remain active
+    /// @dev If balance falls below this threshold, executor is deactivated
     uint256 internal immutable stakingBalanceThresholdPerModule;
-    // amount to slash from the executor upon inactivity.
+
+    /// @notice Amount slashed per module for inactive executors who don't execute in their designated round
     uint256 internal immutable inactiveSlashingAmountPerModule;
 
-    // amount to slash for committing without revealing
+    /// @notice Amount slashed per module for executors who commit but don't reveal
     uint256 internal immutable commitSlashingAmountPerModule;
 
+    /// @notice Number of rounds per epoch
     uint8 internal immutable roundsPerEpoch;
 
+    /// @notice Pool balance for the current epoch (distributed to executors)
     uint256 public epochPoolBalance;
+
+    /// @notice Pool balance accumulated for the next epoch
     uint256 public nextEpochPoolBalance;
 
+    /// @notice Protocol balance (withdrawable by owner)
     uint256 public protocolBalance;
 
-    // all in seconds
+    /// @notice Duration of each round in seconds
     uint8 internal immutable roundDuration;
+
+    /// @notice Buffer time between rounds in seconds
     uint8 internal immutable roundBuffer;
+
+    /// @notice Total duration of an epoch in seconds
     uint8 internal immutable epochDuration;
+
+    /// @notice Duration of commit phase in seconds
     uint8 internal immutable commitPhaseDuration;
+
+    /// @notice Duration of reveal phase in seconds
     uint8 internal immutable revealPhaseDuration;
+
+    /// @notice Total duration of selection phase (commit + reveal) in seconds
     uint8 internal immutable selectionPhaseDuration;
+
+    /// @notice Total duration of a round including buffer in seconds
     uint8 internal immutable totalRoundDuration;
-    // slashing phase
+
+    /// @notice Duration of slashing window in seconds
     uint8 internal immutable slashingDuration;
 
-    // addresses of all active executors
+    /// @notice Array of active executor addresses
+    /// @dev Maintains invariant: activeExecutors[0..numberOfActiveExecutors-1] are all valid executors
     address[] public activeExecutors;
-    // executor info
+
+    /// @notice Mapping from executor address to their executor information
     mapping(address => Executor) public executorInfo;
 
-    // total number of executed jobs (non-including zero-fee jobs) during rounds in this epoch
+    /// @notice Total number of jobs executed during rounds in the current epoch (excluding zero-fee jobs)
     uint96 public executedJobsInRoundsOfEpoch;
-    // addresses to receive pool cut. These are designated executors who executed at least one job during a round in an epoch. This will reset every epoch.
+
+    /// @notice Addresses of designated executors who executed jobs during rounds this epoch
+    /// @dev Resets every epoch. Used for reward distribution.
     address[] public poolCutReceivers;
 
+    /// @notice Mapping from executor address to their commit-reveal data
     mapping(address => CommitData) public commitmentMap;
 
+    /**
+     * @notice Initializes the Coordinator contract with configuration parameters
+     * @dev Validates configuration parameters and sets up initial state. All time durations are in seconds.
+     * @param _spec Configuration specification containing all system parameters
+     * @param _owner Address that will own the contract (can update taxes and add modules)
+     * @custom:requirements
+     *   - stakingBalanceThresholdPerModule <= stakingAmountPerModule
+     *   - inactiveSlashingAmountPerModule + commitSlashingAmountPerModule <= stakingBalanceThresholdPerModule
+     *   - roundsPerEpoch > 0 and < 256
+     *   - totalRoundDuration > 0
+     */
     constructor(InitSpec memory _spec, address _owner)
         TaxHandler(_owner, _spec.executionTax, _spec.zeroFeeExecutionTax, _spec.protocolPoolCutBps)
     {
@@ -114,13 +170,19 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Executes the jobs with the given indices.
-     * @notice Outside rounds the executor pays the protocol tax and the executor tax.
-     * @notice If the current block.timestamp is in a round, only the selected executor can call and pays no executor tax.
-     * @notice If executor checks in, the executor will be rewarded with the pool cut.
-     * @notice This function does not revert if any of the calls to execute jobs reverts.
-     * @param _indices The indices of the jobs to execute.
-     * @param _feeRecipient The address to receive excution fees.
+     * @notice Executes a batch of jobs from the specified job registry
+     * @dev During designated rounds, only the selected executor can execute and pays no executor tax.
+     *      Outside rounds, anyone can execute but must pay execution tax. Failed job executions don't revert the entire batch.
+     * @param _indices Array of job indices to execute
+     * @param _gasLimits Array of gas limits for each job execution (must match _indices length)
+     * @param _feeRecipient Address to receive execution fees from job sponsors
+     * @param _jobRegistryIndex Index of the job registry in the jobRegistries array
+     * @return standardTax Total execution tax paid for non-zero-fee jobs
+     * @return zeroFeeTax Total execution tax paid for zero-fee window jobs
+     * @return successfulExecutions Total number of successfully executed jobs
+     * @custom:emits BatchExecution event with job registry index, taxes, and round status
+     * @custom:emits CheckIn event if designated executor checks in for the first time in a round
+     * @custom:emits ExecutorDeactivated event if executor balance falls below threshold
      */
     function executeBatch(
         uint256[] calldata _indices,
@@ -374,11 +436,13 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Stakes the stakingToken transfering the stakingAmount to the contract and activates the executor to be able to execute jobs.
-     * @notice Caller must not be an already initialized executor. To increase balance use topup instead.
-     * @notice Cannot be called during alternating open competition and designated rounds and during slashing window.
-     * @dev Activates the executor, adding it to executorInfo and increments numberOfActiveExecutors.
-     * @param _modulesBitset The bitset of modules to register for.
+     * @notice Stakes tokens and activates the executor to be eligible for job execution
+     * @dev Transfers staking tokens from caller and adds executor to activeExecutors array.
+     *      Executor must register for at least 2 modules. Cannot be called during rounds or slashing window.
+     * @param _modulesBitset Bitset representing which modules to register for (bit position = module index)
+     * @return stakingAmount Total amount of tokens staked (stakingAmountPerModule * number of modules)
+     * @custom:emits ModulesRegistered event with executor address and registered modules bitset
+     * @custom:emits ExecutorActivated event when executor is successfully activated
      */
     function stake(uint256 _modulesBitset) public override returns (uint256 stakingAmount) {
         // *** CHECKS ***
@@ -416,9 +480,12 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Unstakes the stakingToken and transfers the balance from the contract to the executor and deactivates the executor.
-     * @notice Cannot be called during reveal phase, execution rounds and slashing window.
-     * @dev If the executor is active it is deactivated removing it from activeExecutors and numberOfActiveExecutors is decremented. The executor is removed from executorInfo.
+     * @notice Unstakes all tokens and deactivates the executor
+     * @dev Removes executor from activeExecutors, deletes executor info, and transfers all staking balance back.
+     *      Cannot be called during commit phase, execution rounds, or slashing window.
+     *      Executor must have waited minimumRegistrationPeriod since last registration.
+     * @custom:emits ModulesDeregistered event with executor address and deregistered modules bitset
+     * @custom:emits ExecutorDeactivated event if executor was active
      */
     function unstake() public override {
         // *** CHECKS ***
@@ -447,9 +514,11 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Increases the staking balance of the executor by the given amount and activates the executor if end balance is above threshold.
-     * @notice Cannot be called during execution rounds and slashing window.
-     * @param _amount The amount to topup the staking balance with stakingToken.
+     * @notice Increases the executor's staking balance by the specified amount
+     * @dev If the new balance is above threshold and executor was inactive, executor is reactivated.
+     *      Cannot be called during execution rounds or slashing window.
+     * @param _amount Amount of staking tokens to add to executor's balance
+     * @custom:emits ExecutorActivated event if executor is reactivated due to topup
      */
     function topup(uint256 _amount) public override {
         // *** CHECKS ***
@@ -478,13 +547,14 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Slashes the executor for not executing in the given round with inactiveSlashingAmountPerModule times the number of registered modules.
-     * @notice If executor's balance goes below threshold, executor is deactivated.
-     * @notice Cannot only be called during slashing window.
-     * @notice If the recipiant is an initialized executor, reward will go to internal balance, otherwise normal ERC20 transfer.
-     * @param _executor The address of the executor to be slashed.
-     * @param _round The round the executor is being slashed for.
-     * @param _recipient The address to send slashing reward to.
+     * @notice Slashes an executor for not executing in their designated round
+     * @dev Can only be called during slashing window. Verifies executor was selected for the round and didn't execute.
+     *      Half of slashed amount goes to recipient, other half to protocol balance.
+     * @param _executor Address of the executor to slash
+     * @param _round Round number the executor failed to execute in
+     * @param _recipient Address to receive half of the slashed amount as reward
+     * @custom:emits InactiveExecutorSlashed event with executor, recipient, epoch, round, and slash amount
+     * @custom:emits ExecutorDeactivated event if executor balance falls below threshold after slashing
      */
     function slashInactiveExecutor(address _executor, uint8 _round, address _recipient) public override {
         // *** CHECKS ***
@@ -525,12 +595,13 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Slashes the executor for committing without revealing with commitSlashingAmountPerModule times the number of registered modules.
-     * @notice If executor's balance goes below threshold, executor is deactivated.
-     * @notice Cannot only be called during slashing window.
-     * @notice If the recipiant is an initialized executor, reward will go to internal balance, otherwise normal ERC20 transfer.
-     * @param _executor The address of the executor to be slashed.
-     * @param _recipient The address to send slashing reward to.
+     * @notice Slashes an executor for committing without revealing their signature
+     * @dev Can only be called during slashing window. Verifies executor committed but didn't reveal in the current epoch.
+     *      Half of slashed amount goes to recipient, other half to protocol balance.
+     * @param _executor Address of the executor to slash
+     * @param _recipient Address to receive half of the slashed amount as reward
+     * @custom:emits CommitterSlashed event with executor, recipient, epoch, and slash amount
+     * @custom:emits ExecutorDeactivated event if executor balance falls below threshold after slashing
      */
     function slashCommitter(address _executor, address _recipient) public override {
         // *** CHECKS ***
@@ -554,8 +625,10 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Initiates a new epoch by setting the epochEndTime to the current block.timestamp + epochDuration.
-     * @notice Cannot be called before last epoch is done.
+     * @notice Initiates a new epoch, distributing rewards and resetting state
+     * @dev Calculates protocol cut, distributes pool rewards to designated executors, and updates epoch state.
+     *      Can be called by anyone once the current epoch has ended. Resets poolCutReceivers array.
+     * @custom:emits EpochInitiated event with new epoch number, total distributed rewards, and protocol cut
      */
     function initiateEpoch() public override {
         // *** CHECKS ***
@@ -627,9 +700,11 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Commits a hash of the executor's ERC-191 signature of the current epoch.
-     * @notice Can only be called during commit phase.
-     * @param _commitment A hash of an ERC-191 signature of the current epoch number.
+     * @notice Commits a hash of the executor's signature for the commit-reveal scheme
+     * @dev Can only be called during commit phase by active executors. The commitment should be keccak256(signature)
+     *      where signature is an ERC-191 signature of (epoch, chainid).
+     * @param _commitment Hash of the executor's ERC-191 signature of the current epoch
+     * @custom:emits Commitment event with executor address and epoch number
      */
     function commit(bytes32 _commitment) public override {
         // *** CHECKS ***
@@ -645,10 +720,11 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Reveals the executor's ERC-191 signature of the current epoch.
-     * @notice Can only be called during reveal phase.
-     * @notice Caller must have committed in the same epoch.
-     * @param _signature The signature to be verified and used to update the seed.
+     * @notice Reveals the executor's signature and updates the seed for randomness
+     * @dev Can only be called during reveal phase. Verifies signature matches commitment and updates seed.
+     *      The seed is used to select designated executors for each round.
+     * @param _signature ERC-191 signature of (epoch, chainid) that matches the committed hash
+     * @custom:emits Reveal event with executor address, epoch, and new seed
      */
     function reveal(bytes calldata _signature) public override {
         // *** CHECKS ***
@@ -674,9 +750,9 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Adds a job registry to the coordinator.
-     * @notice Can only be called by the owner.
-     * @param _registry The address of the job registry to add.
+     * @notice Adds a new job registry to the coordinator
+     * @dev Can only be called by the owner. Adds registry to jobRegistries array and marks it as valid.
+     * @param _registry Address of the job registry contract to add
      */
     function addJobRegistry(address _registry) public override onlyOwner {
         jobRegistries.push(_registry);
@@ -684,10 +760,12 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Registers the executor for specific modules
-     * @notice The _modulesBitset should only contain bits for new modules to register. Otherwise the call will revert.
-     * @param _modulesBitset Bitset representing all modules to register for.
-     * @return stakingAmount The amount of staking tokens transferred to the coordinator.
+     * @notice Registers the executor for additional modules
+     * @dev Executor must already be initialized. Transfers additional staking tokens for new modules.
+     *      Bitset should only contain bits for new modules, not already registered ones.
+     * @param _modulesBitset Bitset representing new modules to register for
+     * @return stakingAmount Total amount of additional staking tokens transferred
+     * @custom:emits ModulesRegistered event with executor address and updated modules bitset
      */
     function registerModules(uint256 _modulesBitset) public override returns (uint256 stakingAmount) {
         // *** CHECKS ***
@@ -721,9 +799,11 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Deregisters the executor from specific modules
-     * @notice The executor has to wait for the minimum registration period to be over before deregistering modules
-     * @param _modulesBitset Bitset representing all modules to deregister from
+     * @notice Deregisters the executor from specified modules
+     * @dev Executor must wait minimumRegistrationPeriod since last registration/module addition.
+     *      Executor must maintain at least 2 registered modules after deregistration.
+     * @param _modulesBitset Bitset representing modules to deregister from
+     * @custom:emits ModulesDeregistered event with executor address and updated modules bitset
      */
     function deregisterModules(uint256 _modulesBitset) public override {
         // *** CHECKS ***
@@ -744,9 +824,10 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Withdraws the staking balance from the executor.
-     * @notice The executor balance after withdrawal has to be at least the stakingAmountPerModule times the number of registered modules.
-     * @param _amount The amount to withdraw from the executor's balance.
+     * @notice Withdraws a portion of the executor's staking balance
+     * @dev Executor balance after withdrawal must remain above stakingAmountPerModule * number of modules.
+     *      Transfers staking tokens from contract to executor.
+     * @param _amount Amount of staking tokens to withdraw
      */
     function withdrawStakingBalance(uint256 _amount) public override {
         // executor balance has to be above threshold
@@ -761,10 +842,10 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Withdraws the protocol balance to the owner.
-     * @notice Can only be called by the owner.
-     * @param _recipient The recipient of the protocol balance.
-     * @return amount The amount of protocol balance withdrawn.
+     * @notice Withdraws the protocol balance to the specified recipient
+     * @dev Can only be called by the owner. Transfers all protocol balance and resets it to zero.
+     * @param _recipient Address to receive the protocol balance
+     * @return amount Amount of protocol balance withdrawn
      */
     function withdrawProtocolBalance(address _recipient) public override onlyOwner returns (uint256 amount) {
         amount = protocolBalance;
@@ -774,7 +855,9 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
 
     /**
      * @notice Registers the executor for specific modules
-     * @param _modulesBitset Bitset representing all modules to register for
+     * @dev Internal function that updates the executor's registeredModules bitset
+     * @param executor Storage reference to the executor
+     * @param _modulesBitset Bitset representing modules to register for
      */
     function _registerModule(Executor storage executor, uint256 _modulesBitset) private {
         executor.registeredModules |= _modulesBitset;
@@ -782,16 +865,19 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
 
     /**
      * @notice Deregisters the executor from specific modules
-     * @param _modulesBitset Bitset representing all modules to deregister from
+     * @dev Internal function that updates the executor's registeredModules bitset
+     * @param executor Storage reference to the executor
+     * @param _modulesBitset Bitset representing modules to deregister from
      */
     function _deregisterModule(Executor storage executor, uint256 _modulesBitset) private {
         executor.registeredModules &= ~_modulesBitset;
     }
 
     /**
-     * @notice Counts number of modules registered (number of 1s in bitset)
-     * @param _modulesBitset The bitset to count
-     * @return count The number of modules registered
+     * @notice Counts the number of modules in a bitset (number of set bits)
+     * @dev Uses bit manipulation for efficient counting
+     * @param _modulesBitset The bitset to count modules in
+     * @return count Number of modules (set bits) in the bitset
      */
     function _countModules(uint256 _modulesBitset) private pure returns (uint256) {
         uint256 x = _modulesBitset;
@@ -813,8 +899,9 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Creates a mask for valid modules based on currentModuleCount
-     * @return mask The mask with 1s for all valid module positions
+     * @notice Creates a mask for valid modules based on current module count
+     * @dev Returns a bitset with 1s for all valid module positions (e.g., if 4 modules exist, returns ...0001111)
+     * @return mask Bitset mask with 1s for all valid module positions
      */
     function _getValidModulesMask() private view returns (uint256) {
         // e.g. if currentModuleCount = 4, mask = ...0000000000011111
@@ -822,9 +909,10 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Activates the executor, adding it to activeExecutors and increments numberOfActiveExecutors.
-     * @dev Should only be used together with setting executor.active to true.
-     * @param _executor The address of the executor to be activated.
+     * @notice Activates the executor, adding it to activeExecutors array
+     * @dev Reuses empty slots in array if available, otherwise pushes to end. Increments numberOfActiveExecutors.
+     *      Should only be called together with setting executor.active to true.
+     * @param _executor Address of the executor to activate
      */
     function _activateExecutor(address _executor) private {
         if (numberOfActiveExecutors < activeExecutors.length) {
@@ -841,12 +929,12 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Deactivates the executor, removing it from activeExecutors and decrements numberOfActiveExecutors.
-     * @dev Should only be called when the executor is active.
-     * @dev Should only be used together with setting executor.active to false or deleting executorInfo entry.
-     * @param _index The index of the executor in activeExecutors.
-     * @return executorAtIndex The address of the executor at the given index.
-     * @return lastExecutor The address of the last executor in activeExecutors.
+     * @notice Deactivates the executor, removing it from activeExecutors array
+     * @dev Swaps executor with last element and decrements numberOfActiveExecutors. Maintains array invariant.
+     *      Should only be called when executor is active.
+     * @param _index Index of the executor in activeExecutors array
+     * @return executorAtIndex Address of the executor that was at the given index
+     * @return lastExecutor Address of the executor that was moved to fill the gap
      */
     function _deactivateExecutor(uint32 _index) private returns (address, address) {
         uint32 newNumberOfActiveExecutors;
@@ -862,12 +950,13 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Slashes the executor for the given amount and sends half to the recipient.
-     * @notice If the recipiant is an initialized executor, reward will go to internal balance, otherwise normal ERC20 transfer.
-     * @dev Should only be called when the executor is active.
-     * @param _amount The amount to slash from the executor's balance.
-     * @param _executor The address of the executor to be slashed.
-     * @param _recipient The address to reward half of the slashed amount to.
+     * @notice Slashes the executor and distributes the slashed amount
+     * @dev Deducts amount from executor balance. Half goes to recipient (internal balance if executor, otherwise transfer),
+     *      other half to protocol balance. Deactivates executor if balance falls below threshold.
+     * @param _amount Amount to slash from executor's balance
+     * @param _executor Storage reference to the executor being slashed
+     * @param _recipient Address to receive half of the slashed amount
+     * @custom:emits ExecutorDeactivated event if executor is deactivated due to low balance
      */
     function _slash(uint256 _amount, Executor storage _executor, address _recipient) private {
         // *** BALANCE THRESHOLD CHECK AND POTENTIAL DEACTIVATION ***
@@ -896,12 +985,13 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Verifies the ERC-191 signature of the executor for the given epoch and chainId.
-     * @param _epochNum The epoch number to verify the signature for.
-     * @param _chainId The chainId to verify the signature for.
-     * @param _signature The signature to verify.
-     * @param _expectedSigner The expected signer of the signature.
-     * @return isValid Is true if the signature is valid, false otherwise.
+     * @notice Verifies an ERC-191 signature for the given epoch and chainId
+     * @dev Uses ecrecover to verify the signature matches the expected signer
+     * @param _epochNum Epoch number that was signed
+     * @param _chainId Chain ID that was signed
+     * @param _signature Signature to verify (65 bytes)
+     * @param _expectedSigner Address that should have signed the message
+     * @return isValid True if signature is valid and matches expected signer
      */
     function _verifySignature(uint192 _epochNum, uint256 _chainId, bytes memory _signature, address _expectedSigner)
         private
@@ -915,11 +1005,11 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Splits the signature into r, s and v.
-     * @param _sig The signature to split.
-     * @return r The r value of the signature.
-     * @return s The s value of the signature.
-     * @return v The v value of the signature.
+     * @notice Splits a 65-byte signature into r, s, and v components
+     * @param _sig Signature bytes (must be exactly 65 bytes)
+     * @return r R component of the signature
+     * @return s S component of the signature
+     * @return v V component of the signature (27 or 28)
      */
     function _splitSignature(bytes memory _sig) private pure returns (bytes32 r, bytes32 s, uint8 v) {
         if (_sig.length != 65) revert InvalidSignatureLength();
@@ -931,8 +1021,9 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Exports the configuration of the ExecutionManager contract
-     * @return config A bytes array containing the encoded configuration data
+     * @notice Exports the complete configuration of the Coordinator contract
+     * @dev Returns encoded configuration data for off-chain tools and verification
+     * @return config Encoded bytes containing all configuration parameters
      */
     function exportConfig() public view returns (bytes memory) {
         return abi.encode(
@@ -956,10 +1047,10 @@ contract Coordinator is ICoordinator, TaxHandler, ReentrancyGuard {
     }
 
     /**
-     * @notice Exports the tax configuration of the Coordinator contract
-     * @return stakingToken The address of the staking token
-     * @return executionTax The execution tax
-     * @return protocolPoolCutBps The protocol pool cut in basis points
+     * @notice Returns the tax configuration of the Coordinator
+     * @return stakingToken Address of the ERC20 token used for staking
+     * @return executionTax Execution tax amount in staking token units
+     * @return protocolPoolCutBps Protocol pool cut in basis points (e.g., 1000 = 10%)
      */
     function getTaxConfig() public view returns (address, uint256, uint256) {
         return (stakingToken, executionTax, protocolPoolCutBps);

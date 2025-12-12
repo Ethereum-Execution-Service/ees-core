@@ -25,39 +25,58 @@ import {ReentrancyGuard} from "solmate/src/utils/ReentrancyGuard.sol";
  *       _\/\\\_____________\/\\\______________/\\\______\//\\\__
  *        _\/\\\\\\\\\\\\\\\_\/\\\\\\\\\\\\\\\_\///\\\\\\\\\\\/___
  *         _\///////////////__\///////////////____\///////////_____
+ *
+ * @title JobRegistry
+ * @notice Manages job lifecycle including creation, execution, and deletion
+ * @dev Inherits from EIP712 for signature verification and ReentrancyGuard for reentrancy protection.
+ *      Jobs are stored in an array and can be reused at expired indices. Supports sponsored jobs with
+ *      EIP-712 signatures and ERC-6492 contract signatures.
  */
-
-/// @notice JobRegistry keeps track of all jobs in the EES. It is through this contract jobs are created, managed and deleted.
 contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     using SafeTransferLib for ERC20;
     using SafeTransferFromNoRevert for ERC20;
     using JobSpecificationHash for JobSpecification;
     using FeeModuleInputHash for FeeModuleInput;
 
+    /// @notice Array of all jobs stored in the registry
     Job[] public jobs;
 
+    /// @notice Validator for ERC-6492 signatures (allows contract signatures)
     PublicERC6492Validator public immutable publicERC6492Validator;
 
+    /// @notice Coordinator contract that manages executors and modules
     Coordinator internal immutable coordinator;
 
-    // covering constant gas usage of execute which is not already measured in the function
+    /// @notice Constant gas overhead for job execution
+    /// @dev Covers gas usage not already measured in the execute function
     uint256 private constant _EXECUTION_GAS_OVERHEAD = 200_000;
 
-    // for single use nonces
+    /// @notice Nonce bitmap for tracking used unordered nonces
+    /// @dev Maps address => word position => bitmap. Used to prevent signature replay attacks.
     mapping(address => mapping(uint256 => uint256)) public nonceBitmap;
 
+    /**
+     * @notice Initializes the JobRegistry contract
+     * @param _coordinator Coordinator contract address
+     * @param _publicERC6492Validator ERC-6492 signature validator address
+     */
     constructor(Coordinator _coordinator, PublicERC6492Validator _publicERC6492Validator) {
         coordinator = _coordinator;
         publicERC6492Validator = _publicERC6492Validator;
     }
 
     /**
-     * @notice Creates a job with given specification and stores it in the jobs array. It calls the callback funcitons onCreateJob on both the execution module and the application.
-     * @notice The nonce and deadline fieds inside _specification are only considered if _sponsor is not zero address.
-     * @param _specification Struct containing specifications of the job.
-     * @param _sponsor The address paying execution fees related to the job. If zero address, msg.sender is set to sponsor and _sponsorSignature is not verified.
-     * @param _sponsorSignature EIP-712 signature of _specification signed by _sponsor.
-     * @param _index The index in the jobs array which the job should be created at. If this is greater than or equal to jobs.length then the array will be extended, otherwise it will try to reuse an index of an existing expired job.
+     * @notice Creates a new job with the given specification
+     * @dev Validates signatures, calls module and application callbacks, and stores the job.
+     *      Can reuse expired job indices. Supports sponsored jobs with separate signatures.
+     * @param _specification Job specification containing all job parameters
+     * @param _sponsor Address paying execution fees (zero address means msg.sender is sponsor)
+     * @param _sponsorSignature EIP-712 signature of job specification signed by sponsor (if _sponsor != address(0))
+     * @param _ownerSignature EIP-712 signature of job specification signed by owner (if msg.sender != owner)
+     * @param _index Desired index in jobs array (UINT256_MAX to append, or existing index to reuse)
+     * @return index The index where the job was created
+     * @custom:emits JobCreated event with job index, creator, application, and initial execution status
+     * @custom:emits JobExecuted event if initial execution occurs
      */
     function createJob(
         JobSpecification calldata _specification,
@@ -173,16 +192,17 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     }
 
     /**
-     * @notice Executes a job, calling onExecuteJob on the execution module, fee module and application.
-     * @notice The execution fee is taken from the sponsor. If the transfer fails and sponsorFallbackToOwner is true, the owner pays the fee.
-     * @notice May deactivate the job if application reverted and ignoreAppRevert is false or maxExecutions is reached.
-     * @param _index Index of the job in the jobs array.
-     * @param _feeRecipient Address who receives execution fee tokens.
-     * @return executionFee The execution fee taken.
-     * @return executionFeeToken The ERC-20 token of the execution fee.
-     * @return executionModule The execution module of the job.
-     * @return feeModule The fee module of the job.
-     * @return inZeroFeeWindow Whether the job was executed in the zero fee window.
+     * @notice Executes a job by calling execution module, fee module, and application
+     * @dev Can only be called by the Coordinator. Execution fee is collected from sponsor (or owner if fallback enabled).
+     *      Job may be deactivated if application reverts (and ignoreAppRevert is false) or maxExecutions is reached.
+     * @param _index Index of the job in the jobs array
+     * @param _feeRecipient Address to receive the execution fee tokens
+     * @return executionFee Amount of execution fee collected
+     * @return executionFeeToken ERC20 token address of the execution fee
+     * @return executionModule Execution module ID used by the job
+     * @return feeModule Fee module ID used by the job
+     * @return inZeroFeeWindow Whether the job was executed within the zero fee window
+     * @custom:emits JobExecuted event with execution details
      */
     function execute(uint256 _index, address _feeRecipient)
         external
@@ -269,9 +289,11 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     }
 
     /**
-     * @notice Deactivates a job preventing it from being executed.
-     * @notice Deactivated jobs are still stored in the jobs array, but can be deleted by anyone after the job has expired.
-     * @param _index Index of the job in the jobs array.
+     * @notice Deactivates a job, preventing it from being executed
+     * @dev Can only be called by the job owner. Deactivated jobs remain in the array but cannot be executed.
+     *      Expired deactivated jobs can be deleted by anyone.
+     * @param _index Index of the job in the jobs array
+     * @custom:emits JobDeactivated event with job index, owner, and application address
      */
     function deactivateJob(uint256 _index) public override {
         Job storage job = jobs[_index];
@@ -281,8 +303,10 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     }
 
     /**
-     * @notice Activates a job, setting the active flag to true.
-     * @param _index Index of the job in the jobs array.
+     * @notice Activates a previously deactivated job
+     * @dev Can only be called by the job owner. Cannot activate if maxExecutions has been reached.
+     * @param _index Index of the job in the jobs array
+     * @custom:emits JobActivated event with job index, owner, and application address
      */
     function activateJob(uint256 _index) public override {
         Job storage job = jobs[_index];
@@ -294,10 +318,11 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     }
 
     /**
-     * @notice Deletes the job from the jobs array and calls onDeleteJob on execution module and application.
-     * @notice Deleted jobs are removed from the jobs array.
-     * @notice Can only be called by the owner of the job.
-     * @param _index The index of the job in the jobs array.
+     * @notice Deletes a job from the jobs array
+     * @dev Can only be called by the job owner. Calls onDeleteJob on execution module, fee module, and application.
+     *      Application callback failures are caught and logged but don't prevent deletion.
+     * @param _index Index of the job in the jobs array
+     * @custom:emits JobDeleted event with job index, owner, application, and whether application callback reverted
      */
     function deleteJob(uint256 _index) public override nonReentrant {
         if (msg.sender != jobs[_index].owner) revert Unauthorized();
@@ -305,9 +330,11 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     }
 
     /**
-     * @notice Revokes sponsorship of a job. This will make the owner the sponsor.
-     * @notice Only callable by the sponsor or owner of the job.
-     * @param _index Index of the job in the jobs array.
+     * @notice Revokes sponsorship of a job, making the owner the new sponsor
+     * @dev Can be called by either the current sponsor or the job owner. If sponsor calls and
+     *      sponsorFallbackToOwner is false, sponsor is set to address(0).
+     * @param _index Index of the job in the jobs array
+     * @custom:emits SponsorshipRevoked event with job index, owner, new sponsor, and old sponsor
      */
     function revokeSponsorship(uint256 _index) public override {
         Job storage job = jobs[_index];
@@ -329,14 +356,13 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     }
 
     /**
-     * @notice Updates data in a fee module or migrates to other fee module.
-     * @notice Removes current sponsorship from the job.
-     * @notice If _sponsor is zero address, it will be set to job.owner.
-     * @notice If job.sponsorCanUpdateFeeModule is true, both sponsor and owner can update fee module. The sponsor can even update the sponsor with a new signature.
-     * @notice If job.sponsorCanUpdateFeeModule is false, only owner can update fee module.
-     * @param _feeModuleInput Signable struct containing the index of the job and the data to be updated.
-     * @param _sponsor The address paying execution fees related to the job.
-     * @param _sponsorSignature EIP-712 signature of _feeModuleInput signed by _sponsor.
+     * @notice Updates fee module data or migrates to a different fee module
+     * @dev Removes current sponsorship. If sponsorCanUpdateFeeModule is true, both sponsor and owner can update.
+     *      Cannot be called when job is in execution mode. Supports fee module migration.
+     * @param _feeModuleInput Signable struct containing job index, fee module ID, and update data
+     * @param _sponsor New sponsor address (zero address means owner becomes sponsor)
+     * @param _sponsorSignature EIP-712 signature of _feeModuleInput signed by _sponsor (if _sponsor != address(0))
+     * @custom:emits FeeModuleUpdate event with job index, owner, sponsor, and fee module ID
      */
     function updateFeeModule(
         FeeModuleInput calldata _feeModuleInput,
@@ -391,20 +417,21 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     }
 
     /**
-     * @notice Gets the length of the job array.
-     * @return length The length of the job array.
+     * @notice Returns the total number of jobs in the registry
+     * @dev Includes both active and deleted jobs. Deleted jobs have owner == address(0).
+     * @return length Total number of jobs in the jobs array
      */
     function getJobsArrayLength() public view override returns (uint256 length) {
         return jobs.length;
     }
 
     /**
-     * @notice Invalidate multiple unordered nonces for the caller.
-     * @dev Allows the caller to batch invalidate nonces using a bitmask.
-     *      This can be useful in scenarios where multiple nonces need to be invalidated at once,
-     *      such as when several nonces are compromised or outdated.
-     * @param _wordPos The position in the nonce bitmap (index of the word) where the nonces should be invalidated.
-     * @param _mask A bitmask where each bit set to 1 invalidates the corresponding nonce in the bitmap.
+     * @notice Invalidates multiple unordered nonces for the caller using a bitmask
+     * @dev Useful for batch invalidating nonces when they are compromised or outdated.
+     *      Each bit set to 1 in _mask invalidates the corresponding nonce.
+     * @param _wordPos Word position (index) in the nonce bitmap
+     * @param _mask Bitmask where each set bit invalidates the corresponding nonce
+     * @custom:emits UnorderedNonceInvalidation event with caller, word position, and mask
      */
     function invalidateUnorderedNonces(uint256 _wordPos, uint256 _mask) external {
         nonceBitmap[msg.sender][_wordPos] |= _mask;
@@ -412,13 +439,12 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     }
 
     /**
-     * @notice Returns the index of the bitmap and the bit position within the bitmap. Used for unordered nonces
-     * @notice Taken from the PERMIT-2's SignatureTransfer contract https://github.com/Uniswap/permit2/blob/main/src/SignatureTransfer.sol
-     * @param _nonce The nonce to get the associated word and bit positions
-     * @return wordPos The word position or index into the nonceBitmap
-     * @return bitPos The bit position
-     * @dev The first 248 bits of the nonce value is the index of the desired bitmap
-     * @dev The last 8 bits of the nonce value is the position of the bit in the bitmap
+     * @notice Calculates the bitmap word position and bit position for a given nonce
+     * @dev Implementation from PERMIT-2's SignatureTransfer contract.
+     *      First 248 bits = word position, last 8 bits = bit position.
+     * @param _nonce The nonce to calculate positions for
+     * @return wordPos Word position (index) in the nonce bitmap
+     * @return bitPos Bit position within the word
      */
     function bitmapPositions(uint256 _nonce) private pure returns (uint256 wordPos, uint256 bitPos) {
         wordPos = uint248(_nonce >> 8);
@@ -426,8 +452,10 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     }
 
     /**
-     * @notice Deletes the job from the jobs array and calls onDeleteJob on execution module and application.
-     * @param _index The index of the job in the jobs array.
+     * @notice Deletes a job and calls cleanup callbacks on modules and application
+     * @dev Internal function that handles job deletion logic. Application callback failures are caught.
+     * @param _index Index of the job to delete
+     * @custom:emits JobDeleted event with job details and whether application callback reverted
      */
     function _deleteJob(uint256 _index) private {
         Job memory job = jobs[_index];
@@ -452,11 +480,12 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
     }
 
     /**
-     * @notice Checks whether a nonce is taken and sets the bit at the bit position in the bitmap at the word position
-     * @notice Taken and modified from the PERMIT-2's SignatureTransfer contract https://github.com/Uniswap/permit2/blob/main/src/SignatureTransfer.sol
-     * @param _from The address to use the nonce at.
-     * @param _nonce The nonce to spend.
-     * @param _consume Flag which is true if the nonce should be consumed.
+     * @notice Checks if a nonce is used and optionally consumes it
+     * @dev Implementation from PERMIT-2's SignatureTransfer contract (modified).
+     *      If _consume is true, marks nonce as used. If false, only checks if already used.
+     * @param _from Address whose nonce is being checked
+     * @param _nonce Nonce to check/consume
+     * @param _consume If true, consume the nonce; if false, only check if used
      */
     function _useUnorderedNonce(address _from, uint256 _nonce, bool _consume) internal {
         (uint256 wordPos, uint256 bitPos) = bitmapPositions(_nonce);
@@ -474,9 +503,8 @@ contract JobRegistry is IJobRegistry, EIP712, ReentrancyGuard {
 
     /**
      * @notice Exports the configuration of the JobRegistry contract
-     * @dev This function encodes and returns key configuration parameters of the contract
-     * @return config bytes array containing the encoded configuration data:
-     *         - _EXECUTION_GAS_OVERHEAD: The constant gas overhead for job execution
+     * @dev Returns encoded configuration data for off-chain tools and verification
+     * @return config Encoded bytes containing the execution gas overhead constant
      */
     function exportConfig() public view returns (bytes memory) {
         return abi.encode(_EXECUTION_GAS_OVERHEAD);

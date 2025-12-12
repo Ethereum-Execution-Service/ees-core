@@ -12,20 +12,18 @@ import {ICoordinator} from "../src/interfaces/ICoordinator.sol";
 import {PublicERC6492Validator} from "../src/PublicERC6492Validator.sol";
 
 contract DeployAll is Script {
-    uint16 treasuryBasisPoints;
     uint8 protocolFeeRatio;
     // owner is deployer
-    address owner = 0xCE02d0981c1D4dCA9331178F322506C06E394bb0;
+    address owner = 0xfd8eFb4061Aa7849fFBFE4DaDE414151dd8fA332;
+
+    address deployer = 0x314ceF6386726935Fbe7de297c01104f4B3654a1;
 
     ICoordinator.InitSpec initSpec;
 
     function setUp() public {
-        // set to treasury
-        treasuryBasisPoints = 2000;
-
         initSpec = ICoordinator.InitSpec({
-            // Base sepolia USDC copy
-            stakingToken: 0x7139F4601480d20d43Fa77780B67D295805aD31a,
+            // Base USDC
+            stakingToken: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913,
             // 100 USDC - 100000000
             stakingAmountPerModule: 100000000,
             // 30 days
@@ -36,16 +34,16 @@ contract DeployAll is Script {
             inactiveSlashingAmountPerModule: 20000000,
             // 10 USDC - 10000000
             commitSlashingAmountPerModule: 10000000,
-            roundDuration: 20,
+            roundDuration: 30,
             roundsPerEpoch: 5,
-            roundBuffer: 15,
-            commitPhaseDuration: 15,
-            revealPhaseDuration: 15,
-            slashingDuration: 15,
-            // 0.06 USDC - 60000
-            executionTax: 60000,
-            // 0.02 USDC - 20000
-            zeroFeeExecutionTax: 20000,
+            roundBuffer: 30,
+            commitPhaseDuration: 30,
+            revealPhaseDuration: 30,
+            slashingDuration: 30,
+            // 0.03 USDC - 30000
+            executionTax: 30000,
+            // 0.01 USDC - 10000
+            zeroFeeExecutionTax: 10000,
             // 10% in basis points
             protocolPoolCutBps: 1000
         });
@@ -65,7 +63,7 @@ contract DeployAll is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        coordinator = new Coordinator(initSpec, owner);
+        coordinator = new Coordinator(initSpec, deployer);
         console2.log("Coordinator Deployed:", address(coordinator));
 
         publicERC6492Validator = new PublicERC6492Validator();
@@ -90,6 +88,8 @@ contract DeployAll is Script {
         coordinator.addExecutionModule(regularTimeInterval);
         coordinator.addFeeModule(linearAuction);
         //coordinator.addFeeModule(peggedLinearAuction);
+
+        coordinator.transferOwnership(owner);
 
         vm.stopBroadcast();
     }

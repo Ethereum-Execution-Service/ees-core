@@ -5,25 +5,48 @@ import {IExecutionModule} from "../interfaces/IExecutionModule.sol";
 import {ILinearAuction} from "../interfaces/feeModules/ILinearAuction.sol";
 import {Coordinator} from "../Coordinator.sol";
 
+/**
+ * @title LinearAuction
+ * @notice Fee module that implements a linear auction pricing model for job executions
+ * @dev The execution fee increases linearly from minExecutionFee to maxExecutionFee over the
+ *      execution window (after the zero fee window). During the zero fee window, execution is free.
+ */
 contract LinearAuction is ILinearAuction {
+    /// @notice The Coordinator contract that manages this fee module
     Coordinator public immutable coordinator;
+
+    /// @notice Mapping from job index to fee parameters (token, min fee, max fee)
     mapping(uint256 => Params) public params;
 
+    /**
+     * @notice Initializes the LinearAuction fee module
+     * @param _coordinator The Coordinator contract address
+     */
     constructor(Coordinator _coordinator) {
         coordinator = _coordinator;
     }
 
+    /**
+     * @notice Ensures only registered JobRegistry contracts can call module functions
+     * @dev Reverts if msg.sender is not a registered JobRegistry in the Coordinator
+     */
     modifier onlyJobRegistry() {
         if (!coordinator.isJobRegistry(msg.sender)) revert NotJobRegistry();
         _;
     }
 
     /**
-     * @notice Computes execution fee as a linear function between minExecutionFee and maxExecutionFee depending on time in execution window.
-     * @param _index The index of the job in the jobs array in JobRegistry contract.
-     * @param _executionWindow The amount of time the job can be executed within.
-     * @param _executionTime The time the job can be executed from.
-     * @return executionFee The computed execution fee.
+     * @notice Computes the execution fee based on a linear auction model
+     * @dev During the zero fee window, returns 0. After the zero fee window, the fee increases
+     *      linearly from minExecutionFee to maxExecutionFee over the remaining execution window.
+     *      The fee reaches maxExecutionFee at the last second of the execution window.
+     * @param _index The index of the job in the jobs array in JobRegistry contract
+     * @param _executionWindow The total execution window duration (in seconds)
+     * @param _zeroFeeWindow The duration of the zero fee period at the start (in seconds)
+     * @param _executionTime The timestamp from which execution is allowed
+     * @return executionFee The computed execution fee in the fee token
+     * @return executionFeeToken The token address for the execution fee
+     * @return inZeroFeeWindow True if execution is within the zero fee window
      */
     function onExecuteJob(
         uint256 _index,
@@ -62,10 +85,12 @@ contract LinearAuction is ILinearAuction {
     }
 
     /**
-     * @notice Stores the parameters for a job in the params mapping.
-     * @notice Reverts if minExecutionFee is greater than maxExecutionFee.
-     * @param _index The index of the job in the jobs array in JobRegistry contract.
-     * @param _inputs The encoded parameters for the job.
+     * @notice Stores the fee parameters for a job when it is created
+     * @dev Decodes the input bytes to extract executionFeeToken, minExecutionFee, and maxExecutionFee.
+     *      Validates that minExecutionFee <= maxExecutionFee.
+     * @param _index The index of the job in the jobs array in JobRegistry contract
+     * @param _inputs Encoded parameters: executionFeeToken (address), minExecutionFee (uint256), maxExecutionFee (uint256)
+     * @custom:reverts MinExecutionFeeGreaterThanMax if minExecutionFee > maxExecutionFee
      */
     function onCreateJob(uint256 _index, bytes calldata _inputs) external override onlyJobRegistry {
         address executionFeeToken;
@@ -85,10 +110,11 @@ contract LinearAuction is ILinearAuction {
     }
 
     /**
-     * @notice Updates the parameters for a job in the params mapping.
-     * @notice Reverts if minExecutionFee is greater than maxExecutionFee.
-     * @param _index The index of the job in the jobs array in JobRegistry contract.
-     * @param _inputs The encoded parameters for the job.
+     * @notice Updates the fee parameters for an existing job
+     * @dev Decodes the input bytes and updates the stored parameters. Validates that minExecutionFee <= maxExecutionFee.
+     * @param _index The index of the job in the jobs array in JobRegistry contract
+     * @param _inputs Encoded parameters: executionFeeToken (address), minExecutionFee (uint256), maxExecutionFee (uint256)
+     * @custom:reverts MinExecutionFeeGreaterThanMax if minExecutionFee > maxExecutionFee
      */
     function onUpdateData(uint256 _index, bytes calldata _inputs) external override onlyJobRegistry {
         address executionFeeToken;
@@ -108,17 +134,17 @@ contract LinearAuction is ILinearAuction {
     }
 
     /**
-     * @notice Deletes stored parameters from params mapping.
-     * @param _index Job index to delete.
+     * @notice Deletes the fee parameters for a job when it is deleted
+     * @param _index The index of the job in the jobs array in JobRegistry contract
      */
     function onDeleteJob(uint256 _index) external onlyJobRegistry {
         delete params[_index];
     }
 
     /**
-     * @notice Returns the encoded parameters for a job.
-     * @param _index The index of the job in the jobs array in JobRegistry contract.
-     * @return encodedData The encoded parameters for the job.
+     * @notice Returns the encoded parameters for a job
+     * @param _index The index of the job in the jobs array in JobRegistry contract
+     * @return encodedData ABI-encoded parameters: (executionFeeToken, minExecutionFee, maxExecutionFee)
      */
     function getEncodedData(uint256 _index) public view override returns (bytes memory) {
         Params memory param = params[_index];
